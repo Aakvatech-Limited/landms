@@ -3,5 +3,94 @@
 *.egg-info
 *.swp
 tags
-node_modules
-__pycache__
+hms_tz/docs/current
+
+# JavaScript, Node.js, and related files
+node_modules/
+package-lock.json
+*.log  # Generic log files
+*.lock # Lock files
+.npmrc
+.yarnrc
+.pnp.*
+
+# JavaScript specific
+*.js.map # Source maps
+dist/       # Distribution/build folders (often contain JS)
+build/
+*.min.js  # Minified JavaScript files (usually generated)
+
+# Vue.js specific
+.vuepress/cache
+.cache/
+*.vue.map
+
+# Python specific
+__pycache__/
+*.py[cod]  # Compiled Python files
+.venv/      # Virtual environment (adjust path if needed)
+venv/
+env/
+*.DS_Store  # macOS specific file
+.idea/      # PyCharm specific files
+.pytest_cache/ # pytest cache
+.coverage*  # Coverage data
+htmlcov/    # Coverage reports
+
+# General files/directories that might be generated or shouldn't be tracked
+.cache/       # Generic cache directory
+__pycache__/  # Python bytecode cache
+*.tmp         # Temporary files
+temp/
+tmp/
+*.bak         # Backup files
+*.swp         # Swap files (already included but good to reiterate)
+.vscode/      # VS Code specific settings (optional, but good practice)
+.idea/       # IDE specific files (e.g., PyCharm, WebStorm)
+.history     # History files
+*.db          # Database files (if you don't want to track them)
+
+# OS Specific
+.AppleDouble
+Thumbs.db
+ehthumbs.db
+
+# Git related
+.git/subtree/
+.git/refs/
+.git/logs/
+
+# Secrets - Never commit these!
+*.env
+.env.*
+config.ini  # Or similar configuration files
+credentials.json # Example credentials file
+secrets/*  #  Or a secrets directory
+
+# Logs
+logs/
+*.log
+
+# Archives or large files (if not needed in the repo)
+*.zip
+*.rar
+*.tar
+*.gz
+*.7z
+
+# Editor and IDE files (can be customized/removed depending on your IDE)
+.idea/*
+.vscode/*
+*.suo
+*.sln
+*.user
+*.iws
+*.ipr
+*.iml
+*.DS_Store # macOS specific file (already included but good to reiterate)
+
+# Deployment or build artifacts
+dist/
+build/
+*.apk  # Android packages
+*.ipa  # iOS packages
