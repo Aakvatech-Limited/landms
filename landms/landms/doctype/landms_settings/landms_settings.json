@@ -1,0 +1,200 @@
+{
+ "doctype": "DocType",
+ "name": "LandMS Settings",
+ "module": "LandMS",
+ "issingle": 1,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "company_section",
+   "fieldtype": "Section Break",
+   "label": "Company and Currency"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_currency",
+   "fieldtype": "Link",
+   "label": "Default Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "accounts_section",
+   "fieldtype": "Section Break",
+   "label": "GL Account Mappings"
+  },
+  {
+   "fieldname": "land_under_development_account",
+   "fieldtype": "Link",
+   "label": "Land Under Development Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "plot_inventory_account",
+   "fieldtype": "Link",
+   "label": "Plot Inventory Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer_advance_account",
+   "fieldtype": "Link",
+   "label": "Customer Advances Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "revenue_account",
+   "fieldtype": "Link",
+   "label": "Plot Sales Revenue Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cogs_account",
+   "fieldtype": "Link",
+   "label": "Cost of Land Sold Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tcb_bank_account",
+   "fieldtype": "Link",
+   "label": "TCB Bank Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "government_payable_account",
+   "fieldtype": "Link",
+   "label": "Government Payable Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "forfeited_deposits_account",
+   "fieldtype": "Link",
+   "label": "Forfeited Deposits Income Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seller_payable_account",
+   "fieldtype": "Link",
+   "label": "Seller Payable Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Creditors account used when land is acquired — Dr Land Under Development / Cr this account"
+  },
+  {
+   "fieldname": "application_fee_section",
+   "fieldtype": "Section Break",
+   "label": "Application Fee"
+  },
+  {
+   "fieldname": "application_fee_amount",
+   "fieldtype": "Float",
+   "label": "Application Fee Amount (TZS)",
+   "reqd": 1,
+   "description": "Fixed application fee charged per plot before a Sales Order can be created"
+  },
+  {
+   "fieldname": "unpaid_application_expiry_days",
+   "fieldtype": "Int",
+   "label": "Unpaid Application Expiry (Days)",
+   "reqd": 1,
+   "default": "3",
+   "description": "Days before an unpaid application auto-cancels and the plot is freed"
+  },
+  {
+   "fieldname": "application_fee_validity_days",
+   "fieldtype": "Int",
+   "label": "Application Fee Validity (Days)",
+   "reqd": 1,
+   "default": "7",
+   "description": "Days the paid application reserves the plot before the Sales Order must be created"
+  },
+  {
+   "fieldname": "application_fee_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "application_fee_income_account",
+   "fieldtype": "Link",
+   "label": "Application Fee Income Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Income account where application fees are posted"
+  },
+  {
+   "fieldname": "application_fee_receiving_account",
+   "fieldtype": "Link",
+   "label": "Application Fee Receiving Account",
+   "options": "Account",
+   "description": "Default Bank/Cash account where application fee payments are received"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
+  },
+  {
+   "fieldname": "plot_inventory_warehouse",
+   "fieldtype": "Link",
+   "label": "Plot Inventory Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "naming_section",
+   "fieldtype": "Section Break",
+   "label": "Naming Series"
+  },
+  {
+   "fieldname": "naming_series_contract",
+   "fieldtype": "Data",
+   "label": "Contract Naming Series",
+   "default": "CTR-.YYYY.-.####"
+  },
+  {
+   "fieldname": "naming_series_installment_schedule",
+   "fieldtype": "Data",
+   "label": "Installment Schedule Naming Series",
+   "default": "ISCH-.YYYY.-.####"
+  },
+  {
+   "fieldname": "naming_series_tcb_log",
+   "fieldtype": "Data",
+   "label": "TCB Log Naming Series",
+   "default": "TCB-.YYYY.-.####"
+  },
+  {
+   "fieldname": "naming_series_govt_fee",
+   "fieldtype": "Data",
+   "label": "Government Fee Entry Naming Series",
+   "default": "GFE-.YYYY.-.####"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Finance",
+   "read": 1,
+   "write": 0,
+   "create": 0
+  }
+ ]
+}
