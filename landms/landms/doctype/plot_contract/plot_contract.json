@@ -1,0 +1,323 @@
+{
+ "doctype": "DocType",
+ "name": "Plot Contract",
+ "module": "LandMS",
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "contract_section",
+  "customer",
+  "plot",
+  "acquisition_name",
+  "land_acquisition",
+  "contract_date",
+  "col_break_1",
+  "contract_status",
+  "payment_completion_days",
+  "payment_deadline",
+  "sales_order",
+  "financials_section",
+  "selling_price",
+  "booking_fee_percent",
+  "government_share_percent",
+  "col_break_2",
+  "booking_fee_amount",
+  "balance_due",
+  "booking_fee_invoice",
+  "payment_schedule_section",
+  "payment_schedule",
+  "payment_summary_section",
+  "total_contract_value",
+  "total_paid",
+  "payment_progress",
+  "col_break_3",
+  "total_outstanding",
+  "government_fee_withheld",
+  "government_fee_entry",
+  "forfeiture_entry",
+  "notes_section",
+  "notes",
+  "termination_reason",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CTR-.YYYY.-.####"
+  },
+  {
+   "fieldname": "contract_section",
+   "fieldtype": "Section Break",
+   "label": "Contract and Land Acquisition Details"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "plot",
+   "fieldtype": "Link",
+   "label": "Plot",
+   "options": "Plot Master",
+   "in_list_view": 1,
+   "reqd": 1,
+   "description": "Only Available plots can be selected"
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Land Acquisition",
+   "options": "Land Acquisition",
+   "read_only": 1,
+   "description": "Auto-filled from the selected plot"
+  },
+  {
+   "fieldname": "acquisition_name",
+   "fieldtype": "Data",
+   "label": "Acquisition Name",
+   "read_only": 1,
+   "description": "Auto-filled from the Land Acquisition"
+  },
+  {
+   "fieldname": "contract_date",
+   "fieldtype": "Date",
+   "label": "Contract Date",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contract_status",
+   "fieldtype": "Select",
+   "label": "Contract Status",
+   "options": "Draft\nOngoing\nCompleted\nCancelled\nTerminated",
+   "default": "Draft",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_completion_days",
+   "fieldtype": "Int",
+   "label": "Payment Completion Days",
+   "default": "90",
+   "in_list_view": 1,
+   "reqd": 1,
+   "description": "Days from contract date the customer has to complete full payment"
+  },
+  {
+   "fieldname": "payment_deadline",
+   "fieldtype": "Date",
+   "label": "Payment Deadline",
+   "read_only": 1,
+   "description": "Auto-filled from contract date + payment completion days"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1,
+   "description": "Linked ERP Sales Order \u2014 auto-set when contract is created from the application flow"
+  },
+  {
+   "fieldname": "financials_section",
+   "fieldtype": "Section Break",
+   "label": "Financials"
+  },
+  {
+   "fieldname": "selling_price",
+   "fieldtype": "Currency",
+   "label": "Selling Price (TZS)",
+   "read_only": 1,
+   "description": "Auto-filled from Plot Master"
+  },
+  {
+   "fieldname": "booking_fee_percent",
+   "fieldtype": "Percent",
+   "label": "Booking Fee %",
+   "reqd": 1,
+   "description": "Percentage of selling price required as booking fee"
+  },
+  {
+   "fieldname": "government_share_percent",
+   "fieldtype": "Percent",
+   "label": "Government Share %",
+   "reqd": 1,
+   "description": "Government fee percentage \u2014 deducted at full payment completion"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "booking_fee_amount",
+   "fieldtype": "Currency",
+   "label": "Booking Fee Amount (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "balance_due",
+   "fieldtype": "Currency",
+   "label": "Balance Due (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "booking_fee_invoice",
+   "fieldtype": "Link",
+   "label": "Booking Fee Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "description": "Auto-set to the plot Sales Invoice on contract submission"
+  },
+  {
+   "fieldname": "payment_schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Schedule"
+  },
+  {
+   "fieldname": "payment_schedule",
+   "fieldtype": "Table",
+   "label": "Payment Schedule",
+   "options": "Plot Contract Payment"
+  },
+  {
+   "fieldname": "payment_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Summary"
+  },
+  {
+   "fieldname": "total_contract_value",
+   "fieldtype": "Currency",
+   "label": "Total Contract Value (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_paid",
+   "fieldtype": "Currency",
+   "label": "Total Paid (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_progress",
+   "fieldtype": "Select",
+   "label": "Payment Progress",
+   "options": "Unpaid\nAdvance Paid\nAdvance + Installments Paid\nFully Paid\nPartially Paid",
+   "default": "Unpaid",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_outstanding",
+   "fieldtype": "Currency",
+   "label": "Total Outstanding (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "government_fee_withheld",
+   "fieldtype": "Currency",
+   "label": "Expected Government Fee (TZS)",
+   "read_only": 1,
+   "description": "Selling price \u00d7 government share % \u2014 collected at full payment completion"
+  },
+  {
+   "fieldname": "government_fee_entry",
+   "fieldtype": "Link",
+   "label": "Government Fee Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "description": "Auto-created when contract is fully paid"
+  },
+  {
+   "fieldname": "forfeiture_entry",
+   "fieldtype": "Link",
+   "label": "Forfeiture Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "description": "Auto-created when a paid contract is terminated \u2014 customer funds are forfeited"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Long Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "termination_reason",
+   "fieldtype": "Long Text",
+   "label": "Termination Reason",
+   "read_only": 1,
+   "description": "Reason recorded when contract was terminated"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Plot Contract",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ],
+ "states": [
+  {"title": "Draft", "color": "Gray"},
+  {"title": "Ongoing", "color": "Yellow"},
+  {"title": "Completed", "color": "Green"},
+  {"title": "Cancelled", "color": "Red"},
+  {"title": "Terminated", "color": "Orange"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
