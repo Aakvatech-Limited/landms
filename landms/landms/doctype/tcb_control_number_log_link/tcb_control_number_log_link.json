@@ -1,0 +1,45 @@
+{
+ "doctype": "DocType",
+ "name": "TCB Control Number Log Link",
+ "module": "LandMS",
+ "istable": 1,
+ "is_submittable": 0,
+ "fields": [
+  {
+   "fieldname": "event_at",
+   "fieldtype": "Datetime",
+   "label": "Event At",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Data",
+   "label": "Event Type",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "log",
+   "fieldtype": "Link",
+   "label": "TCB API Log",
+   "options": "TCB API Log",
+   "in_list_view": 1,
+   "columns": 4
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "in_list_view": 1,
+   "columns": 3
+  }
+ ]
+}
