@@ -1,0 +1,221 @@
+{
+ "doctype": "DocType",
+ "name": "Plot Master",
+ "module": "LandMS",
+ "autoname": "naming_series:",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "title_field": "plot_number",
+ "search_fields": "plot_number,land_acquisition,acquisition_name,plot_type,status",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "PLT-.YYYY.-.####",
+   "default": "PLT-.YYYY.-.####"
+  },
+  {
+   "fieldname": "plot_details_section",
+   "fieldtype": "Section Break",
+   "label": "Plot Details"
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Land Acquisition",
+   "options": "Land Acquisition",
+   "reqd": 1,
+   "description": "Must be an Approved or Subdivided Land Acquisition"
+  },
+  {
+   "fieldname": "acquisition_name",
+   "fieldtype": "Data",
+   "label": "Acquisition Name",
+   "read_only": 1,
+   "fetch_from": "land_acquisition.acquisition_name",
+   "description": "Auto-filled from selected Land Acquisition"
+  },
+  {
+   "fieldname": "plot_number",
+   "fieldtype": "Data",
+   "label": "Plot Number",
+   "reqd": 1,
+   "description": "Unique plot identifier within this Land Acquisition (e.g. A-001)"
+  },
+  {
+   "fieldname": "plot_type",
+   "fieldtype": "Select",
+   "label": "Plot Type",
+   "options": "Residential\nCommercial\nMixed Use",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Available\nPending Fee\nPending Advance\nReserved\nReady for Handover\nDelivered\nTitle Closed",
+   "default": "Available",
+   "read_only": 1
+  },
+  {
+   "fieldname": "plot_size_sqm",
+   "fieldtype": "Float",
+   "label": "Plot Size (sqm)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6",
+   "description": "Optional plot latitude. Auto-filled from Land Acquisition when available."
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6",
+   "description": "Optional plot longitude. Auto-filled from Land Acquisition when available."
+  },
+  {
+   "fieldname": "location_description",
+   "fieldtype": "Small Text",
+   "label": "Location Description"
+  },
+  {
+   "fieldname": "financials_section",
+   "fieldtype": "Section Break",
+   "label": "Financials"
+  },
+  {
+   "fieldname": "cost_per_sqm",
+   "fieldtype": "Currency",
+   "label": "Cost per Sqm (TZS)",
+   "read_only": 1,
+   "description": "Auto-calculated from Land Acquisition cost divided by total area"
+  },
+  {
+   "fieldname": "selling_price_per_sqm",
+   "fieldtype": "Currency",
+   "label": "Selling Price per Sqm (TZS)",
+   "read_only": 1,
+   "description": "Auto-filled from the Land Acquisition rate for this plot type"
+  },
+  {
+   "fieldname": "col_break_financials",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allocated_cost",
+   "fieldtype": "Currency",
+   "label": "Allocated Cost (TZS)",
+   "read_only": 1,
+   "description": "Auto-calculated as cost per sqm multiplied by plot size"
+  },
+  {
+   "fieldname": "selling_price",
+   "fieldtype": "Currency",
+   "label": "Selling Price (TZS)",
+   "reqd": 1,
+   "read_only": 1,
+   "description": "Auto-calculated as selling price per sqm multiplied by plot size"
+  },
+  {
+   "fieldname": "sales_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Sales Defaults",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "booking_fee_percent",
+   "fieldtype": "Percent",
+   "label": "Booking Fee %",
+   "read_only": 1,
+   "description": "Snapshot from Land Acquisition at plot creation"
+  },
+  {
+   "fieldname": "government_share_percent",
+   "fieldtype": "Percent",
+   "label": "Government Share %",
+   "read_only": 1,
+   "description": "Snapshot from Land Acquisition at plot creation"
+  },
+  {
+   "fieldname": "col_break_sales_defaults",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_completion_days",
+   "fieldtype": "Int",
+   "label": "Payment Completion Days",
+   "read_only": 1,
+   "description": "Snapshot from Land Acquisition at plot creation"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "System References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "label": "Serial No",
+   "read_only": 1,
+   "description": "Auto-assigned on submission (equals plot name)"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "description": "Material Receipt that moved this plot's value from LUD into Plot Inventory"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Long Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Plot Master",
+   "read_only": 1,
+   "print_hide": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Land Acquisition Approver",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ]
+}
