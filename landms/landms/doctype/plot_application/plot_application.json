@@ -1,0 +1,245 @@
+{
+ "doctype": "DocType",
+ "name": "Plot Application",
+ "module": "LandMS",
+ "autoname": "naming_series:",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "title_field": "customer",
+ "search_fields": "customer,plot,status",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "field_order": [
+  "naming_series",
+  "application_section",
+  "customer",
+  "plot",
+  "acquisition_name",
+  "land_acquisition",
+  "application_date",
+  "col_break_1",
+  "status",
+  "application_fee",
+  "unpaid_validity_days",
+  "validity_days",
+  "expiry_date",
+  "fee_section",
+  "payment_date",
+  "reference_no",
+  "col_break_2",
+  "sales_invoice",
+  "payment_entry",
+  "links_section",
+  "sales_order",
+  "notes_section",
+  "notes",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "PA-.YYYY.-.####",
+   "default": "PA-.YYYY.-.####"
+  },
+  {
+   "fieldname": "application_section",
+   "fieldtype": "Section Break",
+   "label": "Application Details"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "plot",
+   "fieldtype": "Link",
+   "label": "Plot",
+   "options": "Plot Master",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Only currently Available plots can be selected. On submit the plot moves to Pending Fee until the application is paid or cancelled."
+  },
+  {
+   "fieldname": "acquisition_name",
+   "fieldtype": "Data",
+   "label": "Acquisition Name",
+   "read_only": 1,
+   "description": "Auto-filled from the selected plot"
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Land Acquisition",
+   "options": "Land Acquisition",
+   "read_only": 1,
+   "description": "Auto-filled from the selected plot"
+  },
+  {
+   "fieldname": "application_date",
+   "fieldtype": "Date",
+   "label": "Application Date",
+   "reqd": 1,
+   "default": "Today",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nSubmitted\nPaid\nConverted\nExpired\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "application_fee",
+   "fieldtype": "Currency",
+   "label": "Application Fee (TZS)",
+   "read_only": 1,
+   "description": "Auto-filled from LandMS Settings"
+  },
+  {
+   "fieldname": "unpaid_validity_days",
+   "fieldtype": "Int",
+   "label": "Pre-Payment Validity (Days)",
+   "read_only": 1,
+   "description": "Auto-filled from LandMS Settings (Unpaid Application Expiry Days)"
+  },
+  {
+   "fieldname": "validity_days",
+   "fieldtype": "Int",
+   "label": "Post-Payment Validity (Days)",
+   "read_only": 1,
+   "description": "Auto-filled from LandMS Settings (Application Fee Validity Days) for the first Sales Order advance window"
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Expiry Date",
+   "read_only": 1,
+   "description": "Auto-calculated: payment date + validity days. Plot stays Pending Advance until this date, then returns to Available if no advance is received."
+  },
+  {
+   "fieldname": "fee_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Details"
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_no",
+   "fieldtype": "Data",
+   "label": "Payment Reference No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "description": "Sales Invoice created for the application fee"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1,
+   "description": "Payment Entry that settled the application fee SI"
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1,
+   "description": "ERP Sales Order created after application fee payment"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Long Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Plot Application",
+   "read_only": 1,
+   "print_hide": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ],
+ "states": [
+  {"color": "Grey",   "title": "Draft"},
+  {"color": "Blue",   "title": "Submitted"},
+  {"color": "Green",  "title": "Paid"},
+  {"color": "Purple", "title": "Converted"},
+  {"color": "Red",    "title": "Expired"},
+  {"color": "Red",    "title": "Cancelled"}
+ ]
+}
