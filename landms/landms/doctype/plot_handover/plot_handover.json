@@ -2,17 +2,10 @@
  "doctype": "DocType",
  "name": "Plot Handover",
  "module": "LandMS",
- "autoname": "naming_series:",
- "naming_series": "PHO-.YYYY.-.####",
+ "autoname": "format:PHO-.{YY}.{MM}.-.####",
  "is_submittable": 1,
  "track_changes": 1,
  "fields": [
-  {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "PHO-.YYYY.-.####"
-  },
   {
    "fieldname": "handover_section",
    "fieldtype": "Section Break",

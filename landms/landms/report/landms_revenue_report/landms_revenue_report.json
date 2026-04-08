@@ -1,0 +1,9 @@
+{
+ "add_total_row": 0,
+ "doctype": "Report",
+ "is_standard": "Yes",
+ "module": "LandMS",
+ "name": "landms_revenue_report",
+ "ref_doctype": "Plot Contract",
+ "report_type": "Script Report"
+}
