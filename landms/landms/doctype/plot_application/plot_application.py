@@ -5,7 +5,7 @@ from frappe.utils import add_days, cint, flt, getdate, today
 from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
-from landms.landms.doctype.plot_master.plot_master import PLOT_TYPE_TO_ITEM
+from landms.sales_order_hooks import build_payment_schedule_rows, build_sales_order_item_row
 
 
 class PlotApplication(Document):
@@ -347,8 +347,14 @@ class PlotApplication(Document):
 		transaction_date = self.payment_date or today()
 		payment_deadline = add_days(transaction_date, payment_completion_days)
 
-		item_row = _build_sales_order_item_row(
+		item_row = build_sales_order_item_row(
 			plot, settings.plot_inventory_warehouse, payment_deadline
+		)
+		payment_schedule_rows = build_payment_schedule_rows(
+			total_amount=flt(plot.selling_price),
+			booking_fee_percent=flt(plot.booking_fee_percent),
+			transaction_date=transaction_date,
+			payment_deadline=payment_deadline,
 		)
 
 		so = frappe.get_doc({
@@ -358,6 +364,7 @@ class PlotApplication(Document):
 			"transaction_date":         transaction_date,
 			"delivery_date":            payment_deadline,
 			"set_warehouse":            settings.plot_inventory_warehouse,
+			"ignore_default_payment_terms_template": 1,
 			# Custom fields (fixtures in Phase 1):
 			"plot":                     plot.name,
 			"land_acquisition":         plot.land_acquisition,
@@ -367,6 +374,7 @@ class PlotApplication(Document):
 			"government_share_percent": flt(plot.government_share_percent),
 			"payment_completion_days":  payment_completion_days,
 			"payment_deadline":         payment_deadline,
+			"payment_schedule":         payment_schedule_rows,
 			"items":                    [item_row],
 		})
 		so.insert(ignore_permissions=True)
@@ -380,40 +388,3 @@ class PlotApplication(Document):
 				alert=True,
 			)
 		return so.name
-
-
-# ---------------------------------------------------------------------- #
-#  Helpers                                                                 #
-# ---------------------------------------------------------------------- #
-
-def _build_sales_order_item_row(plot, warehouse, delivery_date):
-	"""Build the single Sales Order item row that represents this plot.
-
-	Phase 5 will extract this to a shared sales_order_hooks module so SO hooks
-	can reuse it — for now it lives with its only caller.
-	"""
-	item_code = PLOT_TYPE_TO_ITEM.get(plot.plot_type)
-	if not item_code:
-		frappe.throw(f"No item is mapped for plot type {plot.plot_type}.")
-
-	item = frappe.db.get_value(
-		"Item", item_code,
-		["name", "item_name", "stock_uom"],
-		as_dict=True,
-	)
-	if not item:
-		frappe.throw(f"Item {item_code} was not found.")
-	if not item.stock_uom:
-		frappe.throw(f"Item {item_code} is missing Stock UOM.")
-
-	return {
-		"item_code":         item.name,
-		"item_name":         item.item_name,
-		"uom":               item.stock_uom,
-		"stock_uom":         item.stock_uom,
-		"conversion_factor": 1,
-		"qty":               1,
-		"rate":              flt(plot.selling_price),
-		"warehouse":         warehouse,
-		"delivery_date":     delivery_date,
-	}

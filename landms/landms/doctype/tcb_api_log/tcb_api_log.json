@@ -165,5 +165,30 @@
    "fieldtype": "Long Text",
    "label": "Error / Traceback"
   }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
  ]
 }

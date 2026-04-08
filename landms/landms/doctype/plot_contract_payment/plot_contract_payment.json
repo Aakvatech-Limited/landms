@@ -9,14 +9,23 @@
    "fieldname": "installment_number",
    "fieldtype": "Int",
    "label": "#",
+   "read_only": 1,
    "in_list_view": 1,
    "columns": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Installment",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 3
   },
   {
    "fieldname": "due_date",
    "fieldtype": "Date",
    "label": "Due Date",
-   "reqd": 1,
+   "read_only": 1,
    "in_list_view": 1,
    "columns": 2
   },
@@ -24,7 +33,7 @@
    "fieldname": "expected_amount",
    "fieldtype": "Currency",
    "label": "Expected (TZS)",
-   "reqd": 1,
+   "read_only": 1,
    "in_list_view": 1,
    "columns": 3
   },
@@ -34,6 +43,30 @@
    "label": "Paid (TZS)",
    "read_only": 1,
    "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "outstanding_amount",
+   "fieldtype": "Currency",
+   "label": "Remaining (TZS)",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "paid_date",
+   "fieldtype": "Date",
+   "label": "Paid Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
    "columns": 3
   },
   {

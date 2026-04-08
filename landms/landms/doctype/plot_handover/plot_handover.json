@@ -1,0 +1,205 @@
+{
+ "doctype": "DocType",
+ "name": "Plot Handover",
+ "module": "LandMS",
+ "autoname": "naming_series:",
+ "naming_series": "PHO-.YYYY.-.####",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PHO-.YYYY.-.####"
+  },
+  {
+   "fieldname": "handover_section",
+   "fieldtype": "Section Break",
+   "label": "Handover Details"
+  },
+  {
+   "fieldname": "contract",
+   "fieldtype": "Link",
+   "label": "Plot Contract",
+   "options": "Plot Contract",
+   "reqd": 1,
+   "description": "The completed contract this handover is for"
+  },
+  {
+   "fieldname": "handover_date",
+   "fieldtype": "Date",
+   "label": "Handover Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "handover_status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nCompleted",
+   "default": "Draft",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "label": "Delivery Note",
+   "options": "Delivery Note",
+   "read_only": 1,
+   "description": "Created automatically on submit to reduce serialized plot stock"
+  },
+  {
+   "fieldname": "plot_section",
+   "fieldtype": "Section Break",
+   "label": "Plot and Contract Information"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "plot",
+   "fieldtype": "Link",
+   "label": "Plot",
+   "options": "Plot Master",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acquisition_name",
+   "fieldtype": "Data",
+   "label": "Project Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Land Acquisition",
+   "options": "Land Acquisition",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract_date",
+   "fieldtype": "Date",
+   "label": "Contract Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "selling_price",
+   "fieldtype": "Float",
+   "label": "Contract Value (TZS)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "parties_section",
+   "fieldtype": "Section Break",
+   "label": "Parties"
+  },
+  {
+   "fieldname": "handed_over_by",
+   "fieldtype": "Data",
+   "label": "Handed Over By",
+   "reqd": 1,
+   "description": "Full name of the company representative handing over the plot"
+  },
+  {
+   "fieldname": "handed_over_by_title",
+   "fieldtype": "Data",
+   "label": "Title / Position",
+   "description": "e.g. Sales Manager, Director"
+  },
+  {
+   "fieldname": "col_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "received_by",
+   "fieldtype": "Data",
+   "label": "Received By",
+   "reqd": 1,
+   "description": "Full name of the customer or authorised representative receiving the plot"
+  },
+  {
+   "fieldname": "receiver_id_type",
+   "fieldtype": "Select",
+   "label": "ID Type",
+   "options": "\nNational ID\nPassport\nCompany Registration"
+  },
+  {
+   "fieldname": "receiver_id_number",
+   "fieldtype": "Data",
+   "label": "ID Number"
+  },
+  {
+   "fieldname": "witness_section",
+   "fieldtype": "Section Break",
+   "label": "Witness"
+  },
+  {
+   "fieldname": "witness_name",
+   "fieldtype": "Data",
+   "label": "Witness Name"
+  },
+  {
+   "fieldname": "witness_id_number",
+   "fieldtype": "Data",
+   "label": "Witness ID Number"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Long Text",
+   "label": "Notes / Special Conditions"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Plot Handover",
+   "read_only": 1,
+   "print_hide": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Sales",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "Finance",
+   "read": 1
+  },
+  {
+   "role": "Auditor",
+   "read": 1
+  }
+ ]
+}

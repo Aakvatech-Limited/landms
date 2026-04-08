@@ -1,0 +1,212 @@
+{
+ "doctype": "DocType",
+ "name": "TCB Payment Notification",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "transaction_id",
+ "sort_field": "received_at",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "TCB-IPN-.YYYY.-.######",
+   "default": "TCB-IPN-.YYYY.-.######",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Received\nProcessed\nFailed\nDuplicate\nIgnored",
+   "default": "Received",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tcb_status_code",
+   "fieldtype": "Int",
+   "label": "TCB Status Code",
+   "description": "Outer envelope status from TCB (0 = Success)."
+  },
+  {
+   "fieldname": "tcb_status_desc",
+   "fieldtype": "Data",
+   "label": "TCB Status Description"
+  },
+  {
+   "fieldname": "identifiers_section",
+   "fieldtype": "Section Break",
+   "label": "Identifiers"
+  },
+  {
+   "fieldname": "transaction_id",
+   "fieldtype": "Data",
+   "label": "TCB Transaction ID",
+   "unique": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "TCB's own transaction_id. Unique \u2014 used for idempotency."
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Control Number (Reference)",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "account_no",
+   "fieldtype": "Data",
+   "label": "Account Number"
+  },
+  {
+   "fieldname": "col_break_identifiers",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "in_list_view": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "default": "TZS"
+  },
+  {
+   "fieldname": "charge",
+   "fieldtype": "Float",
+   "label": "Charge",
+   "precision": "2"
+  },
+  {
+   "fieldname": "transaction_date",
+   "fieldtype": "Datetime",
+   "label": "Transaction Date"
+  },
+  {
+   "fieldname": "payer_section",
+   "fieldtype": "Section Break",
+   "label": "Payer / Description"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Payer / Phone",
+   "description": "TCB sends the payer identifier (name or phone) in the 'phone' field of the IPN param."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "linked_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tcb_control_number",
+   "fieldtype": "Link",
+   "label": "TCB Control Number",
+   "options": "TCB Control Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_linked",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tcb_api_log",
+   "fieldtype": "Link",
+   "label": "TCB API Log",
+   "options": "TCB API Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processing_section",
+   "fieldtype": "Section Break",
+   "label": "Processing Result"
+  },
+  {
+   "fieldname": "processing_message",
+   "fieldtype": "Small Text",
+   "label": "Processing Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Long Text",
+   "label": "Error / Traceback",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_payload_section",
+   "fieldtype": "Section Break",
+   "label": "Raw Payload",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "Long Text",
+   "label": "Raw Payload",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ]
+}

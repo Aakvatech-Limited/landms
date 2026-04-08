@@ -27,14 +27,17 @@ doc_events = {
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 	},
 	"Payment Entry": {
-		"validate":  "landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
+		"validate": [
+			"landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
+			"landms.payment_sync.validate_payment_entry",
+		],
 		"on_submit": [
 			"landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
-			"landms.payment_sync.sync_plot_contract_from_payment_entry",
+			"landms.payment_sync.on_submit_payment_entry",
 		],
 		"on_cancel": [
 			"landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
-			"landms.payment_sync.sync_plot_contract_from_payment_entry",
+			"landms.payment_sync.on_cancel_payment_entry",
 		],
 	},
 	"Sales Order": {
@@ -44,5 +47,8 @@ doc_events = {
 	},
 }
 
-# Scheduled Tasks — wired in Phase 8
-# scheduler_events = {}
+scheduler_events = {
+	"daily": [
+		"landms.tasks.daily",
+	],
+}

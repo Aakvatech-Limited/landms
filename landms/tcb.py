@@ -30,6 +30,7 @@ import re
 import secrets
 from hmac import compare_digest
 from typing import Any
+from urllib.parse import quote_plus, urlencode
 
 import frappe
 from frappe.utils import (
@@ -185,8 +186,9 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"reconciliation_lookback_days": 1,
 			"decline_reference_on_so_cancel": 1,
 			"decline_failure_policy": "Allow Cancel and Flag",
-			"live_base_url": "https://partners.tcbbank.co.tz",
-			"reconciliation_base_url": "https://partners.tcbbank.co.tz:8444",
+			"reference_create_url": "",
+			"reference_decline_url": "",
+			"reconciliation_url": "",
 			"partner_code": "",
 			"profile_id": "",
 			"verify_ssl": 1,
@@ -205,9 +207,9 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"reconciliation_lookback_days": settings_doc.reconciliation_lookback_days or 1,
 		"decline_reference_on_so_cancel": settings_doc.decline_reference_on_so_cancel,
 		"decline_failure_policy": settings_doc.decline_failure_policy or "Allow Cancel and Flag",
-		"live_base_url": settings_doc.live_base_url or "https://partners.tcbbank.co.tz",
-		"reconciliation_base_url": settings_doc.reconciliation_base_url or "https://partners.tcbbank.co.tz:8444",
-		"api_key": settings_doc.get_password("api_key", raise_exception=False),
+		"reference_create_url": (settings_doc.reference_create_url or "").strip(),
+		"reference_decline_url": (settings_doc.reference_decline_url or "").strip(),
+		"reconciliation_url": (settings_doc.reconciliation_url or "").strip(),
 		"partner_code": settings_doc.partner_code,
 		"profile_id": settings_doc.profile_id,
 		"verify_ssl": settings_doc.verify_ssl,
@@ -358,7 +360,7 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		        "message": "TCB outbound mode is Log Only; no live call was made."}
 
 	# --- Live ---
-	_validate_live_reference_settings(settings)
+	_validate_live_reference_settings(settings, need="reference")
 	url = _reference_create_url(settings)
 	verify_ssl = bool(cint(settings.get("verify_ssl", 1)))
 	connect_timeout = flt(settings.get("connect_timeout_seconds") or 5)
@@ -371,9 +373,17 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 
 	try:
 		session = get_request_session()
+		# TCB Reference Create expects application/x-www-form-urlencoded
+		# (NOT JSON). We build the body ourselves so the Content-Type header
+		# is unambiguous and we don't depend on requests' auto-detection.
+		encoded_body = urlencode(payload, doseq=True, quote_via=quote_plus)
 		response = session.post(
 			url,
-			data=payload,
+			data=encoded_body,
+			headers={
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Accept": "application/json",
+			},
 			timeout=(connect_timeout, read_timeout),
 			verify=verify_ssl,
 		)
@@ -473,7 +483,7 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			registry.mark_declined(note="Outbound mode not Live — declined locally only.")
 		return {"ok": True, "status": "Ignored", "message": "Outbound mode is not Live; decline call skipped."}
 
-	_validate_live_reference_settings(settings)
+	_validate_live_reference_settings(settings, need="decline")
 
 	endpoint = _masked_reference_decline_endpoint(settings)
 	url = _reference_decline_url(settings)
@@ -882,14 +892,29 @@ def _record_registry_event(control_number: str, event_type: str, event_status: s
 # ---------------------------------------------------------------------- #
 
 
-def _validate_live_reference_settings(settings: dict[str, Any]):
+def _validate_live_reference_settings(settings: dict[str, Any], *, need: str = "reference") -> None:
+	"""Validate settings before a live call.
+
+	`need` picks which URL is mandatory:
+	    reference    → reference_create_url
+	    decline      → reference_decline_url
+	    reconciliation → reconciliation_url
+	"""
 	missing = []
-	if not settings.get("api_key"):
-		missing.append("API Key")
 	if not settings.get("partner_code"):
 		missing.append("Partner Code")
 	if not settings.get("profile_id"):
 		missing.append("Profile ID / Account Number")
+
+	url_field = {
+		"reference":      "reference_create_url",
+		"decline":        "reference_decline_url",
+		"reconciliation": "reconciliation_url",
+	}.get(need, "reference_create_url")
+
+	if not settings.get(url_field):
+		missing.append(url_field.replace("_", " ").title())
+
 	if missing:
 		frappe.throw(
 			"TCB outbound mode is Live but required integration fields are missing: "
@@ -898,40 +923,48 @@ def _validate_live_reference_settings(settings: dict[str, Any]):
 
 
 def _reference_create_url(settings: dict[str, Any]) -> str:
-	base = (settings.get("live_base_url") or "https://partners.tcbbank.co.tz").rstrip("/")
-	api_key = settings.get("api_key") or ""
-	return f"{base}/public/api/reference/{api_key}"
+	return settings.get("reference_create_url") or ""
 
 
 def _masked_reference_endpoint(settings: dict[str, Any]) -> str:
-	base = (settings.get("live_base_url") or "https://partners.tcbbank.co.tz").rstrip("/")
-	return f"{base}/public/api/reference/<API_KEY>"
+	return _mask_url_secret(settings.get("reference_create_url") or "")
 
 
 def _reference_decline_url(settings: dict[str, Any]) -> str:
-	base = (settings.get("live_base_url") or "https://partners.tcbbank.co.tz").rstrip("/")
-	api_key = settings.get("api_key") or ""
-	return f"{base}/public/api/reference/decline/{api_key}"
+	return settings.get("reference_decline_url") or ""
 
 
 def _masked_reference_decline_endpoint(settings: dict[str, Any]) -> str:
-	base = (settings.get("live_base_url") or "https://partners.tcbbank.co.tz").rstrip("/")
-	return f"{base}/public/api/reference/decline/<API_KEY>"
+	return _mask_url_secret(settings.get("reference_decline_url") or "")
 
 
 def _reconciliation_url(settings: dict[str, Any]) -> str:
-	base = (settings.get("reconciliation_base_url") or "https://partners.tcbbank.co.tz:8444").rstrip("/")
-	api_key = settings.get("api_key") or ""
-	return f"{base}/public/api/reconciliation/{api_key}"
+	return settings.get("reconciliation_url") or ""
 
 
 def _masked_reconciliation_endpoint(settings: dict[str, Any]) -> str:
-	base = (settings.get("reconciliation_base_url") or "https://partners.tcbbank.co.tz:8444").rstrip("/")
-	return f"{base}/public/api/reconciliation/<API_KEY>"
+	return _mask_url_secret(settings.get("reconciliation_url") or "")
+
+
+def _mask_url_secret(url: str) -> str:
+	"""Replace the final path segment of a TCB URL with <SECRET>.
+
+	TCB endpoints embed the partner secret as the last path component, so
+	we mask that for safe logging without losing the host / route context.
+	"""
+	if not url:
+		return ""
+	try:
+		head, sep, tail = url.rpartition("/")
+		if sep and tail:
+			return f"{head}/<SECRET>"
+	except Exception:
+		pass
+	return url
 
 
 def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end_date: str) -> dict[str, Any]:
-	_validate_live_reference_settings(settings)
+	_validate_live_reference_settings(settings, need="reconciliation")
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
 	payload = {

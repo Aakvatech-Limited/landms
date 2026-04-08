@@ -124,41 +124,23 @@
   {
    "fieldname": "credentials_section",
    "fieldtype": "Section Break",
-   "label": "TCB Credentials and Endpoints"
+   "label": "TCB Credentials"
   },
   {
    "fieldname": "partner_code",
    "fieldtype": "Data",
    "label": "Partner Code",
-   "description": "Issued by TCB."
+   "description": "Issued by TCB. Sent as partnerCode in every outbound call."
   },
   {
    "fieldname": "profile_id",
    "fieldtype": "Data",
    "label": "Profile ID / Account Number",
-   "description": "Profile / account number used as acctNo in decline calls."
-  },
-  {
-   "fieldname": "api_key",
-   "fieldtype": "Password",
-   "label": "API Key",
-   "description": "Embedded in the URL path for live calls (treated as a secret)."
+   "description": "Collection account. Sent as profileID on reference create and as acctNo on decline."
   },
   {
    "fieldname": "credentials_col_break",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "live_base_url",
-   "fieldtype": "Data",
-   "label": "Live Base URL",
-   "default": "https://partners.tcbbank.co.tz"
-  },
-  {
-   "fieldname": "reconciliation_base_url",
-   "fieldtype": "Data",
-   "label": "Reconciliation Base URL",
-   "default": "https://partners.tcbbank.co.tz:8444"
   },
   {
    "fieldname": "verify_ssl",
@@ -177,6 +159,72 @@
    "fieldtype": "Float",
    "label": "Read Timeout (s)",
    "default": "15"
+  },
+  {
+   "fieldname": "endpoints_section",
+   "fieldtype": "Section Break",
+   "label": "TCB Endpoints (Full URLs)",
+   "description": "TCB provides pre-signed URLs that already contain the partner secret in the path. Paste the complete URL from TCB. There is no separate API Key."
+  },
+  {
+   "fieldname": "reference_create_url",
+   "fieldtype": "Data",
+   "label": "Reference Create URL",
+   "length": 500,
+   "description": "Full URL for registering a control number (reference). E.g. https://partners.tcbbank.co.tz/public/api/reference/XXXX. Request is form-urlencoded (POST)."
+  },
+  {
+   "fieldname": "reference_decline_url",
+   "fieldtype": "Data",
+   "label": "Reference Decline URL",
+   "length": 500,
+   "description": "Full URL for declining / cancelling a reference. E.g. https://partners.tcbbank.co.tz/public/api/reference/decline/XXXX. Request is JSON (POST)."
+  },
+  {
+   "fieldname": "endpoints_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reconciliation_url",
+   "fieldtype": "Data",
+   "label": "Reconciliation URL",
+   "length": 500,
+   "description": "Full URL for the reconciliation pull. E.g. https://partners.tcbbank.co.tz:8444/public/api/reconciliation/XXXX. Request is form-urlencoded (POST)."
+  },
+  {
+   "fieldname": "callback_section",
+   "fieldtype": "Section Break",
+   "label": "IPN Callback URL (Give This To TCB)"
+  },
+  {
+   "fieldname": "ipn_callback_url",
+   "fieldtype": "Data",
+   "label": "IPN Callback URL",
+   "length": 500,
+   "read_only": 1,
+   "description": "Public URL where TCB should POST instant payment notifications. Share this with TCB integration team. Populated from the site's public URL."
+  },
+  {
+   "fieldname": "ipn_callback_html",
+   "fieldtype": "HTML",
+   "label": "IPN Callback Hint",
+   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. Authenticate by sending the configured Callback Token in the <code>X-TCB-Token</code> header. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>.</div>"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
   }
  ]
 }

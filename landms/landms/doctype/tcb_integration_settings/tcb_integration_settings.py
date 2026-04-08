@@ -1,8 +1,9 @@
 import re
+from urllib.parse import urlparse
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, get_url
 
 
 # Bounds for the control number pattern. Anything outside this is almost
@@ -12,7 +13,23 @@ PATTERN_MAX_LENGTH = 20
 PATTERN_ALLOWED_CHARS = re.compile(r"^[0-9#]+$")
 
 
+IPN_CALLBACK_PATH = "/api/method/landms.api.tcb.ipn_callback"
+
+
 class TCBIntegrationSettings(Document):
+
+	def onload(self):
+		"""Populate the read-only IPN URL every time the form opens.
+
+		The value is not persisted — it's derived from the site's public URL
+		so that moving between sites (dev / staging / prod) always shows
+		the right endpoint to hand to TCB.
+		"""
+		try:
+			self.ipn_callback_url = get_url(IPN_CALLBACK_PATH)
+		except Exception:
+			# Never let a display helper break the form.
+			self.ipn_callback_url = IPN_CALLBACK_PATH
 
 	def validate(self):
 		self._validate_control_number_pattern()
@@ -20,6 +37,8 @@ class TCBIntegrationSettings(Document):
 		self._validate_inbound_consistency()
 		self._validate_reconciliation_consistency()
 		self._validate_timeouts()
+		# Always clear the persisted value — it's a runtime display only.
+		self.ipn_callback_url = ""
 
 	# ------------------------------------------------------------------ #
 	#  Pattern                                                             #
@@ -55,12 +74,23 @@ class TCBIntegrationSettings(Document):
 	# ------------------------------------------------------------------ #
 
 	def _validate_live_credentials(self):
-		"""When live calls are about to happen, we need real credentials."""
+		"""When live calls are about to happen, we need real credentials and URLs."""
+		# Light URL shape check even when disabled — catches typos early.
+		for fieldname in ("reference_create_url", "reference_decline_url", "reconciliation_url"):
+			url = (getattr(self, fieldname, None) or "").strip()
+			if url and not _looks_like_https_url(url):
+				frappe.throw(
+					f"{self.meta.get_label(fieldname)} must be a full https:// URL."
+				)
+			# Normalize whitespace.
+			setattr(self, fieldname, url)
+
 		if not cint(self.enabled):
 			return
 
-		needs_live = self.outbound_mode == "Live" or self.inbound_mode == "Apply Payment"
-		if not needs_live:
+		needs_outbound = self.outbound_mode == "Live"
+		needs_inbound = self.inbound_mode == "Apply Payment"
+		if not (needs_outbound or needs_inbound):
 			return
 
 		missing = []
@@ -68,13 +98,16 @@ class TCBIntegrationSettings(Document):
 			missing.append("Partner Code")
 		if not self.profile_id:
 			missing.append("Profile ID / Account Number")
-		# api_key is a Password field — must read via get_password to detect "is set".
-		if not self.get_password("api_key", raise_exception=False):
-			missing.append("API Key")
+
+		if needs_outbound:
+			if not (self.reference_create_url or "").strip():
+				missing.append("Reference Create URL")
+			if not (self.reference_decline_url or "").strip():
+				missing.append("Reference Decline URL")
 
 		if missing:
 			frappe.throw(
-				"TCB credentials are required when Outbound Mode is Live or Inbound Mode "
+				"TCB integration fields are required when Outbound Mode is Live or Inbound Mode "
 				"is Apply Payment. Missing: " + ", ".join(missing)
 			)
 
@@ -117,3 +150,11 @@ class TCBIntegrationSettings(Document):
 			frappe.throw("Connect Timeout must be greater than zero.")
 		if flt(self.read_timeout_seconds) <= 0:
 			frappe.throw("Read Timeout must be greater than zero.")
+
+
+def _looks_like_https_url(value: str) -> bool:
+	try:
+		parsed = urlparse(value)
+	except Exception:
+		return False
+	return parsed.scheme in ("https", "http") and bool(parsed.netloc)

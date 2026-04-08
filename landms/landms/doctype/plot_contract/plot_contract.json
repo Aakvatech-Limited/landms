@@ -20,6 +20,8 @@
   "payment_completion_days",
   "payment_deadline",
   "sales_order",
+  "plot_application",
+  "control_number",
   "financials_section",
   "selling_price",
   "booking_fee_percent",
@@ -39,6 +41,8 @@
   "government_fee_withheld",
   "government_fee_entry",
   "forfeiture_entry",
+  "linked_documents_section",
+  "linked_documents_html",
   "notes_section",
   "notes",
   "termination_reason",
@@ -114,7 +118,7 @@
    "label": "Payment Completion Days",
    "default": "90",
    "in_list_view": 1,
-   "reqd": 1,
+   "read_only": 1,
    "description": "Days from contract date the customer has to complete full payment"
   },
   {
@@ -133,6 +137,21 @@
    "description": "Linked ERP Sales Order \u2014 auto-set when contract is created from the application flow"
   },
   {
+   "fieldname": "plot_application",
+   "fieldtype": "Link",
+   "label": "Plot Application",
+   "options": "Plot Application",
+   "read_only": 1,
+   "description": "Application fee stage that produced this sale"
+  },
+  {
+   "fieldname": "control_number",
+   "fieldtype": "Data",
+   "label": "TCB Control Number",
+   "read_only": 1,
+   "description": "The payment reference the customer uses at TCB"
+  },
+  {
    "fieldname": "financials_section",
    "fieldtype": "Section Break",
    "label": "Financials"
@@ -148,14 +167,14 @@
    "fieldname": "booking_fee_percent",
    "fieldtype": "Percent",
    "label": "Booking Fee %",
-   "reqd": 1,
+   "read_only": 1,
    "description": "Percentage of selling price required as booking fee"
   },
   {
    "fieldname": "government_share_percent",
    "fieldtype": "Percent",
    "label": "Government Share %",
-   "reqd": 1,
+   "read_only": 1,
    "description": "Government fee percentage \u2014 deducted at full payment completion"
   },
   {
@@ -177,10 +196,10 @@
   {
    "fieldname": "booking_fee_invoice",
    "fieldtype": "Link",
-   "label": "Booking Fee Invoice",
+   "label": "Plot Sales Invoice",
    "options": "Sales Invoice",
    "read_only": 1,
-   "description": "Auto-set to the plot Sales Invoice on contract submission"
+   "description": "The single Sales Invoice that carries all advance and installment payments for this contract"
   },
   {
    "fieldname": "payment_schedule_section",
@@ -191,7 +210,8 @@
    "fieldname": "payment_schedule",
    "fieldtype": "Table",
    "label": "Payment Schedule",
-   "options": "Plot Contract Payment"
+   "options": "Plot Contract Payment",
+   "read_only": 1
   },
   {
    "fieldname": "payment_summary_section",
@@ -251,6 +271,17 @@
    "options": "Journal Entry",
    "read_only": 1,
    "description": "Auto-created when a paid contract is terminated \u2014 customer funds are forfeited"
+  },
+  {
+   "fieldname": "linked_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "linked_documents_html",
+   "fieldtype": "HTML",
+   "label": "Linked Documents"
   },
   {
    "fieldname": "notes_section",

@@ -1,0 +1,219 @@
+{
+ "charts": [
+  {
+   "chart_name": "LMS Plot Status Mix",
+   "label": "Plot Status Mix"
+  },
+  {
+   "chart_name": "LMS Business Trend Overview",
+   "label": "Business Trend Overview"
+  }
+ ],
+ "content": "[{\"id\":\"hdr_overview\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Overview</b></span>\",\"col\":12}},{\"id\":\"nc_available\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Available Plots\",\"col\":3}},{\"id\":\"nc_reserved\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Reserved Plots\",\"col\":3}},{\"id\":\"nc_ongoing\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Ongoing Contracts\",\"col\":3}},{\"id\":\"nc_cash\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Cash Collected\",\"col\":3}},{\"id\":\"spacer1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdr_charts\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Analytics</b></span>\",\"col\":12}},{\"id\":\"ch_status\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LMS Plot Status Mix\",\"col\":6}},{\"id\":\"ch_trend\",\"type\":\"chart\",\"data\":{\"chart_name\":\"LMS Business Trend Overview\",\"col\":12}},{\"id\":\"spacer2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdr_shortcuts\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sc_plot\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Master\",\"col\":3}},{\"id\":\"sc_app\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Application\",\"col\":3}},{\"id\":\"sc_contract\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Contract\",\"col\":3}},{\"id\":\"sc_handover\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Handover\",\"col\":3}},{\"id\":\"spacer3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdr_masters\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Masters &amp; Settings</b></span>\",\"col\":12}},{\"id\":\"card_land\",\"type\":\"card\",\"data\":{\"card_name\":\"Land & Plots\",\"col\":4}},{\"id\":\"card_contracts\",\"type\":\"card\",\"data\":{\"card_name\":\"Contracts & Payments\",\"col\":4}},{\"id\":\"card_tcb\",\"type\":\"card\",\"data\":{\"card_name\":\"TCB Integration\",\"col\":4}}]",
+ "creation": "2026-04-08 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "organization",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Land Management",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Land & Plots",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Land Acquisition",
+   "link_count": 0,
+   "link_to": "Land Acquisition",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Master",
+   "link_count": 0,
+   "link_to": "Plot Master",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Application",
+   "link_count": 0,
+   "link_to": "Plot Application",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Handover",
+   "link_count": 0,
+   "link_to": "Plot Handover",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Contracts & Payments",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Contract",
+   "link_count": 0,
+   "link_to": "Plot Contract",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Contract Payment",
+   "link_count": 0,
+   "link_to": "Plot Contract Payment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Integration",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Integration Settings",
+   "link_count": 0,
+   "link_to": "TCB Integration Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Control Number",
+   "link_count": 0,
+   "link_to": "TCB Control Number",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB API Log",
+   "link_count": 0,
+   "link_to": "TCB API Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LandMS Settings",
+   "link_count": 0,
+   "link_to": "LandMS Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LandMS",
+ "name": "Land Management",
+ "number_cards": [
+  {
+   "label": "Available Plots",
+   "number_card_name": "LANDMS Available Plots"
+  },
+  {
+   "label": "Reserved Plots",
+   "number_card_name": "LANDMS Reserved Plots"
+  },
+  {
+   "label": "Ongoing Contracts",
+   "number_card_name": "LANDMS Ongoing Contracts"
+  },
+  {
+   "label": "Cash Collected",
+   "number_card_name": "LANDMS Cash Collected"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 30.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Plot Master",
+   "link_to": "Plot Master",
+   "type": "DocType"
+  },
+  {
+   "color": "Yellow",
+   "doc_view": "List",
+   "label": "Plot Application",
+   "link_to": "Plot Application",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Plot Contract",
+   "link_to": "Plot Contract",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "Plot Handover",
+   "link_to": "Plot Handover",
+   "type": "DocType"
+  }
+ ],
+ "title": "Land Management"
+}
