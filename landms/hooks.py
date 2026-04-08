@@ -13,6 +13,9 @@ fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Land Acquisition Approver"]]]},
 	{"dt": "Custom Field", "filters": [["module", "=", "LandMS"]]},
 	{"dt": "Workflow", "filters": [["document_type", "=", "Land Acquisition"]]},
+	{"dt": "Dashboard Chart", "filters": [["module", "=", "LandMS"]]},
+	{"dt": "Number Card", "filters": [["module", "=", "LandMS"]]},
+	{"dt": "Workspace", "filters": [["module", "=", "LandMS"]]},
 ]
 
 doc_events = {

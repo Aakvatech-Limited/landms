@@ -9,7 +9,6 @@
  "function": "Count",
  "idx": 0,
  "is_public": 1,
- "is_standard": 1,
  "label": "LMS Locked Plots",
  "modified": "2026-03-27 12:17:19.936966",
  "modified_by": "Administrator",

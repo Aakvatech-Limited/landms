@@ -10,7 +10,6 @@
  "function": "Sum",
  "idx": 0,
  "is_public": 1,
- "is_standard": 1,
  "label": "LANDMS Cash Collected",
  "modified": "2026-03-12 20:00:00.000000",
  "modified_by": "Administrator",
