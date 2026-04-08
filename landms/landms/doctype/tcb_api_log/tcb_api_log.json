@@ -1,0 +1,194 @@
+{
+ "doctype": "DocType",
+ "name": "TCB API Log",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 0,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "event_type",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "TCB-LOG-.YYYY.-.######",
+   "default": "TCB-LOG-.YYYY.-.######",
+   "reqd": 1
+  },
+  {
+   "fieldname": "header_section",
+   "fieldtype": "Section Break",
+   "label": "Event"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "Outbound\nInbound",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "label": "Event Type",
+   "options": "Reference Create\nReference Decline\nIPN Callback\nReconciliation",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Success\nFailed\nIgnored",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "processing_mode",
+   "fieldtype": "Data",
+   "label": "Processing Mode",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "header_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "requested_at",
+   "fieldtype": "Datetime",
+   "label": "Requested At"
+  },
+  {
+   "fieldname": "response_at",
+   "fieldtype": "Datetime",
+   "label": "Response At"
+  },
+  {
+   "fieldname": "is_duplicate",
+   "fieldtype": "Check",
+   "label": "Is Duplicate",
+   "default": "0"
+  },
+  {
+   "fieldname": "endpoint_section",
+   "fieldtype": "Section Break",
+   "label": "Endpoint and Status Codes"
+  },
+  {
+   "fieldname": "endpoint",
+   "fieldtype": "Data",
+   "label": "Endpoint",
+   "length": 255,
+   "description": "API endpoint hit (with credentials masked)."
+  },
+  {
+   "fieldname": "http_status_code",
+   "fieldtype": "Int",
+   "label": "HTTP Status Code"
+  },
+  {
+   "fieldname": "tcb_status_code",
+   "fieldtype": "Int",
+   "label": "TCB Status Code"
+  },
+  {
+   "fieldname": "tcb_message",
+   "fieldtype": "Data",
+   "label": "TCB Message",
+   "length": 255
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References"
+  },
+  {
+   "fieldname": "external_reference",
+   "fieldtype": "Data",
+   "label": "External Reference (Control Number)",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "transaction_id",
+   "fieldtype": "Data",
+   "label": "TCB Transaction ID",
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "references_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order"
+  },
+  {
+   "fieldname": "plot_contract",
+   "fieldtype": "Link",
+   "label": "Plot Contract",
+   "options": "Plot Contract"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry"
+  },
+  {
+   "fieldname": "payload_section",
+   "fieldtype": "Section Break",
+   "label": "Payloads"
+  },
+  {
+   "fieldname": "request_payload",
+   "fieldtype": "Long Text",
+   "label": "Request Payload"
+  },
+  {
+   "fieldname": "response_payload",
+   "fieldtype": "Long Text",
+   "label": "Response Payload"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Long Text",
+   "label": "Error / Traceback"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

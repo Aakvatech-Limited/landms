@@ -1,0 +1,230 @@
+{
+ "doctype": "DocType",
+ "name": "TCB Integration Settings",
+ "module": "LandMS",
+ "issingle": 1,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "activation_section",
+   "fieldtype": "Section Break",
+   "label": "Activation"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "TCB Integration Enabled",
+   "default": "0",
+   "description": "Master switch. When off, no outbound calls are made and no inbound payloads are processed (still logged if Log Only)."
+  },
+  {
+   "fieldname": "outbound_section",
+   "fieldtype": "Section Break",
+   "label": "Outbound (Reference Create / Decline)"
+  },
+  {
+   "fieldname": "outbound_mode",
+   "fieldtype": "Select",
+   "label": "Outbound Mode",
+   "options": "Off\nLog Only\nLive",
+   "default": "Off",
+   "reqd": 1,
+   "description": "Off = no calls, no logs. Log Only = no live calls, all attempts logged. Live = real calls to TCB."
+  },
+  {
+   "fieldname": "control_number_pattern",
+   "fieldtype": "Data",
+   "label": "Control Number Pattern",
+   "default": "99911####00##",
+   "reqd": 1,
+   "description": "Pattern used to generate TCB control numbers. '#' = random digit (filled by secrets.randbelow). All other characters are literal. Example: 99911####00## generates 13-digit references like 9991143790087."
+  },
+  {
+   "fieldname": "outbound_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decline_reference_on_so_cancel",
+   "fieldtype": "Check",
+   "label": "Decline Reference on SO Cancel",
+   "default": "1",
+   "description": "When an unpaid Sales Order is cancelled, send a Reference Decline call to TCB so the control number cannot accept a payment."
+  },
+  {
+   "fieldname": "decline_failure_policy",
+   "fieldtype": "Select",
+   "label": "Decline Failure Policy",
+   "options": "Allow Cancel and Flag\nBlock Cancel",
+   "default": "Allow Cancel and Flag",
+   "description": "What to do if the TCB Decline call fails. Allow Cancel and Flag = cancel the SO anyway and mark the registry. Block Cancel = throw and prevent the SO cancellation."
+  },
+  {
+   "fieldname": "inbound_section",
+   "fieldtype": "Section Break",
+   "label": "Inbound (IPN Callback)"
+  },
+  {
+   "fieldname": "inbound_mode",
+   "fieldtype": "Select",
+   "label": "Inbound Mode",
+   "options": "Off\nLog Only\nApply Payment",
+   "default": "Off",
+   "reqd": 1,
+   "description": "Off = ignore IPNs. Log Only = log but never create Payment Entry. Apply Payment = create Payment Entry on matched control number."
+  },
+  {
+   "fieldname": "auto_apply_callback_payments",
+   "fieldtype": "Check",
+   "label": "Auto-Apply Callback Payments",
+   "default": "0",
+   "depends_on": "eval:doc.inbound_mode==\"Apply Payment\"",
+   "description": "When enabled and inbound mode is Apply Payment, IPN callbacks immediately create the Payment Entry. Otherwise the callback is logged for manual review."
+  },
+  {
+   "fieldname": "inbound_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "callback_token",
+   "fieldtype": "Password",
+   "label": "Callback Token",
+   "description": "Shared secret TCB sends in the callback header. Used to authenticate inbound IPN requests. Validated with hmac.compare_digest."
+  },
+  {
+   "fieldname": "reconciliation_section",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
+  },
+  {
+   "fieldname": "reconciliation_enabled",
+   "fieldtype": "Check",
+   "label": "Reconciliation Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "auto_apply_reconciliation_payments",
+   "fieldtype": "Check",
+   "label": "Auto-Apply Reconciliation Payments",
+   "default": "0",
+   "depends_on": "eval:doc.reconciliation_enabled"
+  },
+  {
+   "fieldname": "reconciliation_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reconciliation_lookback_days",
+   "fieldtype": "Int",
+   "label": "Reconciliation Lookback Days",
+   "default": "1",
+   "depends_on": "eval:doc.reconciliation_enabled",
+   "description": "How far back the daily reconciliation job pulls TCB rows."
+  },
+  {
+   "fieldname": "credentials_section",
+   "fieldtype": "Section Break",
+   "label": "TCB Credentials"
+  },
+  {
+   "fieldname": "partner_code",
+   "fieldtype": "Data",
+   "label": "Partner Code",
+   "description": "Issued by TCB. Sent as partnerCode in every outbound call."
+  },
+  {
+   "fieldname": "profile_id",
+   "fieldtype": "Data",
+   "label": "Profile ID / Account Number",
+   "description": "Collection account. Sent as profileID on reference create and as acctNo on decline."
+  },
+  {
+   "fieldname": "credentials_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verify_ssl",
+   "fieldtype": "Check",
+   "label": "Verify SSL",
+   "default": "1"
+  },
+  {
+   "fieldname": "connect_timeout_seconds",
+   "fieldtype": "Float",
+   "label": "Connect Timeout (s)",
+   "default": "5"
+  },
+  {
+   "fieldname": "read_timeout_seconds",
+   "fieldtype": "Float",
+   "label": "Read Timeout (s)",
+   "default": "15"
+  },
+  {
+   "fieldname": "endpoints_section",
+   "fieldtype": "Section Break",
+   "label": "TCB Endpoints (Full URLs)",
+   "description": "TCB provides pre-signed URLs that already contain the partner secret in the path. Paste the complete URL from TCB. There is no separate API Key."
+  },
+  {
+   "fieldname": "reference_create_url",
+   "fieldtype": "Data",
+   "label": "Reference Create URL",
+   "length": 500,
+   "description": "Full URL for registering a control number (reference). E.g. https://partners.tcbbank.co.tz/public/api/reference/XXXX. Request is form-urlencoded (POST)."
+  },
+  {
+   "fieldname": "reference_decline_url",
+   "fieldtype": "Data",
+   "label": "Reference Decline URL",
+   "length": 500,
+   "description": "Full URL for declining / cancelling a reference. E.g. https://partners.tcbbank.co.tz/public/api/reference/decline/XXXX. Request is JSON (POST)."
+  },
+  {
+   "fieldname": "endpoints_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reconciliation_url",
+   "fieldtype": "Data",
+   "label": "Reconciliation URL",
+   "length": 500,
+   "description": "Full URL for the reconciliation pull. E.g. https://partners.tcbbank.co.tz:8444/public/api/reconciliation/XXXX. Request is form-urlencoded (POST)."
+  },
+  {
+   "fieldname": "callback_section",
+   "fieldtype": "Section Break",
+   "label": "IPN Callback URL (Give This To TCB)"
+  },
+  {
+   "fieldname": "ipn_callback_url",
+   "fieldtype": "Data",
+   "label": "IPN Callback URL",
+   "length": 500,
+   "read_only": 1,
+   "description": "Public URL where TCB should POST instant payment notifications. Share this with TCB integration team. Populated from the site's public URL."
+  },
+  {
+   "fieldname": "ipn_callback_html",
+   "fieldtype": "HTML",
+   "label": "IPN Callback Hint",
+   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. Authenticate by sending the configured Callback Token in the <code>X-TCB-Token</code> header. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>.</div>"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+{
+ "background_color": "#FFF6E5",
+ "color": "#B27600",
+ "creation": "2026-03-27 10:33:12.671427",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Plot Master",
+ "filters_json": "[[\"Plot Master\",\"docstatus\",\"=\",1,false],[\"Plot Master\",\"status\",\"=\",\"Reserved\",false]]",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "label": "LANDMS Reserved Plots",
+ "modified": "2026-03-27 12:17:19.936966",
+ "modified_by": "Administrator",
+ "module": "LandMS",
+ "name": "LANDMS Reserved Plots",
+ "owner": "Administrator",
+ "show_full_number": 1,
+ "show_percentage_stats": 0,
+ "stats_time_interval": "Monthly",
+ "type": "Document Type"
+}

@@ -1,0 +1,161 @@
+{
+ "doctype": "DocType",
+ "name": "TCB Control Number",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "autoname": "field:control_number",
+ "naming_rule": "By fieldname",
+ "title_field": "control_number",
+ "fields": [
+  {
+   "fieldname": "control_number",
+   "fieldtype": "Data",
+   "label": "Control Number",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The 13-digit (or pattern-defined) TCB reference. Acts as the document name."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Generated\nRegistered\nPaid\nDeclined\nExpired\nFailed",
+   "default": "Generated",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Expected Amount",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Sales Order grand_total at the time of generation."
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Lifecycle"
+  },
+  {
+   "fieldname": "generated_at",
+   "fieldtype": "Datetime",
+   "label": "Generated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "registered_at",
+   "fieldtype": "Datetime",
+   "label": "Registered At (TCB)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paid_at",
+   "fieldtype": "Datetime",
+   "label": "Paid At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "declined_at",
+   "fieldtype": "Datetime",
+   "label": "Declined At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lifecycle_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "TCB Transaction Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Paid Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_event",
+   "fieldtype": "Small Text",
+   "label": "Last Event",
+   "read_only": 1
+  },
+  {
+   "fieldname": "logs_section",
+   "fieldtype": "Section Break",
+   "label": "TCB API Log Trail",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "tcb_api_logs",
+   "fieldtype": "Table",
+   "label": "TCB API Logs",
+   "options": "TCB Control Number Log Link",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

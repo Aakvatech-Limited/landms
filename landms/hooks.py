@@ -13,6 +13,9 @@ fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Land Acquisition Approver"]]]},
 	{"dt": "Custom Field", "filters": [["module", "=", "LandMS"]]},
 	{"dt": "Workflow", "filters": [["document_type", "=", "Land Acquisition"]]},
+	{"dt": "Dashboard Chart", "filters": [["module", "=", "LandMS"]]},
+	{"dt": "Number Card", "filters": [["module", "=", "LandMS"]]},
+	{"dt": "Workspace", "filters": [["module", "=", "LandMS"]]},
 ]
 
 doc_events = {
@@ -27,11 +30,28 @@ doc_events = {
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 	},
 	"Payment Entry": {
-		"validate":  "landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
-		"on_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
-		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
+		"validate": [
+			"landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
+			"landms.payment_sync.validate_payment_entry",
+		],
+		"on_submit": [
+			"landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
+			"landms.payment_sync.on_submit_payment_entry",
+		],
+		"on_cancel": [
+			"landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
+			"landms.payment_sync.on_cancel_payment_entry",
+		],
+	},
+	"Sales Order": {
+		"validate":  "landms.sales_order_hooks.validate_sales_order",
+		"on_submit": "landms.sales_order_hooks.submit_sales_order",
+		"on_cancel": "landms.sales_order_hooks.cancel_sales_order",
 	},
 }
 
-# Scheduled Tasks — wired in Phase 8
-# scheduler_events = {}
+scheduler_events = {
+	"daily": [
+		"landms.tasks.daily",
+	],
+}
