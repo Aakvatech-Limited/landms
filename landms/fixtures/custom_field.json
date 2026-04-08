@@ -117,7 +117,12 @@
   "label": "TCB Control Number",
   "insert_after": "lms_ref_section",
   "read_only": 1,
-  "search_index": 1
+  "search_index": 1,
+  "unique": 1,
+  "no_copy": 1,
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "description": "Auto-generated on Sales Order submit. Customers pay TCB against this number; never enter it manually."
  },
  {
   "doctype": "Custom Field",
