@@ -259,14 +259,23 @@ def _read_request_payload() -> tuple[Any, dict[str, Any]]:
 	"""Read request body for both JSON and form-encoded callbacks.
 
 	Returns (raw_payload_for_logging, parsed_dict_for_processing).
-	Logging gets the raw body so we can debug TCB-side malformations later.
+	Logging gets the raw body AND request headers so we can see exactly what
+	TCB sent — including any auth header they may use that isn't documented.
 	"""
 	raw_body = ""
 	parsed: dict[str, Any] = {}
+	headers: dict[str, str] = {}
+	method = ""
+	source_ip = ""
+	query_string = ""
 
 	try:
 		request = frappe.local.request
 		raw_body = (request.get_data(as_text=True) or "").strip()
+		headers = {k: v for k, v in request.headers.items()}
+		method = request.method or ""
+		source_ip = request.remote_addr or ""
+		query_string = request.query_string.decode("utf-8", errors="replace") if request.query_string else ""
 	except Exception:
 		raw_body = ""
 
@@ -285,7 +294,18 @@ def _read_request_payload() -> tuple[Any, dict[str, Any]]:
 		for k in ("cmd", "csrf_token"):
 			parsed.pop(k, None)
 
-	return (raw_body or parsed), parsed
+	# Bundle headers + body together so the persisted raw_payload shows
+	# the full incoming request. This is the only place TCB's actual
+	# request shape is captured for auditing.
+	debug_envelope = {
+		"method":       method,
+		"source_ip":    source_ip,
+		"query_string": query_string,
+		"headers":      headers,
+		"body":         raw_body or parsed,
+	}
+
+	return debug_envelope, parsed
 
 
 def _extract_ipn_body(envelope: dict[str, Any]) -> dict[str, Any]:
