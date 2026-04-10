@@ -7,8 +7,7 @@
   "fieldname": "lms_section",
   "fieldtype": "Section Break",
   "label": "Land Management",
-  "insert_after": "amended_from",
-  "collapsible": 1
+  "insert_after": "amended_from"
  },
  {
   "doctype": "Custom Field",
@@ -19,7 +18,8 @@
   "fieldtype": "Link",
   "label": "Plot Application",
   "options": "Plot Application",
-  "insert_after": "lms_section"
+  "insert_after": "lms_section",
+  "reqd": 1
  },
  {
   "doctype": "Custom Field",
@@ -30,7 +30,8 @@
   "fieldtype": "Link",
   "label": "Plot",
   "options": "Plot Master",
-  "insert_after": "plot_application"
+  "insert_after": "plot_application",
+  "read_only": 1
  },
  {
   "doctype": "Custom Field",
@@ -46,14 +47,24 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Order-lms_col_1",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "lms_col_1",
+  "fieldtype": "Column Break",
+  "insert_after": "land_acquisition"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Sales Order-acquisition_name",
   "dt": "Sales Order",
   "module": "LandMS",
   "fieldname": "acquisition_name",
   "fieldtype": "Data",
   "label": "Acquisition Name",
-  "insert_after": "land_acquisition",
-  "read_only": 1
+  "insert_after": "lms_col_1",
+  "read_only": 1,
+  "hidden": 1
  },
  {
   "doctype": "Custom Field",
@@ -63,7 +74,8 @@
   "fieldname": "booking_fee_percent",
   "fieldtype": "Percent",
   "label": "Booking Fee %",
-  "insert_after": "acquisition_name"
+  "insert_after": "acquisition_name",
+  "read_only": 1
  },
  {
   "doctype": "Custom Field",
@@ -73,7 +85,19 @@
   "fieldname": "government_share_percent",
   "fieldtype": "Percent",
   "label": "Government Share %",
-  "insert_after": "booking_fee_percent"
+  "insert_after": "booking_fee_percent",
+  "read_only": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Order-lms_terms_section",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "lms_terms_section",
+  "fieldtype": "Section Break",
+  "label": "Payment Terms",
+  "insert_after": "government_share_percent",
+  "depends_on": "eval:doc.plot_application"
  },
  {
   "doctype": "Custom Field",
@@ -83,7 +107,17 @@
   "fieldname": "payment_completion_days",
   "fieldtype": "Int",
   "label": "Payment Completion (Days)",
-  "insert_after": "government_share_percent"
+  "insert_after": "lms_terms_section",
+  "read_only": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Order-lms_terms_col",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "lms_terms_col",
+  "fieldtype": "Column Break",
+  "insert_after": "payment_completion_days"
  },
  {
   "doctype": "Custom Field",
@@ -93,7 +127,7 @@
   "fieldname": "payment_deadline",
   "fieldtype": "Date",
   "label": "Payment Deadline",
-  "insert_after": "payment_completion_days",
+  "insert_after": "lms_terms_col",
   "read_only": 1
  },
  {
@@ -105,7 +139,7 @@
   "fieldtype": "Section Break",
   "label": "LMS References",
   "insert_after": "payment_deadline",
-  "collapsible": 1
+  "depends_on": "eval:doc.docstatus>=1"
  },
  {
   "doctype": "Custom Field",
@@ -121,8 +155,7 @@
   "unique": 1,
   "no_copy": 1,
   "in_list_view": 1,
-  "in_standard_filter": 1,
-  "description": "Auto-generated on Sales Order submit. Customers pay TCB against this number; never enter it manually."
+  "in_standard_filter": 1
  },
  {
   "doctype": "Custom Field",
@@ -138,6 +171,15 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Order-lms_ref_col",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "lms_ref_col",
+  "fieldtype": "Column Break",
+  "insert_after": "plot_contract"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Sales Order-plot_sales_invoice",
   "dt": "Sales Order",
   "module": "LandMS",
@@ -145,7 +187,7 @@
   "fieldtype": "Link",
   "label": "Plot Sales Invoice",
   "options": "Sales Invoice",
-  "insert_after": "plot_contract",
+  "insert_after": "lms_ref_col",
   "read_only": 1
  },
  {

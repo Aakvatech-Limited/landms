@@ -33,6 +33,49 @@ from landms.tcb import (
 )
 
 
+@frappe.whitelist()
+def get_sales_order_defaults(plot_application):
+	"""Return all fields needed to populate a Sales Order from a Plot Application."""
+	if not plot_application or not frappe.db.exists("Plot Application", plot_application):
+		frappe.throw(f"Plot Application {plot_application} not found.")
+
+	app = frappe.get_doc("Plot Application", plot_application)
+	if app.docstatus != 1 or app.status != "Paid":
+		frappe.throw(f"Plot Application {app.name} must be Paid. Current status: {app.status}")
+
+	plot = frappe.get_doc("Plot Master", app.plot)
+	settings = frappe.get_single("LandMS Settings")
+
+	payment_completion_days = cint(plot.payment_completion_days or 0)
+	transaction_date = app.payment_date or today()
+	payment_deadline = add_days(transaction_date, payment_completion_days)
+
+	item_row = build_sales_order_item_row(plot, settings.plot_inventory_warehouse, payment_deadline)
+	schedule_rows = build_payment_schedule_rows(
+		total_amount=flt(plot.selling_price),
+		booking_fee_percent=flt(plot.booking_fee_percent),
+		transaction_date=transaction_date,
+		payment_deadline=payment_deadline,
+	)
+
+	return {
+		"customer": app.customer,
+		"plot": app.plot,
+		"land_acquisition": plot.land_acquisition,
+		"acquisition_name": plot.acquisition_name,
+		"booking_fee_percent": flt(plot.booking_fee_percent),
+		"government_share_percent": flt(plot.government_share_percent),
+		"payment_completion_days": payment_completion_days,
+		"transaction_date": transaction_date,
+		"delivery_date": payment_deadline,
+		"payment_deadline": payment_deadline,
+		"company": settings.company,
+		"set_warehouse": settings.plot_inventory_warehouse,
+		"item_row": item_row,
+		"schedule_rows": schedule_rows,
+	}
+
+
 def validate_sales_order(doc, method=None):
 	if not _is_landms_sales_order(doc):
 		return
@@ -70,6 +113,9 @@ def validate_sales_order(doc, method=None):
 def submit_sales_order(doc, method=None):
 	if not _is_landms_sales_order(doc):
 		return
+
+	doc.db_set("plot_outstanding_amount", flt(doc.grand_total), update_modified=False)
+	doc.plot_outstanding_amount = flt(doc.grand_total)
 
 	control_number = _ensure_control_number(doc)
 	_create_registry_row(doc, control_number)
@@ -166,7 +212,8 @@ def build_payment_schedule_rows(total_amount, booking_fee_percent, transaction_d
 	if total_amount <= 0:
 		return []
 
-	if booking_fee_percent <= 0:
+	# If no booking fee or both dates are the same, single row
+	if booking_fee_percent <= 0 or str(transaction_date) == str(payment_deadline):
 		return [{
 			"description": "Full Plot Payment",
 			"due_date": payment_deadline,
