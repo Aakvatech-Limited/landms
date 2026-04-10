@@ -178,17 +178,6 @@
    "description": "Material Receipt that moved this plot's value from LUD into Plot Inventory"
   },
   {
-   "fieldname": "notes_section",
-   "fieldtype": "Section Break",
-   "label": "Notes",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "notes",
-   "fieldtype": "Long Text",
-   "label": "Notes"
-  },
-  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",

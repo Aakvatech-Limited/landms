@@ -8,8 +8,7 @@ Public surface (used by sales_order_hooks, api/tcb.py, scheduler jobs):
   decline_reference_for_sales_order(so_name, cn)         → dict
   apply_tcb_payment_to_sales_order(...)                  → dict
   run_tcb_reconciliation_job(start_date, end_date)       → dict
-  validate_callback_token(token)                         → bool
-  get_tcb_inbound_mode()                                 → str
+get_tcb_inbound_mode()                                 → str
   is_callback_auto_apply_enabled()                       → bool
   has_duplicate_ipn(transaction_id, reference)           → bool
   create_tcb_api_log(...)                                → str | None
@@ -28,7 +27,6 @@ Design notes:
 import json
 import re
 import secrets
-from hmac import compare_digest
 from typing import Any
 from urllib.parse import quote_plus, urlencode
 
@@ -251,17 +249,6 @@ def should_auto_apply_reconciliation_payments() -> bool:
 		and cint(settings.get("auto_apply_reconciliation_payments"))
 	)
 
-
-def validate_callback_token(provided_token: str | None) -> bool:
-	"""Constant-time comparison against the configured callback token."""
-	try:
-		settings_doc = frappe.get_single("TCB Integration Settings")
-		expected_token = settings_doc.get_password("callback_token", raise_exception=False) or ""
-	except Exception:
-		return False
-	if not expected_token:
-		return False
-	return compare_digest((provided_token or "").strip(), expected_token.strip())
 
 
 # ---------------------------------------------------------------------- #

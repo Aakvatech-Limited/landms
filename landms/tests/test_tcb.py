@@ -127,9 +127,6 @@ class TestSettingsAccess(FrappeTestCase):
 		self.assertTrue(result["ok"])
 		self.assertEqual(result["status"], "Ignored")
 
-	def test_validate_callback_token_rejects_empty(self):
-		self.assertFalse(tcb.validate_callback_token(""))
-		self.assertFalse(tcb.validate_callback_token(None))
 
 
 class TestPatternRegexEscape(FrappeTestCase):
