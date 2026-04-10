@@ -121,12 +121,6 @@ class TCBIntegrationSettings(Document):
 				"Auto-Apply Callback Payments can only be enabled when Inbound Mode is 'Apply Payment'."
 			)
 
-		if cint(self.enabled) and self.inbound_mode == "Apply Payment":
-			if not self.get_password("callback_token", raise_exception=False):
-				frappe.throw(
-					"Callback Token is required when Inbound Mode is 'Apply Payment'. "
-					"This token authenticates incoming IPN requests from TCB."
-				)
 
 	# ------------------------------------------------------------------ #
 	#  Reconciliation consistency                                          #

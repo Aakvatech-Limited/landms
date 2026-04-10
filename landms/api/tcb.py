@@ -3,7 +3,6 @@
 URL paths:
 
   POST /api/method/landms.api.tcb.ipn_callback
-       Headers: X-TCB-Token: <callback_token>
        Body:    The TCB envelope:
                 {
                   "status": 0,
@@ -44,7 +43,6 @@ from landms.tcb import (
 	has_duplicate_ipn,
 	is_callback_auto_apply_enabled,
 	run_tcb_reconciliation_job,
-	validate_callback_token,
 )
 
 
@@ -60,9 +58,6 @@ IPN_ENDPOINT = "/api/method/landms.api.tcb.ipn_callback"
 def ipn_callback() -> dict[str, Any]:
 	"""Handle inbound TCB IPN payment notifications.
 
-	Authentication: callback_token in the X-TCB-Token header (or `token` form
-	field as a fallback for systems that can't set custom headers).
-
 	Always returns 200 with a JSON body — TCB retries on non-200 and we never
 	want to look like an outage. The full raw payload is persisted to
 	`TCB Payment Notification` for audit and manual replay.
@@ -70,28 +65,6 @@ def ipn_callback() -> dict[str, Any]:
 	raw_payload, envelope = _read_request_payload()
 	# Unwrap the envelope: the real TCB body wraps payment details inside `param`.
 	body = _extract_ipn_body(envelope)
-
-	# 1. Auth — never proceed without a valid token.
-	provided_token = (
-		frappe.get_request_header("X-TCB-Token")
-		or envelope.get("token")
-		or body.get("token")
-		or ""
-	)
-	if not validate_callback_token(provided_token):
-		create_tcb_api_log(
-			direction="Inbound",
-			event_type="IPN Callback",
-			status="Failed",
-			processing_mode="Auth",
-			endpoint=IPN_ENDPOINT,
-			external_reference=cstr(body.get("reference") or "")[:140],
-			transaction_id=cstr(body.get("transaction_id") or "")[:140],
-			request_payload=raw_payload,
-			response_payload={"message": "Invalid or missing callback token."},
-			error="Auth failure: token mismatch.",
-		)
-		return {"ok": False, "status": "Unauthorized", "message": "Invalid callback token."}
 
 	mode = get_tcb_inbound_mode()
 	reference = cstr(body.get("reference") or "").strip()

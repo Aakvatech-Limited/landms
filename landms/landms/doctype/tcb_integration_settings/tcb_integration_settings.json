@@ -86,12 +86,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "callback_token",
-   "fieldtype": "Password",
-   "label": "Callback Token",
-   "description": "Shared secret TCB sends in the callback header. Used to authenticate inbound IPN requests. Validated with hmac.compare_digest."
-  },
-  {
    "fieldname": "reconciliation_section",
    "fieldtype": "Section Break",
    "label": "Reconciliation"
