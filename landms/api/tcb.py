@@ -235,7 +235,7 @@ def run_reconciliation(start_date: str | None = None, end_date: str | None = Non
 	"""
 	if "System Manager" not in frappe.get_roles():
 		frappe.throw("Only System Manager can trigger TCB reconciliation manually.")
-	return run_tcb_reconciliation_job(start_date=start_date, end_date=end_date)
+	return run_tcb_reconciliation_job(start_date=start_date, end_date=end_date, triggered_by="Manual")
 
 
 # ---------------------------------------------------------------------- #

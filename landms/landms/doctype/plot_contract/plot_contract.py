@@ -559,13 +559,25 @@ class PlotContract(Document):
 
 		settings = frappe.get_single("LandMS Settings")
 		self.reload()
-		self._cancel_unpaid_plot_invoice()
+
+		# Mark terminated first so subsequent hooks see the correct contract state
+		self.db_set("contract_status", "Terminated")
+		self.db_set("termination_reason", str(reason).strip())
+
+		# Post forfeiture JE while Customer Advance liability balance still exists
+		# (must happen before any SI/SO cancellations reverse the GL entries)
 		je_name = self._post_termination_journal_entry(settings)
+
+		# Cancel the SI only if it has no payment allocations — if payments exist
+		# the forfeiture JE above already handles the accounting
+		self._cancel_plot_invoice_on_termination()
+
+		# Cancel the linked Sales Order — the cancel_sales_order hook fires
+		# automatically and declines the TCB control number with the reference decline URL
+		self._cancel_linked_sales_order_on_termination()
 
 		frappe.db.set_value("Plot Master", self.plot, "status", "Available")
 		self._sync_land_acquisition_summary()
-		self.db_set("contract_status", "Terminated")
-		self.db_set("termination_reason", str(reason).strip())
 
 		msg = f"Contract terminated. Plot {self.plot} is now Available for new contracts."
 		if je_name:
@@ -576,16 +588,46 @@ class PlotContract(Document):
 			)
 		frappe.msgprint(msg, indicator="orange", alert=True)
 
-	def _cancel_unpaid_plot_invoice(self):
+	def _cancel_plot_invoice_on_termination(self):
+		"""Cancel the plot SI during termination only if no payment allocations exist.
+
+		If payments have been applied (outstanding < grand_total) the SI is left
+		submitted as an audit trail. The forfeiture JE moves the Customer Advance
+		liability to Forfeited Deposits income — cancelling a paid SI would reverse
+		that GL and create a negative AR balance.
+		"""
 		invoice_name = self._get_plot_invoice_name()
 		if not invoice_name:
 			return
 		si_doc = frappe.get_doc("Sales Invoice", invoice_name)
 		if si_doc.docstatus == 0:
-			frappe.delete_doc("Sales Invoice", invoice_name, ignore_permissions=True)
+			frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
 			return
-		if si_doc.docstatus == 1 and flt(si_doc.outstanding_amount) > 0:
+		if si_doc.docstatus != 1:
+			return
+		# Only cancel when no payments have been allocated (fully outstanding)
+		if flt(si_doc.outstanding_amount) >= flt(si_doc.grand_total):
+			si_doc.flags.ignore_links = True
 			si_doc.cancel()
+		# If any payment exists, leave the SI — forfeiture JE handles the accounting
+
+	def _cancel_linked_sales_order_on_termination(self):
+		"""Cancel the Sales Order linked to this contract on termination.
+
+		Sets _from_termination so that cancel_sales_order skips its payment-block
+		and SI-cancel guards (both already handled above). The TCB control number
+		decline still runs automatically via the cancel_sales_order on_cancel hook.
+		"""
+		so_name = self.sales_order
+		if not so_name or not frappe.db.exists("Sales Order", so_name):
+			return
+		so_doc = frappe.get_doc("Sales Order", so_name)
+		if so_doc.docstatus != 1:
+			return
+		so_doc.flags.ignore_permissions = True
+		so_doc.flags.ignore_links = True
+		so_doc.flags._from_termination = True
+		so_doc.cancel()
 
 
 @frappe.whitelist()

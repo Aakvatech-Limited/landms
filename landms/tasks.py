@@ -18,6 +18,18 @@ def daily():
 			)
 
 
+def run_daily_tcb_reconciliation():
+	"""Nightly TCB reconciliation job — wired to daily_long scheduler."""
+	try:
+		from landms.tcb import run_tcb_reconciliation_job
+		run_tcb_reconciliation_job(triggered_by="Scheduled")
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			"LandMS: TCB nightly reconciliation failed",
+		)
+
+
 def auto_cancel_stale_unpaid_applications():
 	settings = frappe.get_single("LandMS Settings")
 	expiry_days = int(settings.unpaid_application_expiry_days or 3)

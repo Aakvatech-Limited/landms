@@ -37,14 +37,18 @@ doc_events = {
 		],
 	},
 	"Sales Order": {
-		"validate":  "landms.sales_order_hooks.validate_sales_order",
-		"on_submit": "landms.sales_order_hooks.submit_sales_order",
-		"on_cancel": "landms.sales_order_hooks.cancel_sales_order",
+		"validate":      "landms.sales_order_hooks.validate_sales_order",
+		"on_submit":     "landms.sales_order_hooks.submit_sales_order",
+		"before_cancel": "landms.sales_order_hooks.before_cancel_sales_order",
+		"on_cancel":     "landms.sales_order_hooks.cancel_sales_order",
 	},
 }
 
 scheduler_events = {
 	"daily": [
 		"landms.tasks.daily",
+	],
+	"daily_long": [
+		"landms.tasks.run_daily_tcb_reconciliation",
 	],
 }
