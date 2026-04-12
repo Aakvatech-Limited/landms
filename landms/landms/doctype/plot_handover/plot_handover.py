@@ -90,7 +90,7 @@ class PlotHandover(Document):
 
 		contract = frappe.get_doc("Plot Contract", self.contract)
 		plot = frappe.get_doc("Plot Master", self.plot)
-		settings = frappe.get_single("Landms Settings")
+		settings = frappe.get_single("LandMS Settings")
 
 		if not plot.serial_no:
 			frappe.throw(f"Plot {plot.name} is missing its Serial No.")
@@ -121,7 +121,7 @@ class PlotHandover(Document):
 			row.qty = 1
 			row.serial_no = plot.serial_no
 			row.use_serial_batch_fields = 1
-			row.warehouse = row.warehouse or frappe.db.get_single_value("Landms Settings", "plot_inventory_warehouse")
+			row.warehouse = row.warehouse or frappe.db.get_single_value("LandMS Settings", "plot_inventory_warehouse")
 
 		return dn
 

@@ -358,6 +358,7 @@ def _ensure_draft_plot_contract(doc):
 		"contract_date": doc.transaction_date or today(),
 		"payment_completion_days": cint(doc.payment_completion_days or 0),
 		"payment_deadline": doc.payment_deadline,
+		"apply_auto_cancellation": cint(doc.get("apply_auto_cancellation", 1)),
 		"sales_order": doc.name,
 		"control_number": doc.get("control_number") or "",
 		"booking_fee_percent": flt(doc.booking_fee_percent),

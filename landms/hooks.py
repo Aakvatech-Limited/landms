@@ -9,15 +9,7 @@ required_apps = ["erpnext"]
 
 after_install = "landms.install.after_install"
 
-fixtures = [
-	{"dt": "Role", "filters": [["name", "in", ["Land Acquisition Approver"]]]},
-	{"dt": "Custom Field", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Client Script", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Workflow", "filters": [["document_type", "=", "Land Acquisition"]]},
-	{"dt": "Dashboard Chart", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Number Card", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Workspace", "filters": [["module", "=", "LandMS"]]},
-]
+after_migrate = ["landms.utils.import_setup_data"]
 
 doc_events = {
 	"Purchase Order": {

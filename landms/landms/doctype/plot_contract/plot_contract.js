@@ -9,6 +9,7 @@ frappe.ui.form.on('Plot Contract', {
 		const colors = {
 			'Draft': 'gray',
 			'Ongoing': 'yellow',
+			'Overdue': 'red',
 			'Completed': 'green',
 			'Cancelled': 'red',
 			'Terminated': 'orange',
@@ -18,7 +19,10 @@ frappe.ui.form.on('Plot Contract', {
 			colors[frm.doc.contract_status] || 'gray'
 		);
 
+		render_payment_progress_bar(frm);
 		refresh_linked_documents(frm);
+
+		// --- Action buttons ---
 
 		if (frm.doc.docstatus === 1 && frm.doc.contract_status === 'Ongoing') {
 			frm.add_custom_button(__('Terminate Contract'), () => {
@@ -46,22 +50,30 @@ frappe.ui.form.on('Plot Contract', {
 			}, __('Actions'));
 		}
 
-		if (frm.doc.booking_fee_invoice) {
-			frm.add_custom_button(__('View Plot Sales Invoice'), () => {
-				frappe.set_route('Form', 'Sales Invoice', frm.doc.booking_fee_invoice);
-			}, __('Actions'));
-		}
+		// --- Navigation buttons ---
 
 		if (frm.doc.sales_order) {
-			frm.add_custom_button(__('View Sales Order'), () => {
+			frm.add_custom_button(__('Sales Order'), () => {
 				frappe.set_route('Form', 'Sales Order', frm.doc.sales_order);
-			}, __('Actions'));
+			}, __('View'));
 		}
 
 		if (frm.doc.plot_application) {
-			frm.add_custom_button(__('View Plot Application'), () => {
+			frm.add_custom_button(__('Plot Application'), () => {
 				frappe.set_route('Form', 'Plot Application', frm.doc.plot_application);
-			}, __('Actions'));
+			}, __('View'));
+		}
+
+		if (frm.doc.booking_fee_invoice) {
+			frm.add_custom_button(__('Plot Sales Invoice'), () => {
+				frappe.set_route('Form', 'Sales Invoice', frm.doc.booking_fee_invoice);
+			}, __('View'));
+		}
+
+		if (frm.doc.plot) {
+			frm.add_custom_button(__('Plot Master'), () => {
+				frappe.set_route('Form', 'Plot Master', frm.doc.plot);
+			}, __('View'));
 		}
 	},
 
@@ -156,12 +168,50 @@ function build_payment_schedule(frm, booking_fee, balance, total_days) {
 	frm.refresh_field('payment_schedule');
 }
 
+function render_payment_progress_bar(frm) {
+	if (frm.is_new()) return;
+
+	const total = frm.doc.total_contract_value || 0;
+	const paid = frm.doc.total_paid || 0;
+	if (!total) return;
+
+	const pct = Math.min(100, Math.round((paid / total) * 100));
+	let color = 'bg-primary';
+	if (pct >= 100) color = 'bg-success';
+	else if (pct >= 50) color = 'bg-info';
+	else if (pct > 0) color = 'bg-warning';
+
+	const bar_html = `
+		<div style="margin-top: 6px;">
+			<div class="progress" style="height: 12px; border-radius: 6px;">
+				<div class="progress-bar ${color}" role="progressbar"
+					style="width: ${pct}%; border-radius: 6px;"
+					title="${format_currency(paid)} of ${format_currency(total)} (${pct}%)">
+				</div>
+			</div>
+			<div class="text-muted small" style="margin-top: 4px;">
+				${format_currency(paid)} paid of ${format_currency(total)} (${pct}%)
+			</div>
+		</div>
+	`;
+
+	const field = frm.get_field('payment_progress');
+	if (field && field.$wrapper) {
+		let bar_el = field.$wrapper.find('.lms-progress-bar');
+		if (!bar_el.length) {
+			bar_el = $('<div class="lms-progress-bar"></div>');
+			field.$wrapper.append(bar_el);
+		}
+		bar_el.html(bar_html);
+	}
+}
+
 function refresh_linked_documents(frm) {
 	const wrapper = frm.get_field('linked_documents_html')?.$wrapper;
 	if (!wrapper) return;
 
 	if (frm.is_new() || !frm.doc.name) {
-		wrapper.html('<div class="text-muted" style="padding: 8px 0;">Linked documents appear after the contract is saved.</div>');
+		wrapper.html('<div class="text-muted small" style="padding: 8px 0;">Linked documents appear after the contract is saved.</div>');
 		return;
 	}
 
@@ -171,7 +221,7 @@ function refresh_linked_documents(frm) {
 		callback(r) {
 			wrapper.html(
 				r.message
-				|| '<div class="text-muted" style="padding: 8px 0;">No linked documents yet.</div>'
+				|| '<div class="text-muted small" style="padding: 8px 0;">No linked documents yet.</div>'
 			);
 		},
 	});

@@ -574,12 +574,18 @@ def apply_tcb_payment_to_sales_order(
 	amount: float,
 	payment_date: str | None,
 	payment_reference: str | None,
+	hold_for_review: bool = False,
 ) -> dict[str, Any]:
 	"""Apply a confirmed TCB payment to the matching Sales Order's plot SI.
 
 	Looks up the SO by control_number, then walks to its plot_sales_invoice
 	(populated by Plot Contract on first advance) and creates a Payment
 	Entry against it. The registry is updated to Paid on success.
+
+	When `hold_for_review` is True the Payment Entry is created but left in
+	Draft (not submitted) and the registry is NOT marked paid — a human must
+	review and submit it manually. Used when the IPN passed the payload
+	checks but failed an auxiliary signal like the IP allowlist.
 
 	Idempotent: if a Payment Entry with the same reference_no already
 	exists for the invoice, returns {status: 'Ignored'}.
@@ -595,6 +601,15 @@ def apply_tcb_payment_to_sales_order(
 		return {"ok": False, "status": "Failed", "message": "Missing control/reference number from TCB payload."}
 	if amount <= 0:
 		return {"ok": False, "status": "Failed", "message": "TCB payment amount must be greater than zero."}
+
+	# Registry guard: the control number must exist in the TCB Control Number
+	# registry. Payments for unknown references are rejected outright — we
+	# never issued this control number, so it cannot be ours.
+	if not frappe.db.exists("TCB Control Number", control_number):
+		return {
+			"ok": False, "status": "Failed",
+			"message": f"Control number {control_number} is not in the TCB Control Number registry.",
+		}
 
 	standard_so_name = ""
 	try:
@@ -637,7 +652,20 @@ def apply_tcb_payment_to_sales_order(
 			bank_account=bank_account,
 			reference_no=reference_no,
 			remarks=f"TCB Payment — {standard_so_name} / Control No: {control_number}",
+			submit=not hold_for_review,
 		)
+		if hold_for_review:
+			# Draft PE — do NOT mark registry as paid. The money is not yet
+			# booked; a reviewer must submit the PE first.
+			return {
+				"ok": True, "status": "Success",
+				"message": (
+					f"Payment Entry {pe_name} created in Draft for {standard_so_name} "
+					"— pending manual review before submission."
+				),
+				"sales_order": standard_so_name, "payment_entry": pe_name,
+			}
+
 		registry = _get_registry(control_number)
 		if registry:
 			registry.mark_paid(
