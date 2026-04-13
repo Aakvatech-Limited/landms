@@ -422,6 +422,7 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		}
 	except Exception:
 		traceback = frappe.get_traceback()
+		frappe.log_error(traceback, f"TCB Reference Registration Failed — {control_number}")
 		log_name = create_tcb_api_log(
 			direction="Outbound",
 			event_type="Reference Create",
