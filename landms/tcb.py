@@ -309,22 +309,48 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
 		so = frappe.db.get_value(
 			"Sales Order", sales_order_name,
-			["customer", "customer_name"],
+			["customer", "customer_name", "contact_mobile", "contact_phone"],
 			as_dict=True,
 		)
 		if so:
 			customer_name = so.customer_name or so.customer or ""
 			message = f"Plot payment for {customer_name} - {control_number}"
-			mobile = frappe.db.get_value("Customer", so.customer, "mobile_no") or ""
+			# Cascade: Customer mobile_no → SO contact_mobile → SO contact_phone
+			# → linked Contact mobile/phone.  TCB rejects empty mobile.
+			mobile = (
+				frappe.db.get_value("Customer", so.customer, "mobile_no")
+				or so.contact_mobile
+				or so.contact_phone
+				or _get_contact_mobile(so.customer)
+				or "0"
+			)
 
 	return {
 		"partnerCode": settings.get("partner_code") or "",
 		"profileID":   settings.get("profile_id") or "",
 		"reference":   control_number,
-		"name":        customer_name,
+		"name":        customer_name or "Customer",
 		"mobile":      mobile,
 		"message":     message,
 	}
+
+
+def _get_contact_mobile(customer: str) -> str:
+	"""Return the first non-empty mobile/phone from contacts linked to a Customer."""
+	contacts = frappe.get_all(
+		"Dynamic Link",
+		filters={"link_doctype": "Customer", "link_name": customer, "parenttype": "Contact"},
+		fields=["parent"],
+		limit=5,
+	)
+	for c in contacts:
+		mob = frappe.db.get_value("Contact", c.parent, "mobile_no")
+		if mob:
+			return mob
+		phone = frappe.db.get_value("Contact", c.parent, "phone")
+		if phone:
+			return phone
+	return ""
 
 
 def register_reference_for_sales_order(sales_order_name: str, control_number: str) -> dict[str, Any]:
@@ -438,6 +464,13 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 				),
 			}
 
+		if ok:
+			frappe.publish_realtime(
+				"msgprint",
+				{"message": f"TCB reference <b>{control_number}</b> registered successfully.", "alert": True},
+				user=frappe.db.get_value("Sales Order", sales_order_name, "owner"),
+			)
+
 		return {
 			"ok": True, "mode": "Live",
 			"message": tcb_message or "TCB reference registered successfully.",
@@ -467,6 +500,13 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			registry.mark_failed(log_name=log_name,
 			                     event_type="Reference Create",
 			                     note="Reference Create raised an exception. See log.")
+
+		frappe.publish_realtime(
+			"msgprint",
+			{"message": f"TCB reference registration failed for <b>{control_number}</b>: {exc_short[:120]}", "indicator": "red"},
+			user=frappe.db.get_value("Sales Order", sales_order_name, "owner") if sales_order_name else None,
+		)
+
 		return {
 			"ok": False, "mode": "Live",
 			"message": f"TCB reference registration raised an exception: {exc_short}",
@@ -956,6 +996,7 @@ def create_tcb_api_log(
 			payment_entry = ""
 		doc = frappe.get_doc({
 			"doctype":            "TCB API Log",
+			"naming_series":      "TCB-LOG-.YYYY.-.######",
 			"requested_at":       now(),
 			"response_at":        now(),
 			"direction":          direction,
@@ -964,8 +1005,8 @@ def create_tcb_api_log(
 			"processing_mode":    processing_mode or "",
 			"is_duplicate":       cint(is_duplicate),
 			"endpoint":           endpoint or "",
-			"http_status_code":   http_status_code if http_status_code is not None else None,
-			"tcb_status_code":    tcb_status_code if tcb_status_code is not None else None,
+			"http_status_code":   cint(http_status_code),
+			"tcb_status_code":    cint(tcb_status_code),
 			"tcb_message":        (tcb_message or "")[:140],
 			"external_reference": external_reference or "",
 			"transaction_id":     transaction_id or "",

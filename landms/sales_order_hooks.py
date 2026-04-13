@@ -575,7 +575,7 @@ def _register_with_tcb(doc, control_number: str):
 	frappe.enqueue(
 		"landms.tcb.register_reference_for_sales_order",
 		queue="short",
-		timeout=60,
+		timeout=300,
 		sales_order_name=doc.name,
 		control_number=control_number,
 	)
