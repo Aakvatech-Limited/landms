@@ -86,6 +86,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "allowed_ip_addresses",
+   "fieldtype": "Small Text",
+   "label": "Allowed IP Addresses",
+   "description": "Comma or newline separated list of TCB source IPs allowed to call the IPN endpoint. Checked against X-Forwarded-For. Leave empty to allow all (not recommended in production)."
+  },
+  {
    "fieldname": "reconciliation_section",
    "fieldtype": "Section Break",
    "label": "Reconciliation"
@@ -202,7 +208,7 @@
    "fieldname": "ipn_callback_html",
    "fieldtype": "HTML",
    "label": "IPN Callback Hint",
-   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. Authenticate by sending the configured Callback Token in the <code>X-TCB-Token</code> header. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>.</div>"
+   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>. Restrict access by adding TCB's source IP to the Allowed IP Addresses field above.</div>"
   }
  ],
  "permissions": [

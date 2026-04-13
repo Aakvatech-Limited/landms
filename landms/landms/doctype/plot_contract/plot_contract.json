@@ -12,40 +12,46 @@
   "contract_section",
   "customer",
   "plot",
-  "acquisition_name",
   "land_acquisition",
+  "acquisition_name",
   "contract_date",
   "col_break_1",
   "contract_status",
-  "payment_completion_days",
   "payment_deadline",
-  "sales_order",
-  "plot_application",
+  "payment_completion_days",
+  "apply_auto_cancellation",
   "control_number",
+  "tab_financials",
   "financials_section",
   "selling_price",
   "booking_fee_percent",
-  "government_share_percent",
-  "col_break_2",
   "booking_fee_amount",
+  "col_break_2",
+  "government_share_percent",
+  "government_fee_withheld",
   "balance_due",
-  "booking_fee_invoice",
-  "payment_schedule_section",
-  "payment_schedule",
   "payment_summary_section",
   "total_contract_value",
   "total_paid",
-  "payment_progress",
   "col_break_3",
   "total_outstanding",
-  "government_fee_withheld",
+  "payment_progress",
+  "tab_payments",
+  "payment_schedule_section",
+  "payment_schedule",
+  "tab_references",
+  "references_section",
+  "sales_order",
+  "plot_application",
+  "col_break_refs",
+  "booking_fee_invoice",
   "government_fee_entry",
   "forfeiture_entry",
-  "linked_documents_section",
-  "linked_documents_html",
   "notes_section",
   "notes",
   "termination_reason",
+  "linked_documents_section",
+  "linked_documents_html",
   "amended_from"
  ],
  "fields": [
@@ -58,7 +64,7 @@
   {
    "fieldname": "contract_section",
    "fieldtype": "Section Break",
-   "label": "Contract and Land Acquisition Details"
+   "label": "Contract Details"
   },
   {
    "fieldname": "customer",
@@ -66,7 +72,8 @@
    "label": "Customer",
    "options": "Customer",
    "in_list_view": 1,
-   "reqd": 1
+   "reqd": 1,
+   "bold": 1
   },
   {
    "fieldname": "plot",
@@ -75,22 +82,20 @@
    "options": "Plot Master",
    "in_list_view": 1,
    "reqd": 1,
-   "description": "Only Available plots can be selected"
+   "bold": 1
   },
   {
    "fieldname": "land_acquisition",
    "fieldtype": "Link",
    "label": "Land Acquisition",
    "options": "Land Acquisition",
-   "read_only": 1,
-   "description": "Auto-filled from the selected plot"
+   "read_only": 1
   },
   {
    "fieldname": "acquisition_name",
    "fieldtype": "Data",
    "label": "Acquisition Name",
-   "read_only": 1,
-   "description": "Auto-filled from the Land Acquisition"
+   "read_only": 1
   },
   {
    "fieldname": "contract_date",
@@ -107,79 +112,62 @@
    "fieldname": "contract_status",
    "fieldtype": "Select",
    "label": "Contract Status",
-   "options": "Draft\nOngoing\nCompleted\nCancelled\nTerminated",
+   "options": "Draft\nOngoing\nOverdue\nCompleted\nCancelled\nTerminated",
    "default": "Draft",
    "in_standard_filter": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "payment_completion_days",
-   "fieldtype": "Int",
-   "label": "Payment Completion Days",
-   "default": "90",
    "in_list_view": 1,
    "read_only": 1,
-   "description": "Days from contract date the customer has to complete full payment"
+   "bold": 1
   },
   {
    "fieldname": "payment_deadline",
    "fieldtype": "Date",
    "label": "Payment Deadline",
    "read_only": 1,
-   "description": "Auto-filled from contract date + payment completion days"
+   "bold": 1
   },
   {
-   "fieldname": "sales_order",
-   "fieldtype": "Link",
-   "label": "Sales Order",
-   "options": "Sales Order",
-   "read_only": 1,
-   "description": "Linked ERP Sales Order \u2014 auto-set when contract is created from the application flow"
+   "fieldname": "payment_completion_days",
+   "fieldtype": "Int",
+   "label": "Payment Completion Days",
+   "default": "90",
+   "read_only": 1
   },
   {
-   "fieldname": "plot_application",
-   "fieldtype": "Link",
-   "label": "Plot Application",
-   "options": "Plot Application",
-   "read_only": 1,
-   "description": "Application fee stage that produced this sale"
+   "fieldname": "apply_auto_cancellation",
+   "fieldtype": "Check",
+   "label": "Apply Auto-Cancellation",
+   "default": "1",
+   "description": "Inherited from Sales Order. Uncheck to allow payment beyond deadline."
   },
   {
    "fieldname": "control_number",
    "fieldtype": "Data",
    "label": "TCB Control Number",
-   "read_only": 1,
-   "description": "The payment reference the customer uses at TCB"
+   "read_only": 1
+  },
+  {
+   "fieldname": "tab_financials",
+   "fieldtype": "Tab Break",
+   "label": "Financials"
   },
   {
    "fieldname": "financials_section",
    "fieldtype": "Section Break",
-   "label": "Financials"
+   "label": "Price Breakdown"
   },
   {
    "fieldname": "selling_price",
    "fieldtype": "Currency",
    "label": "Selling Price (TZS)",
    "read_only": 1,
-   "description": "Auto-filled from Plot Master"
+   "bold": 1
   },
   {
    "fieldname": "booking_fee_percent",
    "fieldtype": "Percent",
    "label": "Booking Fee %",
-   "read_only": 1,
-   "description": "Percentage of selling price required as booking fee"
-  },
-  {
-   "fieldname": "government_share_percent",
-   "fieldtype": "Percent",
-   "label": "Government Share %",
-   "read_only": 1,
-   "description": "Government fee percentage \u2014 deducted at full payment completion"
-  },
-  {
-   "fieldname": "col_break_2",
-   "fieldtype": "Column Break"
+   "read_only": 1
   },
   {
    "fieldname": "booking_fee_amount",
@@ -188,29 +176,25 @@
    "read_only": 1
   },
   {
-   "fieldname": "balance_due",
-   "fieldtype": "Currency",
-   "label": "Balance Due (TZS)",
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "government_share_percent",
+   "fieldtype": "Percent",
+   "label": "Government Share %",
    "read_only": 1
   },
   {
-   "fieldname": "booking_fee_invoice",
-   "fieldtype": "Link",
-   "label": "Plot Sales Invoice",
-   "options": "Sales Invoice",
-   "read_only": 1,
-   "description": "The single Sales Invoice that carries all advance and installment payments for this contract"
+   "fieldname": "government_fee_withheld",
+   "fieldtype": "Currency",
+   "label": "Expected Government Fee (TZS)",
+   "read_only": 1
   },
   {
-   "fieldname": "payment_schedule_section",
-   "fieldtype": "Section Break",
-   "label": "Payment Schedule"
-  },
-  {
-   "fieldname": "payment_schedule",
-   "fieldtype": "Table",
-   "label": "Payment Schedule",
-   "options": "Plot Contract Payment",
+   "fieldname": "balance_due",
+   "fieldtype": "Currency",
+   "label": "Balance Due (TZS)",
    "read_only": 1
   },
   {
@@ -222,13 +206,26 @@
    "fieldname": "total_contract_value",
    "fieldtype": "Currency",
    "label": "Total Contract Value (TZS)",
-   "read_only": 1
+   "read_only": 1,
+   "bold": 1
   },
   {
    "fieldname": "total_paid",
    "fieldtype": "Currency",
    "label": "Total Paid (TZS)",
-   "read_only": 1
+   "read_only": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_outstanding",
+   "fieldtype": "Currency",
+   "label": "Total Outstanding (TZS)",
+   "read_only": 1,
+   "bold": 1
   },
   {
    "fieldname": "payment_progress",
@@ -240,21 +237,55 @@
    "read_only": 1
   },
   {
-   "fieldname": "col_break_3",
-   "fieldtype": "Column Break"
+   "fieldname": "tab_payments",
+   "fieldtype": "Tab Break",
+   "label": "Payment Schedule"
   },
   {
-   "fieldname": "total_outstanding",
-   "fieldtype": "Currency",
-   "label": "Total Outstanding (TZS)",
+   "fieldname": "payment_schedule_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "payment_schedule",
+   "fieldtype": "Table",
+   "label": "Payment Schedule",
+   "options": "Plot Contract Payment",
    "read_only": 1
   },
   {
-   "fieldname": "government_fee_withheld",
-   "fieldtype": "Currency",
-   "label": "Expected Government Fee (TZS)",
-   "read_only": 1,
-   "description": "Selling price \u00d7 government share % \u2014 collected at full payment completion"
+   "fieldname": "tab_references",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "plot_application",
+   "fieldtype": "Link",
+   "label": "Plot Application",
+   "options": "Plot Application",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_refs",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "booking_fee_invoice",
+   "fieldtype": "Link",
+   "label": "Plot Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1
   },
   {
    "fieldname": "government_fee_entry",
@@ -262,7 +293,7 @@
    "label": "Government Fee Journal Entry",
    "options": "Journal Entry",
    "read_only": 1,
-   "description": "Auto-created when contract is fully paid"
+   "depends_on": "eval:doc.government_fee_entry"
   },
   {
    "fieldname": "forfeiture_entry",
@@ -270,18 +301,7 @@
    "label": "Forfeiture Journal Entry",
    "options": "Journal Entry",
    "read_only": 1,
-   "description": "Auto-created when a paid contract is terminated \u2014 customer funds are forfeited"
-  },
-  {
-   "fieldname": "linked_documents_section",
-   "fieldtype": "Section Break",
-   "label": "Linked Documents",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "linked_documents_html",
-   "fieldtype": "HTML",
-   "label": "Linked Documents"
+   "depends_on": "eval:doc.forfeiture_entry"
   },
   {
    "fieldname": "notes_section",
@@ -298,7 +318,17 @@
    "fieldtype": "Long Text",
    "label": "Termination Reason",
    "read_only": 1,
-   "description": "Reason recorded when contract was terminated"
+   "depends_on": "eval:doc.termination_reason"
+  },
+  {
+   "fieldname": "linked_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Document Links"
+  },
+  {
+   "fieldname": "linked_documents_html",
+   "fieldtype": "HTML",
+   "label": "Linked Documents"
   },
   {
    "fieldname": "amended_from",
@@ -345,6 +375,7 @@
  "states": [
   {"title": "Draft", "color": "Gray"},
   {"title": "Ongoing", "color": "Yellow"},
+  {"title": "Overdue", "color": "Red"},
   {"title": "Completed", "color": "Green"},
   {"title": "Cancelled", "color": "Red"},
   {"title": "Terminated", "color": "Orange"}

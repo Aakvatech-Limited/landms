@@ -75,6 +75,30 @@ class TCBControlNumber(Document):
 		self._transition("Failed", None, log_name=log_name, note=note,
 		                 event_type=event_type, event_status="Failed")
 
+	# ------------------------------------------------------------------ #
+	#  Manual decline (UI button)                                         #
+	# ------------------------------------------------------------------ #
+
+	@frappe.whitelist()
+	def decline_control_number(self):
+		"""Manually decline this control number via the TCB Reference Decline URL.
+
+		Called from the form button. Works for Generated, Registered and Failed
+		statuses. Terminal statuses (Paid, Declined, Expired) are rejected.
+		"""
+		TERMINAL = ("Paid", "Declined", "Expired")
+		if self.status in TERMINAL:
+			frappe.throw(
+				f"Control number {self.name} has status {self.status} and cannot be declined."
+			)
+
+		from landms.tcb import decline_reference_for_sales_order
+		result = decline_reference_for_sales_order(
+			self.sales_order or "",
+			self.name,
+		)
+		return result
+
 	def append_log(self, log_name, event_type, event_status, note=None):
 		"""Append a log row to the trail without changing status."""
 		self.append("tcb_api_logs", {

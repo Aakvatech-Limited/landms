@@ -27,6 +27,7 @@ Design notes:
 import json
 import re
 import secrets
+import time
 from typing import Any
 from urllib.parse import quote_plus, urlencode
 
@@ -574,12 +575,18 @@ def apply_tcb_payment_to_sales_order(
 	amount: float,
 	payment_date: str | None,
 	payment_reference: str | None,
+	hold_for_review: bool = False,
 ) -> dict[str, Any]:
 	"""Apply a confirmed TCB payment to the matching Sales Order's plot SI.
 
 	Looks up the SO by control_number, then walks to its plot_sales_invoice
 	(populated by Plot Contract on first advance) and creates a Payment
 	Entry against it. The registry is updated to Paid on success.
+
+	When `hold_for_review` is True the Payment Entry is created but left in
+	Draft (not submitted) and the registry is NOT marked paid — a human must
+	review and submit it manually. Used when the IPN passed the payload
+	checks but failed an auxiliary signal like the IP allowlist.
 
 	Idempotent: if a Payment Entry with the same reference_no already
 	exists for the invoice, returns {status: 'Ignored'}.
@@ -595,6 +602,15 @@ def apply_tcb_payment_to_sales_order(
 		return {"ok": False, "status": "Failed", "message": "Missing control/reference number from TCB payload."}
 	if amount <= 0:
 		return {"ok": False, "status": "Failed", "message": "TCB payment amount must be greater than zero."}
+
+	# Registry guard: the control number must exist in the TCB Control Number
+	# registry. Payments for unknown references are rejected outright — we
+	# never issued this control number, so it cannot be ours.
+	if not frappe.db.exists("TCB Control Number", control_number):
+		return {
+			"ok": False, "status": "Failed",
+			"message": f"Control number {control_number} is not in the TCB Control Number registry.",
+		}
 
 	standard_so_name = ""
 	try:
@@ -637,7 +653,20 @@ def apply_tcb_payment_to_sales_order(
 			bank_account=bank_account,
 			reference_no=reference_no,
 			remarks=f"TCB Payment — {standard_so_name} / Control No: {control_number}",
+			submit=not hold_for_review,
 		)
+		if hold_for_review:
+			# Draft PE — do NOT mark registry as paid. The money is not yet
+			# booked; a reviewer must submit the PE first.
+			return {
+				"ok": True, "status": "Success",
+				"message": (
+					f"Payment Entry {pe_name} created in Draft for {standard_so_name} "
+					"— pending manual review before submission."
+				),
+				"sales_order": standard_so_name, "payment_entry": pe_name,
+			}
+
 		registry = _get_registry(control_number)
 		if registry:
 			registry.mark_paid(
@@ -670,28 +699,48 @@ def apply_tcb_payment_to_sales_order(
 # ---------------------------------------------------------------------- #
 
 
-def run_tcb_reconciliation_job(start_date: str | None = None, end_date: str | None = None) -> dict[str, Any]:
+def run_tcb_reconciliation_job(
+	start_date: str | None = None,
+	end_date: str | None = None,
+	triggered_by: str = "Manual",
+	log_name: str | None = None,
+) -> dict[str, Any]:
 	"""Pull reconciliation rows from TCB and optionally auto-apply missing payments.
 
-	Wired to scheduler in Phase 8. The dry path (auto_apply off) just logs.
+	If `log_name` is given the existing TCB Reconciliation Log doc is updated
+	in-place (form button path). Otherwise a new log doc is created (scheduler
+	path). The dry path (auto_apply off) just logs.
 	"""
+	t_start = time.time()
 	settings = _get_tcb_settings()
+
 	if not cint(settings.get("enabled")):
-		return {"ok": True, "status": "Ignored", "message": "TCB integration disabled."}
+		msg = "TCB integration disabled."
+		_update_recon_log(log_name, status="Failed", message=msg,
+		                  duration=time.time() - t_start)
+		return {"ok": True, "status": "Ignored", "message": msg}
+
 	if not cint(settings.get("reconciliation_enabled")):
-		return {"ok": True, "status": "Ignored", "message": "TCB reconciliation is disabled in settings."}
+		msg = "TCB reconciliation is disabled in settings."
+		_update_recon_log(log_name, status="Failed", message=msg,
+		                  duration=time.time() - t_start)
+		return {"ok": True, "status": "Ignored", "message": msg}
 
 	lookback_days = cint(settings.get("reconciliation_lookback_days") or 1)
 	end = _normalize_date_string(end_date)
 	start = _normalize_date_string(start_date) if start_date else _normalize_date_string(add_days(end, -lookback_days))
 
+	# Create a new log doc if one was not supplied by the caller (scheduler path).
+	if not log_name:
+		log_name = _create_recon_log(triggered_by=triggered_by, start=start, end=end)
+
 	fetch_result = _fetch_reconciliation_rows(settings=settings, start_date=start, end_date=end)
 	rows = fetch_result.get("rows") or []
 	if not fetch_result.get("ok"):
-		return {
-			"ok": False, "status": "Failed",
-			"message": fetch_result.get("message") or "TCB reconciliation fetch failed.",
-		}
+		err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
+		_update_recon_log(log_name, status="Failed", message=err_msg,
+		                  error=err_msg, duration=time.time() - t_start)
+		return {"ok": False, "status": "Failed", "message": err_msg}
 
 	applied = 0
 	ignored = 0
@@ -755,20 +804,96 @@ def run_tcb_reconciliation_job(start_date: str | None = None, end_date: str | No
 			error=result.get("error"),
 		)
 
-		status = result.get("status")
-		if status == "Success":
+		row_status = result.get("status")
+		if row_status == "Success":
 			applied += 1
-		elif status == "Ignored":
+		elif row_status == "Ignored":
 			ignored += 1
 		else:
 			failed += 1
 
+	total = len(rows)
+	if total == 0 or failed == 0:
+		final_status = "Success"
+	elif applied > 0 or ignored > 0:
+		final_status = "Partial"
+	else:
+		final_status = "Failed"
+
+	summary = f"Processed {total} rows: applied={applied}, ignored={ignored}, failed={failed}."
+	_update_recon_log(
+		log_name,
+		status=final_status,
+		message=summary,
+		total_rows=total,
+		applied=applied,
+		ignored=ignored,
+		failed=failed,
+		duration=time.time() - t_start,
+	)
+
 	return {
-		"ok": True, "status": "Success",
-		"message": f"TCB reconciliation processed {len(rows)} rows: applied={applied}, ignored={ignored}, failed={failed}.",
-		"rows": len(rows), "applied": applied, "ignored": ignored, "failed": failed,
+		"ok": True, "status": final_status,
+		"message": summary,
+		"rows": total, "applied": applied, "ignored": ignored, "failed": failed,
 		"start_date": start, "end_date": end,
 	}
+
+
+def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
+	"""Insert a new TCB Reconciliation Log doc in Running state. Best-effort."""
+	try:
+		doc = frappe.get_doc({
+			"doctype":         "TCB Reconciliation Log",
+			"status":          "Running",
+			"triggered_by":    triggered_by,
+			"started_at":      now(),
+			"date_range_start": start,
+			"date_range_end":   end,
+		})
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return doc.name
+	except Exception:
+		frappe.logger("landms").error("Failed to create TCB Reconciliation Log", exc_info=True)
+		return None
+
+
+def _update_recon_log(
+	log_name: str | None,
+	*,
+	status: str,
+	message: str = "",
+	error: str = "",
+	total_rows: int = 0,
+	applied: int = 0,
+	ignored: int = 0,
+	failed: int = 0,
+	duration: float = 0.0,
+) -> None:
+	"""Update an existing TCB Reconciliation Log after a run. Best-effort."""
+	if not log_name:
+		return
+	try:
+		frappe.db.set_value(
+			"TCB Reconciliation Log",
+			log_name,
+			{
+				"status":           status,
+				"completed_at":     now(),
+				"duration_seconds": round(duration, 2),
+				"total_rows":       total_rows,
+				"applied":          applied,
+				"ignored":          ignored,
+				"failed":           failed,
+				"message":          (message or "")[:500],
+				"error":            error or "",
+			},
+			update_modified=True,
+		)
+		frappe.db.commit()
+	except Exception:
+		frappe.logger("landms").error("Failed to update TCB Reconciliation Log", exc_info=True)
 
 
 # ---------------------------------------------------------------------- #
@@ -969,8 +1094,17 @@ def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end
 	tcb_message = None
 	try:
 		session = get_request_session()
+		# TCB Reconciliation expects application/x-www-form-urlencoded
+		# (same as Reference Create). Build the body explicitly so the
+		# Content-Type header is unambiguous.
+		encoded_body = urlencode(payload, doseq=True, quote_via=quote_plus)
 		response = session.post(
-			url, data=payload,
+			url,
+			data=encoded_body,
+			headers={
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Accept": "application/json",
+			},
 			timeout=(connect_timeout, read_timeout),
 			verify=verify_ssl,
 		)

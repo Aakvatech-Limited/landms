@@ -9,15 +9,7 @@ required_apps = ["erpnext"]
 
 after_install = "landms.install.after_install"
 
-fixtures = [
-	{"dt": "Role", "filters": [["name", "in", ["Land Acquisition Approver"]]]},
-	{"dt": "Custom Field", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Client Script", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Workflow", "filters": [["document_type", "=", "Land Acquisition"]]},
-	{"dt": "Dashboard Chart", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Number Card", "filters": [["module", "=", "LandMS"]]},
-	{"dt": "Workspace", "filters": [["module", "=", "LandMS"]]},
-]
+after_migrate = ["landms.utils.import_setup_data"]
 
 doc_events = {
 	"Purchase Order": {
@@ -45,14 +37,18 @@ doc_events = {
 		],
 	},
 	"Sales Order": {
-		"validate":  "landms.sales_order_hooks.validate_sales_order",
-		"on_submit": "landms.sales_order_hooks.submit_sales_order",
-		"on_cancel": "landms.sales_order_hooks.cancel_sales_order",
+		"validate":      "landms.sales_order_hooks.validate_sales_order",
+		"on_submit":     "landms.sales_order_hooks.submit_sales_order",
+		"before_cancel": "landms.sales_order_hooks.before_cancel_sales_order",
+		"on_cancel":     "landms.sales_order_hooks.cancel_sales_order",
 	},
 }
 
 scheduler_events = {
 	"daily": [
 		"landms.tasks.daily",
+	],
+	"daily_long": [
+		"landms.tasks.run_daily_tcb_reconciliation",
 	],
 }

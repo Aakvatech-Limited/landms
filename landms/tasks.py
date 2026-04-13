@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import add_days, flt, getdate, today
+from frappe.utils import add_days, cint, flt, getdate, today
 
 
 def daily():
@@ -16,6 +16,18 @@ def daily():
 				frappe.get_traceback(),
 				f"LandMS daily: {job_name} failed",
 			)
+
+
+def run_daily_tcb_reconciliation():
+	"""Nightly TCB reconciliation job — wired to daily_long scheduler."""
+	try:
+		from landms.tcb import run_tcb_reconciliation_job
+		run_tcb_reconciliation_job(triggered_by="Scheduled")
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			"LandMS: TCB nightly reconciliation failed",
+		)
 
 
 def auto_cancel_stale_unpaid_applications():
@@ -75,6 +87,7 @@ def auto_expire_paid_applications_past_deadline():
 		from `tabPlot Application`
 		where docstatus = 1
 		  and status = 'Paid'
+		  and apply_auto_cancellation = 1
 		  and payment_date is not null
 		  and date_add(payment_date, interval %s day) < %s
 		order by payment_date asc, name asc
@@ -107,7 +120,11 @@ def auto_expire_paid_applications_past_deadline():
 
 
 def auto_cancel_stale_open_sales_orders_without_payment():
-	"""Backstop: cancel plot SOs still hanging open after the app validity window."""
+	"""Mark overdue + optionally cancel plot SOs past the app validity window.
+
+	Always marks the Plot Contract as Overdue when the deadline has passed.
+	Only cancels the SO if the Plot Contract has apply_auto_cancellation on.
+	"""
 	settings = frappe.get_single("LandMS Settings")
 	validity_days = int(settings.application_fee_validity_days or 7)
 	today_date = getdate(today())
@@ -119,6 +136,7 @@ def auto_cancel_stale_open_sales_orders_without_payment():
 			so.plot,
 			so.customer,
 			so.plot_application,
+			so.plot_contract,
 			date_add(app.payment_date, interval %s day) as expiry_date
 		from `tabSales Order` so
 		inner join `tabPlot Application` app
@@ -137,6 +155,7 @@ def auto_cancel_stale_open_sales_orders_without_payment():
 	)
 
 	cancelled_count = 0
+	overdue_count = 0
 	for row in stale_orders:
 		try:
 			so = frappe.get_doc("Sales Order", row.name)
@@ -153,6 +172,26 @@ def auto_cancel_stale_open_sales_orders_without_payment():
 			if frappe.db.get_value("Plot Application", row.plot_application, "docstatus") != 1:
 				continue
 
+			# Always mark the Plot Contract as Overdue.
+			auto_cancel = True
+			if row.plot_contract and frappe.db.exists("Plot Contract", row.plot_contract):
+				contract_status = frappe.db.get_value(
+					"Plot Contract", row.plot_contract,
+					["contract_status", "apply_auto_cancellation"],
+					as_dict=True,
+				)
+				if contract_status and contract_status.contract_status in ("Draft", "Ongoing"):
+					frappe.db.set_value(
+						"Plot Contract", row.plot_contract,
+						"contract_status", "Overdue",
+						update_modified=True,
+					)
+					overdue_count += 1
+				auto_cancel = cint(contract_status.apply_auto_cancellation) if contract_status else True
+
+			if not auto_cancel:
+				continue
+
 			so.flags.ignore_permissions = True
 			so.cancel()
 			cancelled_count += 1
@@ -164,7 +203,7 @@ def auto_cancel_stale_open_sales_orders_without_payment():
 		except Exception:
 			frappe.log_error(
 				frappe.get_traceback(),
-				f"LandMS: Failed to auto-cancel Sales Order {row.name}",
+				f"LandMS: Failed to process stale Sales Order {row.name}",
 			)
 
 	if cancelled_count:

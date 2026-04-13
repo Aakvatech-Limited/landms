@@ -24,7 +24,7 @@ class PlotApplication(Document):
 		self._ensure_no_other_active_application_for_submit()
 
 	def before_cancel(self):
-		if self.status == "Converted":
+		if self.status == "Converted" and not self.flags.get("_cancellation_reason"):
 			frappe.throw(
 				"This application has already been converted into an active sale. "
 				"Cancel the Sales Order before first payment, or terminate the Plot Contract afterwards."
@@ -44,17 +44,22 @@ class PlotApplication(Document):
 		The scheduler passes doc.flags._cancellation_reason = "Expired" for
 		paid-but-never-converted applications that blew past their deadline;
 		everything else (manual cancel, unpaid timeout) becomes Cancelled.
+
+		Contract termination passes _cancellation_reason = "Contract Terminated"
+		— plot and SO are already handled by the contract, so skip those steps.
 		"""
-		if self.status in ("Submitted", "Paid"):
+		reason = getattr(self.flags, "_cancellation_reason", None)
+		from_termination = reason == "Contract Terminated"
+
+		if not from_termination and self.status in ("Submitted", "Paid"):
 			plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
 			if plot_status in ("Pending Fee", "Pending Advance", "Reserved"):
 				frappe.db.set_value("Plot Master", self.plot, "status", "Available")
 				self._sync_land_acquisition_summary()
 
-		if self.status == "Paid":
+		if not from_termination and self.status == "Paid":
 			self._cancel_linked_sales_order_if_safe()
 
-		reason = getattr(self.flags, "_cancellation_reason", None)
 		self.db_set("status", "Expired" if reason == "Expired" else "Cancelled")
 
 	# ------------------------------------------------------------------ #

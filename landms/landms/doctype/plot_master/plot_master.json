@@ -33,8 +33,7 @@
    "fieldtype": "Data",
    "label": "Acquisition Name",
    "read_only": 1,
-   "fetch_from": "land_acquisition.acquisition_name",
-   "description": "Auto-filled from selected Land Acquisition"
+   "fetch_from": "land_acquisition.acquisition_name"
   },
   {
    "fieldname": "plot_number",
@@ -44,15 +43,15 @@
    "description": "Unique plot identifier within this Land Acquisition (e.g. A-001)"
   },
   {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "plot_type",
    "fieldtype": "Select",
    "label": "Plot Type",
    "options": "Residential\nCommercial\nMixed Use",
    "reqd": 1
-  },
-  {
-   "fieldname": "col_break_1",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "status",
@@ -69,28 +68,34 @@
    "reqd": 1
   },
   {
-   "fieldname": "latitude",
-   "fieldtype": "Float",
-   "label": "Latitude",
-   "precision": "6",
-   "description": "Optional plot latitude. Auto-filled from Land Acquisition when available."
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "longitude",
-   "fieldtype": "Float",
-   "label": "Longitude",
-   "precision": "6",
-   "description": "Optional plot longitude. Auto-filled from Land Acquisition when available."
+   "fieldname": "selling_price",
+   "fieldtype": "Currency",
+   "label": "Selling Price (TZS)",
+   "reqd": 1,
+   "read_only": 1,
+   "description": "Auto-calculated as selling price per sqm multiplied by plot size"
   },
   {
-   "fieldname": "location_description",
-   "fieldtype": "Small Text",
-   "label": "Location Description"
+   "fieldname": "booking_fee_percent",
+   "fieldtype": "Percent",
+   "label": "Booking Fee %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "government_share_percent",
+   "fieldtype": "Percent",
+   "label": "Government Share %",
+   "read_only": 1
   },
   {
    "fieldname": "financials_section",
    "fieldtype": "Section Break",
-   "label": "Financials"
+   "label": "Financials",
+   "collapsible": 1
   },
   {
    "fieldname": "cost_per_sqm",
@@ -118,43 +123,37 @@
    "description": "Auto-calculated as cost per sqm multiplied by plot size"
   },
   {
-   "fieldname": "selling_price",
-   "fieldtype": "Currency",
-   "label": "Selling Price (TZS)",
-   "reqd": 1,
-   "read_only": 1,
-   "description": "Auto-calculated as selling price per sqm multiplied by plot size"
-  },
-  {
-   "fieldname": "sales_defaults_section",
-   "fieldtype": "Section Break",
-   "label": "Sales Defaults",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "booking_fee_percent",
-   "fieldtype": "Percent",
-   "label": "Booking Fee %",
-   "read_only": 1,
-   "description": "Snapshot from Land Acquisition at plot creation"
-  },
-  {
-   "fieldname": "government_share_percent",
-   "fieldtype": "Percent",
-   "label": "Government Share %",
-   "read_only": 1,
-   "description": "Snapshot from Land Acquisition at plot creation"
-  },
-  {
-   "fieldname": "col_break_sales_defaults",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "payment_completion_days",
    "fieldtype": "Int",
    "label": "Payment Completion Days",
-   "read_only": 1,
-   "description": "Snapshot from Land Acquisition at plot creation"
+   "read_only": 1
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Location",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "col_break_location",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "location_description",
+   "fieldtype": "Small Text",
+   "label": "Location Description"
   },
   {
    "fieldname": "references_section",

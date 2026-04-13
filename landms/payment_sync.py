@@ -99,11 +99,13 @@ def create_payment_entry_for_sales_order(
 	bank_account: str,
 	reference_no: str,
 	remarks: str | None = None,
+	submit: bool = True,
 ) -> str:
-	"""Create + submit a Payment Entry against the plot SI.
+	"""Create a Payment Entry against the plot SI, optionally submitting it.
 
 	Used by TCB inbound, so if this is the first advance we create the single
-	plot SI on demand before posting the PE.
+	plot SI on demand before posting the PE. When `submit=False` the PE is
+	inserted as a Draft for manual review instead of being auto-submitted.
 	"""
 	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
 		frappe.throw(f"Sales Order {sales_order_name} not found.")
@@ -166,7 +168,8 @@ def create_payment_entry_for_sales_order(
 		}],
 	})
 	pe.insert(ignore_permissions=True)
-	pe.submit()
+	if submit:
+		pe.submit()
 	return pe.name
 
 

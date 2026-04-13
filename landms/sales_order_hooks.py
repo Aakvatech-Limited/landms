@@ -128,6 +128,19 @@ def submit_sales_order(doc, method=None):
 	_mark_plot_pending_advance(doc)
 
 
+def before_cancel_sales_order(doc, method=None):
+	"""Delete the draft Plot Contract before Frappe's link-check runs.
+
+	Frappe v15 blocks cancellation if any submittable doc (even in Draft state)
+	has a Link field pointing to the Sales Order. The Plot Contract is
+	submittable and links here, so it must be removed in before_cancel —
+	which fires before the link validation — not in on_cancel.
+	"""
+	if not _is_landms_sales_order(doc):
+		return
+	_delete_draft_plot_contract(doc)
+
+
 def cancel_sales_order(doc, method=None):
 	if not _is_landms_sales_order(doc):
 		return
@@ -358,6 +371,7 @@ def _ensure_draft_plot_contract(doc):
 		"contract_date": doc.transaction_date or today(),
 		"payment_completion_days": cint(doc.payment_completion_days or 0),
 		"payment_deadline": doc.payment_deadline,
+		"apply_auto_cancellation": cint(doc.get("apply_auto_cancellation", 1)),
 		"sales_order": doc.name,
 		"control_number": doc.get("control_number") or "",
 		"booking_fee_percent": flt(doc.booking_fee_percent),
@@ -584,6 +598,9 @@ def _mark_plot_pending_advance(doc):
 
 
 def _block_cancel_if_paid(doc):
+	# Termination flow already handles accounting via forfeiture JE
+	if doc.flags.get("_from_termination"):
+		return
 	plot_invoice = doc.get("plot_sales_invoice")
 	if plot_invoice and frappe.db.exists("Sales Invoice", plot_invoice):
 		outstanding, grand_total = frappe.db.get_value(
@@ -600,6 +617,9 @@ def _block_cancel_if_paid(doc):
 
 
 def _cancel_unpaid_plot_sales_invoice(doc):
+	# Termination flow already handled the SI before calling SO cancel
+	if doc.flags.get("_from_termination"):
+		return
 	invoice_name = doc.get("plot_sales_invoice")
 	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
 		return
@@ -621,13 +641,21 @@ def _cancel_unpaid_plot_sales_invoice(doc):
 
 
 def _delete_draft_plot_contract(doc):
-	contract_name = doc.get("plot_contract")
-	if not contract_name or not frappe.db.exists("Plot Contract", contract_name):
-		return
+	# Collect candidates: the stored link on the doc + any DB matches by sales_order.
+	candidates = set()
+	if doc.get("plot_contract") and frappe.db.exists("Plot Contract", doc.plot_contract):
+		candidates.add(doc.plot_contract)
 
-	contract = frappe.get_doc("Plot Contract", contract_name)
-	if contract.docstatus == 0:
-		frappe.delete_doc("Plot Contract", contract.name, ignore_permissions=True)
+	for name in frappe.db.get_all(
+		"Plot Contract",
+		filters={"sales_order": doc.name, "docstatus": 0},
+		pluck="name",
+	):
+		candidates.add(name)
+
+	for name in candidates:
+		if frappe.db.get_value("Plot Contract", name, "docstatus") == 0:
+			frappe.delete_doc("Plot Contract", name, ignore_permissions=True, force=True)
 
 
 def _release_plot_if_no_active_application(doc):

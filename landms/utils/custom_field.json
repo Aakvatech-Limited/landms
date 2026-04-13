@@ -132,13 +132,25 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Order-apply_auto_cancellation",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "apply_auto_cancellation",
+  "fieldtype": "Check",
+  "label": "Apply Auto-Cancellation",
+  "insert_after": "payment_deadline",
+  "default": "1",
+  "description": "When checked, the Sales Order and Plot Contract will be automatically cancelled if installment deadlines are missed. Uncheck to allow the customer to pay beyond the deadline."
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Sales Order-lms_ref_section",
   "dt": "Sales Order",
   "module": "LandMS",
   "fieldname": "lms_ref_section",
   "fieldtype": "Section Break",
   "label": "LMS References",
-  "insert_after": "payment_deadline",
+  "insert_after": "apply_auto_cancellation",
   "depends_on": "eval:doc.docstatus>=1"
  },
  {

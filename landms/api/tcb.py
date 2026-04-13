@@ -163,12 +163,27 @@ def ipn_callback() -> dict[str, Any]:
 		          error="Validation failure.", log_name=log_name or "")
 		return {"ok": False, "status": "Failed", "message": "Missing reference or non-positive amount."}
 
+	# 8. IP allowlist check — if configured and the client IP is not in the
+	#    list, still apply the payment BUT leave the PE in Draft so a human
+	#    can review and submit manually. The control number itself is still
+	#    validated downstream (registry + SO match).
+	allowed_ips = _get_allowed_tcb_ips()
+	client_ip = _get_client_ip()
+	hold_for_review = bool(allowed_ips) and client_ip not in allowed_ips
+	ip_message = (
+		f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
+		"PE will be created as Draft for manual review."
+	) if hold_for_review else ""
+
 	result = apply_tcb_payment_to_sales_order(
 		control_number=reference,
 		amount=amount,
 		payment_date=payment_date,
 		payment_reference=payment_ref,
+		hold_for_review=hold_for_review,
 	)
+	if hold_for_review and result.get("ok"):
+		result["message"] = (result.get("message") or "") + " " + ip_message
 
 	log_name = create_tcb_api_log(
 		direction="Inbound", event_type="IPN Callback",
@@ -220,12 +235,42 @@ def run_reconciliation(start_date: str | None = None, end_date: str | None = Non
 	"""
 	if "System Manager" not in frappe.get_roles():
 		frappe.throw("Only System Manager can trigger TCB reconciliation manually.")
-	return run_tcb_reconciliation_job(start_date=start_date, end_date=end_date)
+	return run_tcb_reconciliation_job(start_date=start_date, end_date=end_date, triggered_by="Manual")
 
 
 # ---------------------------------------------------------------------- #
 #  Helpers                                                                 #
 # ---------------------------------------------------------------------- #
+
+
+def _get_client_ip() -> str:
+	"""Return the real client IP, peering through nginx's X-Forwarded-For.
+
+	Behind nginx, `request.remote_addr` is always 127.0.0.1 (the upstream
+	socket). The original client sits at the leftmost entry of the
+	comma-separated X-Forwarded-For header.
+	"""
+	try:
+		request = frappe.local.request
+		xff = request.headers.get("X-Forwarded-For") or ""
+		if xff:
+			return xff.split(",")[0].strip()
+		return request.remote_addr or ""
+	except Exception:
+		return ""
+
+
+def _get_allowed_tcb_ips() -> list[str]:
+	"""Parse the Allowed IP Addresses field from TCB Integration Settings."""
+	try:
+		raw = frappe.db.get_single_value("TCB Integration Settings", "allowed_ip_addresses") or ""
+	except Exception:
+		return []
+	if not raw:
+		return []
+	# Accept comma- or newline-separated values, trim blanks.
+	parts = [p.strip() for p in raw.replace("\n", ",").split(",")]
+	return [p for p in parts if p]
 
 
 def _read_request_payload() -> tuple[Any, dict[str, Any]]:
