@@ -97,4 +97,4 @@ build/
 
 # LMS local utilities
 landms/landms/cleanup.py
-landms/landms/tcb.py
+DOCUMENTATION.md

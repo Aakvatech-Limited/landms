@@ -552,18 +552,12 @@ def _block_manual_control_number(doc):
 
 
 def _create_registry_row(doc, control_number: str):
-	try:
-		create_or_get_registry(
-			control_number=control_number,
-			sales_order=doc.name,
-			customer=doc.customer,
-			amount=flt(doc.grand_total),
-		)
-	except Exception:
-		frappe.logger("landms").error(
-			f"Failed to create TCB Control Number registry row for {doc.name}",
-			exc_info=True,
-		)
+	create_or_get_registry(
+		control_number=control_number,
+		sales_order=doc.name,
+		customer=doc.customer,
+		amount=flt(doc.grand_total),
+	)
 
 
 def _register_with_tcb(doc, control_number: str):
