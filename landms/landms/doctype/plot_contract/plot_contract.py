@@ -23,6 +23,7 @@ class PlotContract(Document):
 
 	def before_submit(self):
 		self._validate_sales_order_first_payment_gate()
+		self._validate_advance_met()
 
 	def before_cancel(self):
 		if flt(self.total_paid) > 0:
@@ -106,6 +107,29 @@ class PlotContract(Document):
 			as_dict=True,
 		)
 		return bool(si and si.docstatus == 1 and flt(si.outstanding_amount) < flt(si.grand_total))
+
+	def _validate_advance_met(self):
+		"""Block submission unless the advance installment is fully paid."""
+		invoice_name = self._get_plot_invoice_name()
+		if not invoice_name:
+			return
+		si_doc = frappe.get_doc("Sales Invoice", invoice_name)
+		if si_doc.docstatus != 1:
+			return
+		if self._is_advance_installment_met(si_doc):
+			return
+
+		advance_expected = 0.0
+		grand_total = flt(si_doc.grand_total)
+		for row in si_doc.get("payment_schedule") or []:
+			advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
+			break
+
+		total_paid = max(0.0, flt(si_doc.grand_total) - flt(si_doc.outstanding_amount))
+		frappe.throw(
+			f"Cannot submit contract — advance of TZS {advance_expected:,.0f} has not been met. "
+			f"Only TZS {total_paid:,.0f} received so far."
+		)
 
 	# ------------------------------------------------------------------ #
 	#  Field calculation helpers                                           #
@@ -195,6 +219,19 @@ class PlotContract(Document):
 			})
 
 	def calculate_payment_summary(self):
+		# For SO-linked contracts, payment totals are managed by
+		# sync_payment_status (which reads from the SI). Recalculating
+		# from in-memory schedule rows here would overwrite synced values
+		# with stale data because the schedule rows are DB-updated, not
+		# in-memory-updated, during sync.
+		if self.sales_order and flt(self.total_paid) > 0:
+			self.total_contract_value = flt(self.selling_price)
+			if flt(self.government_share_percent) > 0:
+				self.government_fee_withheld = (
+					flt(self.selling_price) * flt(self.government_share_percent) / 100
+				)
+			return
+
 		self.total_contract_value = flt(self.selling_price)
 		total_paid = sum(flt(row.paid_amount) for row in self.payment_schedule)
 		self.total_paid = total_paid
@@ -205,31 +242,56 @@ class PlotContract(Document):
 				flt(self.selling_price) * flt(self.government_share_percent) / 100
 			)
 
-	def _derive_payment_progress(self, total_paid, total_outstanding):
+	def _derive_payment_progress(self, total_paid, total_outstanding, si_doc=None):
 		if flt(total_paid) <= 0:
 			return "Unpaid"
 		if flt(total_outstanding) <= 0:
 			return "Fully Paid"
 
-		first_expected = 0.0
-		first_paid = 0.0
-		for row in self.payment_schedule:
-			if cint(row.installment_number or 0) == 1:
-				first_expected = flt(row.expected_amount)
-				first_paid = flt(row.paid_amount)
+		# Determine advance threshold from the first schedule row's portion.
+		# Use total_paid (grand_total − outstanding) for comparison — NOT the
+		# per-row paid_amount which ERPNext may spread unpredictably.
+		advance_expected = 0.0
+		if si_doc:
+			grand_total = flt(si_doc.grand_total)
+			for row in si_doc.get("payment_schedule") or []:
+				advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
 				break
+		else:
+			for row in self.payment_schedule:
+				if cint(row.installment_number or 0) == 1:
+					advance_expected = flt(row.expected_amount)
+					break
 
-		if first_expected > 0 and first_paid >= first_expected:
-			later_paid = sum(
-				flt(row.paid_amount)
-				for row in self.payment_schedule
-				if cint(row.installment_number or 0) > 1
-			)
-			if later_paid > 0:
+		if advance_expected > 0 and flt(total_paid) >= advance_expected:
+			balance_paid = flt(total_paid) - advance_expected
+			if balance_paid > 0:
 				return "Advance + Installments Paid"
 			return "Advance Paid"
 
 		return "Partially Paid"
+
+	def _is_advance_installment_met(self, si_doc):
+		"""Check whether enough money has been received to cover the advance.
+
+		Uses total money received (grand_total − outstanding) rather than the
+		per-row paid_amount, because ERPNext may spread allocations across
+		schedule rows unpredictably.
+		"""
+		grand_total = flt(si_doc.grand_total)
+		total_paid = max(0.0, grand_total - flt(si_doc.outstanding_amount))
+		if total_paid <= 0:
+			return False
+
+		# Compute the advance amount from the first schedule row's portion.
+		for row in si_doc.get("payment_schedule") or []:
+			advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
+			if advance_expected > 0:
+				return total_paid >= advance_expected
+			break
+
+		# No schedule rows — any payment counts.
+		return True
 
 	def _sync_land_acquisition_summary(self):
 		la = self.land_acquisition or frappe.db.get_value(
@@ -284,7 +346,10 @@ class PlotContract(Document):
 		if len(self.payment_schedule or []) != len(si_doc.payment_schedule or []) and self.docstatus == 0:
 			self._rebuild_schedule_from_invoice(si_doc)
 
-		if total_paid > 0 and self.docstatus == 0:
+		advance_met = self._is_advance_installment_met(si_doc)
+
+		# Only auto-submit the contract once the full advance is covered.
+		if advance_met and self.docstatus == 0:
 			self.submit()
 			self.reload()
 
@@ -295,13 +360,13 @@ class PlotContract(Document):
 		self.db_set("total_outstanding", total_outstanding, update_modified=False)
 		self.db_set(
 			"payment_progress",
-			self._derive_payment_progress(total_paid, total_outstanding),
+			self._derive_payment_progress(total_paid, total_outstanding, si_doc=si_doc),
 			update_modified=False,
 		)
 
 		if so_doc.get("plot_application"):
 			app_status = frappe.db.get_value("Plot Application", so_doc.plot_application, "status")
-			if total_paid > 0 and app_status == "Paid":
+			if advance_met and app_status == "Paid":
 				frappe.db.set_value(
 					"Plot Application",
 					so_doc.plot_application,
@@ -325,7 +390,7 @@ class PlotContract(Document):
 				msg += f" Government fee posted — Journal Entry: {je_name}."
 			frappe.msgprint(msg, indicator="green", alert=True)
 
-		elif total_paid > 0 and self.docstatus == 1:
+		elif advance_met and self.docstatus == 1:
 			self.db_set("contract_status", "Ongoing", update_modified=False)
 			if frappe.db.get_value("Plot Master", self.plot, "status") == "Pending Advance":
 				frappe.db.set_value("Plot Master", self.plot, "status", "Reserved")
@@ -341,11 +406,14 @@ class PlotContract(Document):
 		frappe.db.set_value("Plot Contract", self.name, updates, update_modified=False)
 
 	def _rebuild_schedule_from_invoice(self, invoice):
+		# Compute expected from the original grand_total * invoice_portion,
+		# NOT from payment_amount which ERPNext recalculates after payments.
+		grand_total = flt(invoice.grand_total)
 		self.set("payment_schedule", [])
 		for idx, row in enumerate(invoice.get("payment_schedule") or [], start=1):
-			expected = flt(row.payment_amount)
+			expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
 			paid_amount = flt(row.paid_amount or 0)
-			outstanding = flt(row.outstanding or max(0.0, expected - paid_amount))
+			outstanding = max(0.0, expected - paid_amount)
 			self.append("payment_schedule", {
 				"installment_number": idx,
 				"description": row.description or self._default_installment_label(idx),
@@ -361,6 +429,7 @@ class PlotContract(Document):
 
 	def _sync_schedule_rows_from_invoice(self, invoice, paid_dates):
 		today_date = getdate(today())
+		grand_total = flt(invoice.grand_total)
 		rows = sorted(self.payment_schedule, key=lambda d: cint(d.installment_number or 0))
 
 		for idx, source in enumerate(invoice.get("payment_schedule") or [], start=1):
@@ -368,9 +437,16 @@ class PlotContract(Document):
 				break
 
 			target = rows[idx - 1]
-			expected = flt(source.payment_amount)
+			# Preserve the original expected_amount on the contract row.
+			# Only recompute from grand_total * invoice_portion if the
+			# contract row has no expected_amount yet (first sync).
+			existing_expected = flt(target.expected_amount)
+			if existing_expected > 0:
+				expected = existing_expected
+			else:
+				expected = flt(grand_total * flt(source.invoice_portion) / 100) if grand_total else flt(source.payment_amount)
 			paid_amount = flt(source.paid_amount or 0)
-			outstanding = flt(source.outstanding or max(0.0, expected - paid_amount))
+			outstanding = max(0.0, expected - paid_amount)
 			status = self._derive_installment_status(source.due_date, expected, outstanding, today_date=today_date)
 			paid_date = paid_dates.get(idx) if outstanding <= 0 else None
 
@@ -576,6 +652,9 @@ class PlotContract(Document):
 		# automatically and declines the TCB control number with the reference decline URL
 		self._cancel_linked_sales_order_on_termination()
 
+		# Cancel the Plot Application so the plot is fully released
+		self._cancel_plot_application_on_termination()
+
 		frappe.db.set_value("Plot Master", self.plot, "status", "Available")
 		self._sync_land_acquisition_summary()
 
@@ -628,6 +707,23 @@ class PlotContract(Document):
 		so_doc.flags.ignore_links = True
 		so_doc.flags._from_termination = True
 		so_doc.cancel()
+
+	def _cancel_plot_application_on_termination(self):
+		"""Cancel the Plot Application so the plot is fully released."""
+		app_name = self.plot_application
+		if not app_name:
+			so_doc = self._get_sales_order_doc()
+			if so_doc:
+				app_name = so_doc.get("plot_application")
+		if not app_name or not frappe.db.exists("Plot Application", app_name):
+			return
+		app_doc = frappe.get_doc("Plot Application", app_name)
+		if app_doc.docstatus != 1:
+			return
+		app_doc.flags.ignore_permissions = True
+		app_doc.flags.ignore_links = True
+		app_doc.flags._cancellation_reason = "Contract Terminated"
+		app_doc.cancel()
 
 
 @frappe.whitelist()

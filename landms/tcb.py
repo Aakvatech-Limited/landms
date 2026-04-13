@@ -1094,8 +1094,17 @@ def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end
 	tcb_message = None
 	try:
 		session = get_request_session()
+		# TCB Reconciliation expects application/x-www-form-urlencoded
+		# (same as Reference Create). Build the body explicitly so the
+		# Content-Type header is unambiguous.
+		encoded_body = urlencode(payload, doseq=True, quote_via=quote_plus)
 		response = session.post(
-			url, data=payload,
+			url,
+			data=encoded_body,
+			headers={
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Accept": "application/json",
+			},
 			timeout=(connect_timeout, read_timeout),
 			verify=verify_ssl,
 		)
