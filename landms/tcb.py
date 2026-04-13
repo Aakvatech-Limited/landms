@@ -946,62 +946,39 @@ def create_tcb_api_log(
 	error: str | None = None,
 	is_duplicate: int = 0,
 ) -> str | None:
-	"""Best-effort insertion into TCB API Log. Never raises.
-
-	Uses a separate DB connection so the log survives even when the
-	calling transaction is rolled back (e.g. frappe.throw after a
-	failed TCB call).
-	"""
+	"""Best-effort insertion into TCB API Log. Never raises."""
 	try:
-		import frappe.database
-
-		log_db = frappe.database.get_db(cur_db_name=frappe.conf.db_name)
-		try:
-			ts = now()
-			log_db.sql(
-				"""INSERT INTO `tabTCB API Log`
-				(`name`, `doctype`, `creation`, `modified`, `modified_by`, `owner`,
-				 `requested_at`, `response_at`, `direction`, `event_type`, `status`,
-				 `processing_mode`, `is_duplicate`, `endpoint`,
-				 `http_status_code`, `tcb_status_code`, `tcb_message`,
-				 `external_reference`, `transaction_id`,
-				 `sales_order`, `plot_contract`, `payment_entry`,
-				 `request_payload`, `response_payload`, `error`)
-				VALUES
-				(%(name)s, 'TCB API Log', %(ts)s, %(ts)s, %(user)s, %(user)s,
-				 %(ts)s, %(ts)s, %(direction)s, %(event_type)s, %(status)s,
-				 %(processing_mode)s, %(is_duplicate)s, %(endpoint)s,
-				 %(http_status_code)s, %(tcb_status_code)s, %(tcb_message)s,
-				 %(external_reference)s, %(transaction_id)s,
-				 %(sales_order)s, %(plot_contract)s, %(payment_entry)s,
-				 %(request_payload)s, %(response_payload)s, %(error)s)""",
-				{
-					"name": frappe.generate_hash(length=10),
-					"ts": ts,
-					"user": frappe.session.user or "Administrator",
-					"direction": direction,
-					"event_type": event_type,
-					"status": status,
-					"processing_mode": processing_mode or "",
-					"is_duplicate": cint(is_duplicate),
-					"endpoint": endpoint or "",
-					"http_status_code": http_status_code,
-					"tcb_status_code": tcb_status_code,
-					"tcb_message": (tcb_message or "")[:140],
-					"external_reference": external_reference or "",
-					"transaction_id": transaction_id or "",
-					"sales_order": sales_order or "",
-					"plot_contract": plot_contract or "",
-					"payment_entry": payment_entry or "",
-					"request_payload": _to_pretty_json_text(request_payload),
-					"response_payload": _to_pretty_json_text(response_payload),
-					"error": error or "",
-				},
-			)
-			log_db.commit()
-			return None
-		finally:
-			log_db.close()
+		if sales_order and not frappe.db.exists("Sales Order", sales_order):
+			sales_order = ""
+		if plot_contract and not frappe.db.exists("Plot Contract", plot_contract):
+			plot_contract = ""
+		if payment_entry and not frappe.db.exists("Payment Entry", payment_entry):
+			payment_entry = ""
+		doc = frappe.get_doc({
+			"doctype":            "TCB API Log",
+			"requested_at":       now(),
+			"response_at":        now(),
+			"direction":          direction,
+			"event_type":         event_type,
+			"status":             status,
+			"processing_mode":    processing_mode or "",
+			"is_duplicate":       cint(is_duplicate),
+			"endpoint":           endpoint or "",
+			"http_status_code":   http_status_code if http_status_code is not None else None,
+			"tcb_status_code":    tcb_status_code if tcb_status_code is not None else None,
+			"tcb_message":        (tcb_message or "")[:140],
+			"external_reference": external_reference or "",
+			"transaction_id":     transaction_id or "",
+			"sales_order":        sales_order or "",
+			"plot_contract":      plot_contract or "",
+			"payment_entry":      payment_entry or "",
+			"request_payload":    _to_pretty_json_text(request_payload),
+			"response_payload":   _to_pretty_json_text(response_payload),
+			"error":              error or "",
+		})
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return doc.name
 	except Exception:
 		frappe.logger("landms").error(
 			"Failed to insert TCB API Log",
