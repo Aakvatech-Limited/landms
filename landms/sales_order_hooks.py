@@ -561,14 +561,24 @@ def _create_registry_row(doc, control_number: str):
 
 
 def _register_with_tcb(doc, control_number: str):
+	"""Register the control number with TCB.
+
+	For Live mode the HTTP call runs in a background job so the SO
+	submit is not blocked by TCB network latency. Off / Log Only
+	modes run synchronously (no HTTP call involved).
+	"""
 	settings = _get_tcb_settings()
-	result = register_reference_for_sales_order(doc.name, control_number)
-	if settings.get("outbound_mode") == "Live" and not result.get("ok"):
-		frappe.throw(
-			f"TCB reference registration failed for control number {control_number}: "
-			f"{result.get('message') or 'unknown error'}. "
-			"Sales Order submit blocked. Check TCB API Log for details."
-		)
+	if not cint(settings.get("enabled")) or settings.get("outbound_mode") != "Live":
+		register_reference_for_sales_order(doc.name, control_number)
+		return
+
+	frappe.enqueue(
+		"landms.tcb.register_reference_for_sales_order",
+		queue="short",
+		timeout=60,
+		sales_order_name=doc.name,
+		control_number=control_number,
+	)
 
 
 def _link_application_to_sales_order(doc):
