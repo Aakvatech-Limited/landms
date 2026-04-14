@@ -343,12 +343,7 @@ def _ensure_payment_schedule(doc, plot):
 
 def _ensure_draft_plot_contract(doc):
 	if doc.get("plot_contract") and frappe.db.exists("Plot Contract", doc.plot_contract):
-		contract = frappe.get_doc("Plot Contract", doc.plot_contract)
-		if contract.docstatus == 0:
-			_sync_contract_schedule(contract, doc)
-			contract.flags.from_sales_order = True
-			contract.save(ignore_permissions=True)
-		return contract.name
+		return _sync_existing_draft_plot_contract(doc.plot_contract, doc)
 
 	existing = frappe.db.get_value(
 		"Plot Contract",
@@ -356,12 +351,7 @@ def _ensure_draft_plot_contract(doc):
 		"name",
 	)
 	if existing:
-		contract = frappe.get_doc("Plot Contract", existing)
-		if contract.docstatus == 0:
-			_sync_contract_schedule(contract, doc)
-			contract.flags.from_sales_order = True
-			contract.save(ignore_permissions=True)
-		return existing
+		return _sync_existing_draft_plot_contract(existing, doc)
 
 	contract = frappe.get_doc({
 		"doctype": "Plot Contract",
@@ -384,15 +374,72 @@ def _ensure_draft_plot_contract(doc):
 	return contract.name
 
 
-def _sync_contract_schedule(contract, source_doc):
-	contract.control_number = source_doc.get("control_number") or ""
-	contract.plot_application = source_doc.get("plot_application") or ""
-	contract.payment_deadline = source_doc.get("payment_deadline")
-	contract.set("payment_schedule", [])
+def _sync_existing_draft_plot_contract(contract_name: str, source_doc) -> str:
+	"""Refresh a draft Plot Contract from the Sales Order without failing on harmless races."""
+	for attempt in range(2):
+		contract = frappe.get_doc("Plot Contract", contract_name)
+		if contract.docstatus != 0:
+			return contract.name
 
+		if _draft_contract_matches_sales_order(contract, source_doc):
+			return contract.name
+
+		try:
+			_sync_contract_schedule(contract, source_doc)
+			contract.flags.from_sales_order = True
+			contract.save(ignore_permissions=True)
+			return contract.name
+		except frappe.TimestampMismatchError:
+			if attempt:
+				raise
+
+	return contract_name
+
+
+def _draft_contract_matches_sales_order(contract, source_doc) -> bool:
+	if cstr(contract.control_number or "") != cstr(source_doc.get("control_number") or ""):
+		return False
+	if cstr(contract.plot_application or "") != cstr(source_doc.get("plot_application") or ""):
+		return False
+	if cstr(contract.payment_deadline or "") != cstr(source_doc.get("payment_deadline") or ""):
+		return False
+
+	expected_rows = _build_contract_schedule_rows(source_doc)
+	actual_rows = sorted(
+		contract.get("payment_schedule") or [],
+		key=lambda row: cint(getattr(row, "installment_number", 0) or 0),
+	)
+	if len(actual_rows) != len(expected_rows):
+		return False
+
+	for actual, expected in zip(actual_rows, expected_rows):
+		if cint(getattr(actual, "installment_number", 0) or 0) != cint(expected["installment_number"]):
+			return False
+		if cstr(getattr(actual, "description", "") or "") != cstr(expected["description"] or ""):
+			return False
+		if cstr(getattr(actual, "due_date", "") or "") != cstr(expected["due_date"] or ""):
+			return False
+		if flt(getattr(actual, "expected_amount", 0) or 0) != flt(expected["expected_amount"]):
+			return False
+		if flt(getattr(actual, "paid_amount", 0) or 0) != flt(expected["paid_amount"]):
+			return False
+		if flt(getattr(actual, "outstanding_amount", 0) or 0) != flt(expected["outstanding_amount"]):
+			return False
+		if cstr(getattr(actual, "paid_date", "") or "") != cstr(expected["paid_date"] or ""):
+			return False
+		if cstr(getattr(actual, "sales_invoice", "") or "") != cstr(expected["sales_invoice"] or ""):
+			return False
+		if cstr(getattr(actual, "status", "") or "") != cstr(expected["status"] or ""):
+			return False
+
+	return True
+
+
+def _build_contract_schedule_rows(source_doc) -> list[dict]:
+	rows = []
 	for idx, row in enumerate(source_doc.get("payment_schedule") or [], start=1):
 		expected_amount = flt(getattr(row, "payment_amount", 0))
-		contract.append("payment_schedule", {
+		rows.append({
 			"installment_number": idx,
 			"description": getattr(row, "description", "") or f"Installment {idx}",
 			"due_date": row.due_date,
@@ -403,6 +450,17 @@ def _sync_contract_schedule(contract, source_doc):
 			"sales_invoice": "",
 			"status": "Pending",
 		})
+	return rows
+
+
+def _sync_contract_schedule(contract, source_doc):
+	contract.control_number = source_doc.get("control_number") or ""
+	contract.plot_application = source_doc.get("plot_application") or ""
+	contract.payment_deadline = source_doc.get("payment_deadline")
+	contract.set("payment_schedule", [])
+
+	for row in _build_contract_schedule_rows(source_doc):
+		contract.append("payment_schedule", row)
 
 
 def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None = None):

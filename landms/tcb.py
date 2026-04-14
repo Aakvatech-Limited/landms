@@ -196,26 +196,28 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"read_timeout_seconds": 15,
 		}
 
+	get_value = settings_doc.get
+
 	return {
-		"enabled": settings_doc.enabled,
-		"outbound_mode": settings_doc.outbound_mode or "Off",
-		"inbound_mode": settings_doc.inbound_mode or "Off",
-		"control_number_pattern": settings_doc.control_number_pattern or DEFAULT_PATTERN,
-		"auto_apply_callback_payments": settings_doc.auto_apply_callback_payments,
-		"auto_apply_reconciliation_payments": settings_doc.auto_apply_reconciliation_payments,
-		"reconciliation_enabled": settings_doc.reconciliation_enabled,
-		"reconciliation_lookback_days": settings_doc.reconciliation_lookback_days or 1,
-		"reconciliation_partner_code": (settings_doc.reconciliation_partner_code or "").strip(),
-		"decline_reference_on_so_cancel": settings_doc.decline_reference_on_so_cancel,
-		"decline_failure_policy": settings_doc.decline_failure_policy or "Allow Cancel and Flag",
-		"reference_create_url": (settings_doc.reference_create_url or "").strip(),
-		"reference_decline_url": (settings_doc.reference_decline_url or "").strip(),
-		"reconciliation_url": (settings_doc.reconciliation_url or "").strip(),
-		"partner_code": settings_doc.partner_code,
-		"profile_id": settings_doc.profile_id,
-		"verify_ssl": settings_doc.verify_ssl,
-		"connect_timeout_seconds": settings_doc.connect_timeout_seconds or 5,
-		"read_timeout_seconds": settings_doc.read_timeout_seconds or 15,
+		"enabled": get_value("enabled"),
+		"outbound_mode": get_value("outbound_mode") or "Off",
+		"inbound_mode": get_value("inbound_mode") or "Off",
+		"control_number_pattern": get_value("control_number_pattern") or DEFAULT_PATTERN,
+		"auto_apply_callback_payments": get_value("auto_apply_callback_payments"),
+		"auto_apply_reconciliation_payments": get_value("auto_apply_reconciliation_payments"),
+		"reconciliation_enabled": get_value("reconciliation_enabled"),
+		"reconciliation_lookback_days": get_value("reconciliation_lookback_days") or 1,
+		"reconciliation_partner_code": (get_value("reconciliation_partner_code") or "").strip(),
+		"decline_reference_on_so_cancel": get_value("decline_reference_on_so_cancel"),
+		"decline_failure_policy": get_value("decline_failure_policy") or "Allow Cancel and Flag",
+		"reference_create_url": (get_value("reference_create_url") or "").strip(),
+		"reference_decline_url": (get_value("reference_decline_url") or "").strip(),
+		"reconciliation_url": (get_value("reconciliation_url") or "").strip(),
+		"partner_code": get_value("partner_code"),
+		"profile_id": get_value("profile_id"),
+		"verify_ssl": get_value("verify_ssl"),
+		"connect_timeout_seconds": get_value("connect_timeout_seconds") or 5,
+		"read_timeout_seconds": get_value("read_timeout_seconds") or 15,
 	}
 
 
@@ -778,132 +780,267 @@ def run_tcb_reconciliation_job(
 	path). The dry path (auto_apply off) just logs.
 	"""
 	t_start = time.time()
-	settings = _get_tcb_settings()
+	settings = {}
+	start = ""
+	end = ""
+	try:
+		settings = _get_tcb_settings()
+		lookback_days = cint(settings.get("reconciliation_lookback_days") or 1)
+		end = _normalize_date_string(end_date)
+		start = _normalize_date_string(start_date) if start_date else _normalize_date_string(add_days(end, -lookback_days))
 
-	if not cint(settings.get("enabled")):
-		msg = "TCB integration disabled."
-		_update_recon_log(log_name, status="Failed", message=msg,
-		                  duration=time.time() - t_start)
-		return {"ok": True, "status": "Ignored", "message": msg}
+		# Create a new log doc if one was not supplied by the caller (scheduler path).
+		if not log_name:
+			log_name = _create_recon_log(triggered_by=triggered_by, start=start, end=end)
 
-	if not cint(settings.get("reconciliation_enabled")):
-		msg = "TCB reconciliation is disabled in settings."
-		_update_recon_log(log_name, status="Failed", message=msg,
-		                  duration=time.time() - t_start)
-		return {"ok": True, "status": "Ignored", "message": msg}
+		endpoint = _masked_reconciliation_endpoint(settings)
+		run_request = {
+			"action": "run",
+			"triggered_by": triggered_by,
+			"start_date": start,
+			"end_date": end,
+		}
+		create_tcb_api_log(
+			direction="Outbound",
+			event_type="Reconciliation",
+			status="Success",
+			processing_mode="Started",
+			endpoint=endpoint,
+			reconciliation_log=log_name,
+			request_payload=run_request,
+			response_payload={"message": "Reconciliation run started."},
+		)
 
-	lookback_days = cint(settings.get("reconciliation_lookback_days") or 1)
-	end = _normalize_date_string(end_date)
-	start = _normalize_date_string(start_date) if start_date else _normalize_date_string(add_days(end, -lookback_days))
-
-	# Create a new log doc if one was not supplied by the caller (scheduler path).
-	if not log_name:
-		log_name = _create_recon_log(triggered_by=triggered_by, start=start, end=end)
-
-	fetch_result = _fetch_reconciliation_rows(settings=settings, start_date=start, end_date=end)
-	rows = fetch_result.get("rows") or []
-	if not fetch_result.get("ok"):
-		err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
-		_update_recon_log(log_name, status="Failed", message=err_msg,
-		                  error=err_msg, duration=time.time() - t_start)
-		return {"ok": False, "status": "Failed", "message": err_msg}
-
-	applied = 0
-	ignored = 0
-	failed = 0
-	for row in rows:
-		reference = cstr(row.get("reference") or "").strip()
-		amount = flt(row.get("amount"))
-		transaction_id = cstr(row.get("ptid") or "").strip()
-		receipt_no = cstr(row.get("receipt_no") or "").strip()
-		payment_ref = receipt_no or transaction_id or reference
-		payment_date = row.get("trans_date")
-
-		if not reference or amount <= 0:
+		if not cint(settings.get("enabled")):
+			msg = "TCB integration disabled."
 			create_tcb_api_log(
-				direction="Inbound",
+				direction="Outbound",
 				event_type="Reconciliation",
 				status="Failed",
-				processing_mode="Log Only",
-				endpoint=_masked_reconciliation_endpoint(settings),
-				external_reference=reference,
-				transaction_id=transaction_id,
-				request_payload=row,
-				response_payload={"message": "Skipped row due to missing reference or non-positive amount."},
+				processing_mode="Started",
+				endpoint=endpoint,
+				reconciliation_log=log_name,
+				request_payload=run_request,
+				response_payload={"message": msg},
+				error=msg,
 			)
-			failed += 1
-			continue
+			_update_recon_log(log_name, status="Failed", message=msg,
+			                  duration=time.time() - t_start)
+			return {"ok": True, "status": "Ignored", "message": msg}
 
-		if not cint(settings.get("auto_apply_reconciliation_payments")):
+		if not cint(settings.get("reconciliation_enabled")):
+			msg = "TCB reconciliation is disabled in settings."
+			create_tcb_api_log(
+				direction="Outbound",
+				event_type="Reconciliation",
+				status="Failed",
+				processing_mode="Started",
+				endpoint=endpoint,
+				reconciliation_log=log_name,
+				request_payload=run_request,
+				response_payload={"message": msg},
+				error=msg,
+			)
+			_update_recon_log(log_name, status="Failed", message=msg,
+			                  duration=time.time() - t_start)
+			return {"ok": True, "status": "Ignored", "message": msg}
+
+		fetch_result = _fetch_reconciliation_rows(
+			settings=settings,
+			start_date=start,
+			end_date=end,
+			reconciliation_log=log_name,
+		)
+		rows = fetch_result.get("rows") or []
+		if not fetch_result.get("ok"):
+			err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
+			_update_recon_log(log_name, status="Failed", message=err_msg,
+			                  error=err_msg, duration=time.time() - t_start)
+			return {"ok": False, "status": "Failed", "message": err_msg}
+
+		applied = 0
+		ignored = 0
+		failed = 0
+		processed = 0
+		stop_result = _stop_reconciliation_if_requested(
+			log_name=log_name,
+			settings=settings,
+			started_at=t_start,
+			total_rows=processed,
+			applied=applied,
+			ignored=ignored,
+			failed=failed,
+		)
+		if stop_result:
+			return stop_result
+		for row in rows:
+			stop_result = _stop_reconciliation_if_requested(
+				log_name=log_name,
+				settings=settings,
+				started_at=t_start,
+				total_rows=processed,
+				applied=applied,
+				ignored=ignored,
+				failed=failed,
+			)
+			if stop_result:
+				return stop_result
+
+			reference = cstr(row.get("reference") or "").strip()
+			amount = flt(row.get("amount"))
+			transaction_id = cstr(row.get("ptid") or "").strip()
+			receipt_no = cstr(row.get("receipt_no") or "").strip()
+			payment_ref = receipt_no or transaction_id or reference
+			payment_date = row.get("trans_date")
+
+			if not reference or amount <= 0:
+				create_tcb_api_log(
+					direction="Inbound",
+					event_type="Reconciliation",
+					status="Failed",
+					processing_mode="Log Only",
+					endpoint=endpoint,
+					reconciliation_log=log_name,
+					external_reference=reference,
+					transaction_id=transaction_id,
+					request_payload=row,
+					response_payload={"message": "Skipped row due to missing reference or non-positive amount."},
+				)
+				failed += 1
+				processed += 1
+				continue
+
+			if not cint(settings.get("auto_apply_reconciliation_payments")):
+				create_tcb_api_log(
+					direction="Inbound",
+					event_type="Reconciliation",
+					status="Ignored",
+					processing_mode="Log Only",
+					endpoint=endpoint,
+					reconciliation_log=log_name,
+					external_reference=reference,
+					transaction_id=transaction_id,
+					request_payload=row,
+					response_payload={"message": "Auto-apply reconciliation switch is OFF."},
+				)
+				ignored += 1
+				processed += 1
+				continue
+
+			result = apply_tcb_payment_to_sales_order(
+				control_number=reference,
+				amount=amount,
+				payment_date=payment_date,
+				payment_reference=payment_ref,
+			)
 			create_tcb_api_log(
 				direction="Inbound",
 				event_type="Reconciliation",
-				status="Ignored",
-				processing_mode="Log Only",
-				endpoint=_masked_reconciliation_endpoint(settings),
+				status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
+				processing_mode="Apply Payment",
+				endpoint=endpoint,
+				reconciliation_log=log_name,
 				external_reference=reference,
 				transaction_id=transaction_id,
+				sales_order=result.get("sales_order"),
+				payment_entry=result.get("payment_entry"),
 				request_payload=row,
-				response_payload={"message": "Auto-apply reconciliation switch is OFF."},
+				response_payload={"message": result.get("message")},
+				error=result.get("error"),
 			)
-			ignored += 1
-			continue
 
-		result = apply_tcb_payment_to_sales_order(
-			control_number=reference,
-			amount=amount,
-			payment_date=payment_date,
-			payment_reference=payment_ref,
+			row_status = result.get("status")
+			if row_status == "Success":
+				applied += 1
+			elif row_status == "Ignored":
+				ignored += 1
+			else:
+				failed += 1
+			processed += 1
+
+		stop_result = _stop_reconciliation_if_requested(
+			log_name=log_name,
+			settings=settings,
+			started_at=t_start,
+			total_rows=processed,
+			applied=applied,
+			ignored=ignored,
+			failed=failed,
+		)
+		if stop_result:
+			return stop_result
+
+		total = len(rows)
+		if total == 0 or failed == 0:
+			final_status = "Success"
+		elif applied > 0 or ignored > 0:
+			final_status = "Partial"
+		else:
+			final_status = "Failed"
+
+		summary = f"Processed {total} rows: applied={applied}, ignored={ignored}, failed={failed}."
+		_update_recon_log(
+			log_name,
+			status=final_status,
+			message=summary,
+			total_rows=total,
+			applied=applied,
+			ignored=ignored,
+			failed=failed,
+			duration=time.time() - t_start,
+		)
+
+		create_tcb_api_log(
+			direction="Outbound",
+			event_type="Reconciliation",
+			status="Failed" if final_status == "Failed" else "Success",
+			processing_mode="Completed",
+			endpoint=endpoint,
+			reconciliation_log=log_name,
+			request_payload=run_request,
+			response_payload={
+				"message": summary,
+				"rows": total,
+				"applied": applied,
+				"ignored": ignored,
+				"failed": failed,
+				"final_status": final_status,
+			},
+		)
+
+		return {
+			"ok": True, "status": final_status,
+			"message": summary,
+			"rows": total, "applied": applied, "ignored": ignored, "failed": failed,
+			"start_date": start, "end_date": end,
+		}
+	except Exception:
+		err = frappe.get_traceback()
+		err_msg = "Unhandled reconciliation exception."
+		_update_recon_log(
+			log_name,
+			status="Failed",
+			message=err_msg,
+			error=err,
+			duration=time.time() - t_start,
 		)
 		create_tcb_api_log(
-			direction="Inbound",
+			direction="Outbound",
 			event_type="Reconciliation",
-			status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
-			processing_mode="Apply Payment",
+			status="Failed",
+			processing_mode="Exception",
 			endpoint=_masked_reconciliation_endpoint(settings),
-			external_reference=reference,
-			transaction_id=transaction_id,
-			sales_order=result.get("sales_order"),
-			payment_entry=result.get("payment_entry"),
-			request_payload=row,
-			response_payload={"message": result.get("message")},
-			error=result.get("error"),
+			reconciliation_log=log_name,
+			request_payload={
+				"action": "run",
+				"triggered_by": triggered_by,
+				"start_date": start_date,
+				"end_date": end_date,
+			},
+			response_payload={"message": err_msg},
+			error=err,
 		)
-
-		row_status = result.get("status")
-		if row_status == "Success":
-			applied += 1
-		elif row_status == "Ignored":
-			ignored += 1
-		else:
-			failed += 1
-
-	total = len(rows)
-	if total == 0 or failed == 0:
-		final_status = "Success"
-	elif applied > 0 or ignored > 0:
-		final_status = "Partial"
-	else:
-		final_status = "Failed"
-
-	summary = f"Processed {total} rows: applied={applied}, ignored={ignored}, failed={failed}."
-	_update_recon_log(
-		log_name,
-		status=final_status,
-		message=summary,
-		total_rows=total,
-		applied=applied,
-		ignored=ignored,
-		failed=failed,
-		duration=time.time() - t_start,
-	)
-
-	return {
-		"ok": True, "status": final_status,
-		"message": summary,
-		"rows": total, "applied": applied, "ignored": ignored, "failed": failed,
-		"start_date": start, "end_date": end,
-	}
+		return {"ok": False, "status": "Failed", "message": err_msg}
 
 
 def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
@@ -969,6 +1106,60 @@ def _update_recon_log(
 		frappe.logger("landms").error("Failed to update TCB Reconciliation Log", exc_info=True)
 
 
+def _is_reconciliation_stop_requested(log_name: str | None) -> bool:
+	if not log_name or not frappe.db.exists("TCB Reconciliation Log", log_name):
+		return False
+	return bool(frappe.db.get_value("TCB Reconciliation Log", log_name, "stop_requested"))
+
+
+def _stop_reconciliation_if_requested(
+	*,
+	log_name: str | None,
+	settings: dict[str, Any],
+	started_at: float,
+	total_rows: int,
+	applied: int,
+	ignored: int,
+	failed: int,
+) -> dict[str, Any] | None:
+	if not _is_reconciliation_stop_requested(log_name):
+		return None
+
+	message = (
+		f"Stopped after processing {total_rows} rows: "
+		f"applied={applied}, ignored={ignored}, failed={failed}."
+	)
+	_update_recon_log(
+		log_name,
+		status="Stopped",
+		message=message,
+		total_rows=total_rows,
+		applied=applied,
+		ignored=ignored,
+		failed=failed,
+		duration=time.time() - started_at,
+	)
+	create_tcb_api_log(
+		direction="Outbound",
+		event_type="Reconciliation",
+		status="Stopped",
+		processing_mode="Stopped",
+		endpoint=_masked_reconciliation_endpoint(settings),
+		reconciliation_log=log_name,
+		request_payload={"action": "stop"},
+		response_payload={"message": message},
+	)
+	return {
+		"ok": True,
+		"status": "Stopped",
+		"message": message,
+		"rows": total_rows,
+		"applied": applied,
+		"ignored": ignored,
+		"failed": failed,
+	}
+
+
 # ---------------------------------------------------------------------- #
 #  Logging                                                                 #
 # ---------------------------------------------------------------------- #
@@ -989,6 +1180,7 @@ def create_tcb_api_log(
 	sales_order: str | None = None,
 	plot_contract: str | None = None,
 	payment_entry: str | None = None,
+	reconciliation_log: str | None = None,
 	request_payload: Any = None,
 	response_payload: Any = None,
 	error: str | None = None,
@@ -1002,6 +1194,8 @@ def create_tcb_api_log(
 			plot_contract = ""
 		if payment_entry and not frappe.db.exists("Payment Entry", payment_entry):
 			payment_entry = ""
+		if reconciliation_log and not frappe.db.exists("TCB Reconciliation Log", reconciliation_log):
+			reconciliation_log = ""
 		doc = frappe.get_doc({
 			"doctype":            "TCB API Log",
 			"naming_series":      "TCB-LOG-.YYYY.-.######",
@@ -1021,6 +1215,7 @@ def create_tcb_api_log(
 			"sales_order":        sales_order or "",
 			"plot_contract":      plot_contract or "",
 			"payment_entry":      payment_entry or "",
+			"reconciliation_log": reconciliation_log or "",
 			"request_payload":    _to_pretty_json_text(request_payload),
 			"response_payload":   _to_pretty_json_text(response_payload),
 			"error":              error or "",
@@ -1037,7 +1232,11 @@ def create_tcb_api_log(
 
 
 def has_duplicate_ipn(transaction_id: str, reference: str) -> bool:
-	"""Idempotency guard for IPN callbacks."""
+	"""Idempotency guard for IPN callbacks.
+
+	A prior Failed callback should remain retryable after we fix the underlying
+	problem, so only non-failed inbound logs count as duplicates.
+	"""
 	if not transaction_id or not reference:
 		return False
 	try:
@@ -1049,6 +1248,7 @@ def has_duplicate_ipn(transaction_id: str, reference: str) -> bool:
 					"event_type": "IPN Callback",
 					"transaction_id": transaction_id,
 					"external_reference": reference,
+					"status": ("!=", "Failed"),
 				},
 			)
 		)
