@@ -99,6 +99,37 @@ class TCBControlNumber(Document):
 		)
 		return result
 
+	# ------------------------------------------------------------------ #
+	#  Manual retry registration (UI button)                               #
+	# ------------------------------------------------------------------ #
+
+	@frappe.whitelist()
+	def retry_registration(self):
+		"""Retry TCB reference registration for control numbers stuck at
+		Generated or Failed.
+
+		Called from the form button. Calls the same
+		register_reference_for_sales_order used during SO submission.
+		"""
+		RETRYABLE = ("Generated", "Failed")
+		if self.status not in RETRYABLE:
+			frappe.throw(
+				f"Control number {self.name} has status {self.status} and cannot be retried. "
+				f"Only Generated or Failed control numbers can be retried."
+			)
+
+		if not self.sales_order:
+			frappe.throw(
+				f"Control number {self.name} has no linked Sales Order. Cannot retry registration."
+			)
+
+		from landms.tcb import register_reference_for_sales_order
+		result = register_reference_for_sales_order(
+			self.sales_order,
+			self.name,
+		)
+		return result
+
 	def append_log(self, log_name, event_type, event_status, note=None):
 		"""Append a log row to the trail without changing status."""
 		self.append("tcb_api_logs", {
