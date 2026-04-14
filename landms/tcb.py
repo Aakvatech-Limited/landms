@@ -183,6 +183,7 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"auto_apply_reconciliation_payments": 0,
 			"reconciliation_enabled": 0,
 			"reconciliation_lookback_days": 1,
+			"reconciliation_partner_code": "",
 			"decline_reference_on_so_cancel": 1,
 			"decline_failure_policy": "Allow Cancel and Flag",
 			"reference_create_url": "",
@@ -204,6 +205,7 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"auto_apply_reconciliation_payments": settings_doc.auto_apply_reconciliation_payments,
 		"reconciliation_enabled": settings_doc.reconciliation_enabled,
 		"reconciliation_lookback_days": settings_doc.reconciliation_lookback_days or 1,
+		"reconciliation_partner_code": (settings_doc.reconciliation_partner_code or "").strip(),
 		"decline_reference_on_so_cancel": settings_doc.decline_reference_on_so_cancel,
 		"decline_failure_policy": settings_doc.decline_failure_policy or "Allow Cancel and Flag",
 		"reference_create_url": (settings_doc.reference_create_url or "").strip(),
@@ -1149,7 +1151,7 @@ def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
 	payload = {
-		"partnerCode": settings.get("partner_code") or "",
+		"partnerCode": settings.get("reconciliation_partner_code") or settings.get("partner_code") or "",
 		"startDate":   start_date,
 		"endDate":     end_date,
 	}
