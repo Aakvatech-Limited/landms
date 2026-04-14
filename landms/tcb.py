@@ -908,10 +908,17 @@ def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
 	"""Insert a new TCB Reconciliation Log doc in Running state. Best-effort."""
 	try:
 		doc = frappe.get_doc({
-			"doctype":         "TCB Reconciliation Log",
-			"status":          "Running",
-			"triggered_by":    triggered_by,
-			"started_at":      now(),
+			"doctype":          "TCB Reconciliation Log",
+			"naming_series":    "TCB-RECON-.YYYY.-.######",
+			"status":           "Running",
+			"triggered_by":     triggered_by,
+			"started_at":       now(),
+			"completed_at":     None,
+			"duration_seconds": 0,
+			"total_rows":       0,
+			"applied":          0,
+			"ignored":          0,
+			"failed":           0,
 			"date_range_start": start,
 			"date_range_end":   end,
 		})
