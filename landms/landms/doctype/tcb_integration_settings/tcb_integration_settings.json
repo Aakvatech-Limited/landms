@@ -110,6 +110,13 @@
    "depends_on": "eval:doc.reconciliation_enabled"
   },
   {
+   "fieldname": "reconciliation_partner_code",
+   "fieldtype": "Data",
+   "label": "Reconciliation Partner Code",
+   "depends_on": "eval:doc.reconciliation_enabled",
+   "description": "Partner code sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the account number here instead of the partner code."
+  },
+  {
    "fieldname": "reconciliation_col_break",
    "fieldtype": "Column Break"
   },
@@ -189,7 +196,7 @@
    "fieldtype": "Data",
    "label": "Reconciliation URL",
    "length": 500,
-   "description": "Full URL for the reconciliation pull. E.g. https://partners.tcbbank.co.tz:8444/public/api/reconciliation/XXXX. Request is form-urlencoded (POST)."
+   "description": "Full URL for the reconciliation pull. E.g. https://partners.tcbbank.co.tz/public/api/reconciliation/XXXX. Request is form-urlencoded (POST)."
   },
   {
    "fieldname": "callback_section",
