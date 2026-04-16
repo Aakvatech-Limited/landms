@@ -516,8 +516,13 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 			"payment_amount": flt(row.payment_amount),
 		})
 
-	invoice.insert(ignore_permissions=True)
-	invoice.submit()
+	original_user = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+		invoice.insert(ignore_permissions=True)
+		invoice.submit()
+	finally:
+		frappe.set_user(original_user)
 
 	_link_plot_invoice_to_sales_order(doc, invoice.name)
 	_link_plot_invoice_to_contract(contract_name, invoice.name)
