@@ -17,8 +17,9 @@ frappe.ui.form.on('TCB Reconciliation Log', {
 		_render_status_indicator(frm);
 
 		const status = frm.doc.status;
+		clearTimeout(frm.__recon_poll);
 
-		if (!frm.is_new() && (status === 'Draft' || status === 'Failed')) {
+		if (!frm.is_new() && (status === 'Draft' || status === 'Failed' || status === 'Stopped')) {
 			frm.add_custom_button(__('Run Reconciliation'), () => {
 				frappe.confirm(
 					__('Run TCB reconciliation for {0} to {1}?',
@@ -28,7 +29,7 @@ frappe.ui.form.on('TCB Reconciliation Log', {
 							method: 'run',
 							args: { name: frm.docname },
 							freeze: true,
-							freeze_message: __('Calling TCB reconciliation endpoint…'),
+							freeze_message: __('Queueing TCB reconciliation…'),
 							callback(r) {
 								frm.reload_doc();
 							},
@@ -36,6 +37,33 @@ frappe.ui.form.on('TCB Reconciliation Log', {
 					}
 				);
 			}).addClass('btn-primary');
+		}
+
+		if (!frm.is_new() && status === 'Running' && !frm.doc.stop_requested) {
+			frm.add_custom_button(__('Stop Reconciliation'), () => {
+				frappe.confirm(
+					__('Request stop for this reconciliation run? It will stop after the current step finishes.'),
+					() => {
+						frm.call({
+							method: 'request_stop',
+							args: { name: frm.docname },
+							freeze: true,
+							freeze_message: __('Requesting stop…'),
+							callback() {
+								frm.reload_doc();
+							},
+						});
+					}
+				);
+			}).addClass('btn-warning');
+		}
+
+		if (!frm.is_new() && status === 'Running') {
+			frm.__recon_poll = setTimeout(() => {
+				if (!frm.is_dirty()) {
+					frm.reload_doc();
+				}
+			}, 5000);
 		}
 
 		// Lock fields once we're past Draft.
@@ -54,6 +82,7 @@ function _render_status_indicator(frm) {
 		Success: 'green',
 		Partial: 'yellow',
 		Failed:  'red',
+		Stopped: 'orange',
 	};
 	frm.page.set_indicator(
 		__(frm.doc.status),

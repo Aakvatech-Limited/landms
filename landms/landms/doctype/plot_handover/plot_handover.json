@@ -2,7 +2,7 @@
  "doctype": "DocType",
  "name": "Plot Handover",
  "module": "LandMS",
- "autoname": "format:PHO-.{YY}.{MM}.-.####",
+ "autoname": "format:PHO-.{YY}.{MM}.-.{####}",
  "is_submittable": 1,
  "track_changes": 1,
  "fields": [

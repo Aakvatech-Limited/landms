@@ -15,6 +15,7 @@ class PlotApplication(Document):
 	# ------------------------------------------------------------------ #
 
 	def validate(self):
+		self.reset_amended_application()
 		self.validate_plot_available()
 		self.fill_plot_details()
 		self.fill_fee_from_settings()
@@ -65,6 +66,26 @@ class PlotApplication(Document):
 	# ------------------------------------------------------------------ #
 	#  Validation helpers                                                  #
 	# ------------------------------------------------------------------ #
+
+	def reset_amended_application(self):
+		"""Turn an amended application back into a true fresh draft.
+
+		Frappe's amend flow copies most fields from the cancelled source doc,
+		including old payment links and terminal statuses. For Plot Application
+		we want the amended record to behave like a brand-new application for
+		the same plot/customer.
+		"""
+		if not self.amended_from or self.docstatus != 0:
+			return
+
+		self.status = "Draft"
+		self.application_date = today()
+		self.payment_date = None
+		self.reference_no = ""
+		self.expiry_date = None
+		self.sales_invoice = ""
+		self.payment_entry = ""
+		self.sales_order = ""
 
 	def validate_plot_available(self):
 		"""Draft-time checks: plot must be Available and have no active rival application."""
@@ -161,8 +182,13 @@ class PlotApplication(Document):
 
 		so = frappe.get_doc("Sales Order", self.sales_order)
 		if so.docstatus == 0:
+			# Break the self-referential link first so Frappe does not block
+			# draft SO deletion while this Plot Application is being cancelled.
+			frappe.db.set_value(
+				"Plot Application", self.name, "sales_order", "", update_modified=False
+			)
+			self.sales_order = ""
 			frappe.delete_doc("Sales Order", so.name, ignore_permissions=True)
-			self.db_set("sales_order", "")
 			return
 
 		# Phase 5 will surface a `plot_sales_invoice` link on SO; until then

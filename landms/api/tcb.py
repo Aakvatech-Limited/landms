@@ -47,6 +47,7 @@ from landms.tcb import (
 
 
 IPN_ENDPOINT = "/api/method/landms.api.tcb.ipn_callback"
+RUN_RECONCILIATION_ENDPOINT = "/api/method/landms.api.tcb.run_reconciliation"
 
 
 # ---------------------------------------------------------------------- #
@@ -62,25 +63,12 @@ def ipn_callback() -> dict[str, Any]:
 	want to look like an outage. The full raw payload is persisted to
 	`TCB Payment Notification` for audit and manual replay.
 	"""
-	raw_payload, envelope = _read_request_payload()
-	# Unwrap the envelope: the real TCB body wraps payment details inside `param`.
-	body = _extract_ipn_body(envelope)
-
-	mode = get_tcb_inbound_mode()
-	reference = cstr(body.get("reference") or "").strip()
-	amount = flt(body.get("amount"))
-	transaction_id = cstr(body.get("transaction_id") or "").strip()
-	payment_date = body.get("transaction_date") or body.get("trans_date") or body.get("payment_date")
-	payment_ref = transaction_id or reference
-
-	# 2. Persist the notification record FIRST — even if we'll ignore it.
-	#    This is the canonical audit trail of what TCB sent us.
-	notification_name = _upsert_payment_notification(
-		envelope=envelope,
-		body=body,
-		raw_payload=raw_payload,
-		initial_status="Received",
-	)
+	raw_payload = {}
+	envelope = {}
+	body = {}
+	reference = ""
+	transaction_id = ""
+	notification_name = ""
 
 	def _finalize(notification_status: str, *, message: str = "",
 	              error: str = "", sales_order: str = "",
@@ -102,123 +90,169 @@ def ipn_callback() -> dict[str, Any]:
 				exc_info=True,
 			)
 
-	# 3. Off mode — log and decline.
-	if mode == "Off":
-		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback", status="Ignored",
-			processing_mode="Off", endpoint=IPN_ENDPOINT,
-			external_reference=reference, transaction_id=transaction_id,
-			request_payload=raw_payload,
-			response_payload={"message": "Inbound mode Off."},
-		)
-		_finalize("Ignored", message="Inbound mode is Off.", log_name=log_name or "")
-		return {"ok": True, "status": "Ignored", "message": "Inbound mode is Off."}
+	try:
+		raw_payload, envelope = _read_request_payload()
+		# Unwrap the envelope: the real TCB body wraps payment details inside `param`.
+		body = _extract_ipn_body(envelope)
 
-	# 4. Idempotency — duplicate IPN with same transaction_id + reference.
-	if transaction_id and has_duplicate_ipn(transaction_id, reference):
-		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback", status="Ignored",
-			processing_mode=mode, endpoint=IPN_ENDPOINT, is_duplicate=1,
-			external_reference=reference, transaction_id=transaction_id,
-			request_payload=raw_payload,
-			response_payload={"message": "Duplicate IPN — already processed."},
-		)
-		_finalize("Duplicate", message="Duplicate IPN — already processed.", log_name=log_name or "")
-		return {"ok": True, "status": "Ignored", "message": "Duplicate IPN."}
+		mode = get_tcb_inbound_mode()
+		reference = cstr(body.get("reference") or "").strip()
+		amount = flt(body.get("amount"))
+		transaction_id = cstr(body.get("transaction_id") or "").strip()
+		payment_date = body.get("transaction_date") or body.get("trans_date") or body.get("payment_date")
+		payment_ref = transaction_id or reference
 
-	# 5. Log Only — log and exit.
-	if mode == "Log Only":
-		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback", status="Success",
-			processing_mode="Log Only", endpoint=IPN_ENDPOINT,
-			external_reference=reference, transaction_id=transaction_id,
-			request_payload=raw_payload,
-			response_payload={"message": "Log Only — payment not applied."},
+		# 2. Persist the notification record FIRST — even if we'll ignore it.
+		#    This is the canonical audit trail of what TCB sent us.
+		notification_name = _upsert_payment_notification(
+			envelope=envelope,
+			body=body,
+			raw_payload=raw_payload,
+			initial_status="Received",
 		)
-		_finalize("Ignored", message="Log Only mode — payment not applied.", log_name=log_name or "")
-		return {"ok": True, "status": "Logged", "message": "IPN logged (Log Only mode)."}
 
-	# 6. Apply Payment — only if auto-apply is on.
-	if not is_callback_auto_apply_enabled():
+		# 3. Off mode — log and decline.
+		if mode == "Off":
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Ignored",
+				processing_mode="Off", endpoint=IPN_ENDPOINT,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Inbound mode Off."},
+			)
+			_finalize("Ignored", message="Inbound mode is Off.", log_name=log_name or "")
+			return {"ok": True, "status": "Ignored", "message": "Inbound mode is Off."}
+
+		# 4. Idempotency — duplicate IPN with same transaction_id + reference.
+		if transaction_id and has_duplicate_ipn(transaction_id, reference):
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Ignored",
+				processing_mode=mode, endpoint=IPN_ENDPOINT, is_duplicate=1,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Duplicate IPN — already processed."},
+			)
+			_finalize("Duplicate", message="Duplicate IPN — already processed.", log_name=log_name or "")
+			return {"ok": True, "status": "Ignored", "message": "Duplicate IPN."}
+
+		# 5. Log Only — log and exit.
+		if mode == "Log Only":
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Success",
+				processing_mode="Log Only", endpoint=IPN_ENDPOINT,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Log Only — payment not applied."},
+			)
+			_finalize("Ignored", message="Log Only mode — payment not applied.", log_name=log_name or "")
+			return {"ok": True, "status": "Logged", "message": "IPN logged (Log Only mode)."}
+
+		# 6. Apply Payment — only if auto-apply is on.
+		if not is_callback_auto_apply_enabled():
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Ignored",
+				processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Auto-apply switch is OFF — payment not created."},
+			)
+			_finalize("Ignored", message="Auto-apply is off — payment not created.", log_name=log_name or "")
+			return {"ok": True, "status": "Logged", "message": "IPN logged; auto-apply is off."}
+
+		# 7. Validate minimum payload before going to the matcher.
+		if not reference or amount <= 0:
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Failed",
+				processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Missing reference or non-positive amount."},
+			)
+			_finalize("Failed", message="Missing reference or non-positive amount.",
+			          error="Validation failure.", log_name=log_name or "")
+			return {"ok": False, "status": "Failed", "message": "Missing reference or non-positive amount."}
+
+		# 8. IP allowlist check — if configured and the client IP is not in the
+		#    list, still apply the payment BUT leave the PE in Draft so a human
+		#    can review and submit manually. The control number itself is still
+		#    validated downstream (registry + SO match).
+		allowed_ips = _get_allowed_tcb_ips()
+		client_ip = _get_client_ip()
+		hold_for_review = bool(allowed_ips) and client_ip not in allowed_ips
+		ip_message = (
+			f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
+			"PE will be created as Draft for manual review."
+		) if hold_for_review else ""
+
+		result = apply_tcb_payment_to_sales_order(
+			control_number=reference,
+			amount=amount,
+			payment_date=payment_date,
+			payment_reference=payment_ref,
+			hold_for_review=hold_for_review,
+		)
+		if hold_for_review and result.get("ok"):
+			result["message"] = (result.get("message") or "") + " " + ip_message
+
 		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback", status="Ignored",
+			direction="Inbound", event_type="IPN Callback",
+			status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
 			processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
 			external_reference=reference, transaction_id=transaction_id,
+			sales_order=result.get("sales_order"),
+			payment_entry=result.get("payment_entry"),
 			request_payload=raw_payload,
-			response_payload={"message": "Auto-apply switch is OFF — payment not created."},
+			response_payload={"message": result.get("message")},
+			error=result.get("error"),
 		)
-		_finalize("Ignored", message="Auto-apply is off — payment not created.", log_name=log_name or "")
-		return {"ok": True, "status": "Logged", "message": "IPN logged; auto-apply is off."}
 
-	# 7. Validate minimum payload before going to the matcher.
-	if not reference or amount <= 0:
+		final_status = {
+			"Success": "Processed",
+			"Ignored": "Duplicate",
+			"Failed":  "Failed",
+		}.get(result.get("status") or "", "Failed")
+
+		_finalize(
+			final_status,
+			message=result.get("message") or "",
+			error=result.get("error") or "",
+			sales_order=result.get("sales_order") or "",
+			payment_entry=result.get("payment_entry") or "",
+			log_name=log_name or "",
+		)
+
+		return {
+			"ok": result.get("ok", False),
+			"status": result.get("status"),
+			"message": result.get("message"),
+			"sales_order": result.get("sales_order"),
+			"payment_entry": result.get("payment_entry"),
+		}
+	except Exception:
+		err = frappe.get_traceback()
 		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback", status="Failed",
-			processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
-			external_reference=reference, transaction_id=transaction_id,
-			request_payload=raw_payload,
-			response_payload={"message": "Missing reference or non-positive amount."},
+			direction="Inbound",
+			event_type="IPN Callback",
+			status="Failed",
+			processing_mode="Endpoint Exception",
+			endpoint=IPN_ENDPOINT,
+			external_reference=reference,
+			transaction_id=transaction_id,
+			request_payload=raw_payload or envelope or body,
+			response_payload={"message": "Unhandled exception in IPN callback."},
+			error=err,
 		)
-		_finalize("Failed", message="Missing reference or non-positive amount.",
-		          error="Validation failure.", log_name=log_name or "")
-		return {"ok": False, "status": "Failed", "message": "Missing reference or non-positive amount."}
-
-	# 8. IP allowlist check — if configured and the client IP is not in the
-	#    list, still apply the payment BUT leave the PE in Draft so a human
-	#    can review and submit manually. The control number itself is still
-	#    validated downstream (registry + SO match).
-	allowed_ips = _get_allowed_tcb_ips()
-	client_ip = _get_client_ip()
-	hold_for_review = bool(allowed_ips) and client_ip not in allowed_ips
-	ip_message = (
-		f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
-		"PE will be created as Draft for manual review."
-	) if hold_for_review else ""
-
-	result = apply_tcb_payment_to_sales_order(
-		control_number=reference,
-		amount=amount,
-		payment_date=payment_date,
-		payment_reference=payment_ref,
-		hold_for_review=hold_for_review,
-	)
-	if hold_for_review and result.get("ok"):
-		result["message"] = (result.get("message") or "") + " " + ip_message
-
-	log_name = create_tcb_api_log(
-		direction="Inbound", event_type="IPN Callback",
-		status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
-		processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
-		external_reference=reference, transaction_id=transaction_id,
-		sales_order=result.get("sales_order"),
-		payment_entry=result.get("payment_entry"),
-		request_payload=raw_payload,
-		response_payload={"message": result.get("message")},
-		error=result.get("error"),
-	)
-
-	final_status = {
-		"Success": "Processed",
-		"Ignored": "Duplicate",
-		"Failed":  "Failed",
-	}.get(result.get("status") or "", "Failed")
-
-	_finalize(
-		final_status,
-		message=result.get("message") or "",
-		error=result.get("error") or "",
-		sales_order=result.get("sales_order") or "",
-		payment_entry=result.get("payment_entry") or "",
-		log_name=log_name or "",
-	)
-
-	return {
-		"ok": result.get("ok", False),
-		"status": result.get("status"),
-		"message": result.get("message"),
-		"sales_order": result.get("sales_order"),
-		"payment_entry": result.get("payment_entry"),
-	}
+		_finalize(
+			"Failed",
+			message="Unhandled exception in IPN callback.",
+			error=err,
+			log_name=log_name or "",
+		)
+		return {
+			"ok": False,
+			"status": "Failed",
+			"message": "Unhandled exception while processing IPN. Check TCB API Log.",
+		}
 
 
 # ---------------------------------------------------------------------- #
@@ -233,9 +267,53 @@ def run_reconciliation(start_date: str | None = None, end_date: str | None = Non
 	Permission: System Manager only — checked explicitly because @whitelist
 	without `allow_guest` allows any logged-in user otherwise.
 	"""
+	request_payload = {
+		"start_date": start_date,
+		"end_date": end_date,
+		"user": frappe.session.user,
+	}
 	if "System Manager" not in frappe.get_roles():
-		frappe.throw("Only System Manager can trigger TCB reconciliation manually.")
-	return run_tcb_reconciliation_job(start_date=start_date, end_date=end_date, triggered_by="Manual")
+		message = "Only System Manager can trigger TCB reconciliation manually."
+		create_tcb_api_log(
+			direction="Inbound",
+			event_type="Reconciliation",
+			status="Failed",
+			processing_mode="Endpoint",
+			endpoint=RUN_RECONCILIATION_ENDPOINT,
+			request_payload=request_payload,
+			response_payload={"message": message},
+			error=message,
+		)
+		frappe.throw(message)
+	try:
+		result = run_tcb_reconciliation_job(
+			start_date=start_date,
+			end_date=end_date,
+			triggered_by="Manual",
+		)
+	except Exception:
+		create_tcb_api_log(
+			direction="Inbound",
+			event_type="Reconciliation",
+			status="Failed",
+			processing_mode="Endpoint",
+			endpoint=RUN_RECONCILIATION_ENDPOINT,
+			request_payload=request_payload,
+			response_payload={"message": "Manual reconciliation trigger failed."},
+			error=frappe.get_traceback(),
+		)
+		raise
+	create_tcb_api_log(
+		direction="Inbound",
+		event_type="Reconciliation",
+		status=result.get("status") if result.get("status") in ("Success", "Failed", "Ignored", "Stopped") else ("Success" if result.get("ok") else "Failed"),
+		processing_mode="Endpoint",
+		endpoint=RUN_RECONCILIATION_ENDPOINT,
+		request_payload=request_payload,
+		response_payload=result,
+		error=result.get("message") if not result.get("ok") else "",
+	)
+	return result
 
 
 # ---------------------------------------------------------------------- #

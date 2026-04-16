@@ -44,7 +44,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Success\nFailed\nIgnored",
+   "options": "Success\nFailed\nIgnored\nStopped",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
@@ -144,6 +144,12 @@
    "fieldtype": "Link",
    "label": "Payment Entry",
    "options": "Payment Entry"
+  },
+  {
+   "fieldname": "reconciliation_log",
+   "fieldtype": "Link",
+   "label": "Reconciliation Log",
+   "options": "TCB Reconciliation Log"
   },
   {
    "fieldname": "payload_section",

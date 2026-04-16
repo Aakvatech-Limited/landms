@@ -626,8 +626,8 @@ class PlotContract(Document):
 
 	@frappe.whitelist()
 	def terminate_contract(self, reason):
-		if self.contract_status != "Ongoing":
-			frappe.throw("Only Ongoing contracts can be terminated.")
+		if self.contract_status not in ("Ongoing", "Overdue"):
+			frappe.throw("Only Ongoing or Overdue contracts can be terminated.")
 		if self.docstatus != 1:
 			frappe.throw("Document must be submitted before it can be terminated.")
 		if not reason or not str(reason).strip():
