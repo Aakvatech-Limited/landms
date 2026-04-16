@@ -167,9 +167,14 @@ def create_payment_entry_for_sales_order(
 			"allocated_amount": allocated,
 		}],
 	})
-	pe.insert(ignore_permissions=True)
-	if submit:
-		pe.submit()
+	original_user = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+		pe.insert(ignore_permissions=True)
+		if submit:
+			pe.submit()
+	finally:
+		frappe.set_user(original_user)
 	return pe.name
 
 
