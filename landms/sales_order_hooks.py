@@ -481,7 +481,7 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 			"plot": doc.plot,
 			"is_plot_sale_invoice": 1,
 			"is_return": 0,
-			"docstatus": ("!=", 2),
+			"docstatus": 1,
 		},
 		"name",
 	)
