@@ -46,6 +46,7 @@ from frappe.utils import (
 
 DEFAULT_PATTERN = "99911####00##"
 GENERATION_RETRIES = 20
+TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
 
 
 # ---------------------------------------------------------------------- #
@@ -90,6 +91,14 @@ def is_valid_control_number(value: str, pattern: str | None = None) -> bool:
 	if not pattern:
 		return False
 	return bool(_pattern_to_regex(pattern).match(value))
+
+
+def is_valid_tcb_mobile(value: str | None) -> bool:
+	"""Return True when the mobile number is in TCB's 255XXXXXXXXX format."""
+	value = cstr(value).strip()
+	if not value:
+		return False
+	return bool(TCB_MOBILE_PATTERN.fullmatch(value))
 
 
 # ---------------------------------------------------------------------- #
@@ -1346,7 +1355,13 @@ def _mask_url_secret(url: str) -> str:
 	return url
 
 
-def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end_date: str) -> dict[str, Any]:
+def _fetch_reconciliation_rows(
+	*,
+	settings: dict[str, Any],
+	start_date: str,
+	end_date: str,
+	reconciliation_log: str | None = None,
+) -> dict[str, Any]:
 	_validate_live_reference_settings(settings, need="reconciliation")
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
@@ -1404,6 +1419,7 @@ def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end
 			status="Success" if ok else "Failed",
 			processing_mode="Live",
 			endpoint=endpoint,
+			reconciliation_log=reconciliation_log,
 			http_status_code=http_status,
 			tcb_status_code=tcb_status,
 			tcb_message=tcb_message,
@@ -1429,6 +1445,7 @@ def _fetch_reconciliation_rows(*, settings: dict[str, Any], start_date: str, end
 			status="Failed",
 			processing_mode="Live",
 			endpoint=endpoint,
+			reconciliation_log=reconciliation_log,
 			http_status_code=http_status,
 			tcb_status_code=tcb_status,
 			tcb_message=tcb_message,

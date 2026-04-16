@@ -3,6 +3,30 @@ from frappe.model.document import Document
 from frappe.utils import now
 
 
+RUN_ENDPOINT = "/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.run"
+REQUEST_STOP_ENDPOINT = "/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.request_stop"
+
+
+def _log_reconciliation_endpoint_failure(*, endpoint: str, action: str, name: str, error: str) -> None:
+	from landms.tcb import create_tcb_api_log
+
+	create_tcb_api_log(
+		direction="Inbound",
+		event_type="Reconciliation",
+		status="Failed",
+		processing_mode="Endpoint",
+		endpoint=endpoint,
+		reconciliation_log=name,
+		request_payload={
+			"action": action,
+			"name": name,
+			"user": frappe.session.user,
+		},
+		response_payload={"message": f"Reconciliation {action} request failed."},
+		error=error,
+	)
+
+
 @frappe.whitelist()
 def run(name):
 	"""Module-level entry point called by frm.call({method: 'run'}).
@@ -10,15 +34,33 @@ def run(name):
 	The JS passes name explicitly in args to avoid relying on Frappe
 	automatically injecting doctype/name into the POST body.
 	"""
-	doc = frappe.get_doc("TCB Reconciliation Log", name)
-	return doc._execute_run()
+	try:
+		doc = frappe.get_doc("TCB Reconciliation Log", name)
+		return doc._execute_run()
+	except Exception:
+		_log_reconciliation_endpoint_failure(
+			endpoint=RUN_ENDPOINT,
+			action="run",
+			name=name,
+			error=frappe.get_traceback(),
+		)
+		raise
 
 
 @frappe.whitelist()
 def request_stop(name):
 	"""Ask a running reconciliation job to stop after its current unit of work."""
-	doc = frappe.get_doc("TCB Reconciliation Log", name)
-	return doc._request_stop()
+	try:
+		doc = frappe.get_doc("TCB Reconciliation Log", name)
+		return doc._request_stop()
+	except Exception:
+		_log_reconciliation_endpoint_failure(
+			endpoint=REQUEST_STOP_ENDPOINT,
+			action="request_stop",
+			name=name,
+			error=frappe.get_traceback(),
+		)
+		raise
 
 
 def run_in_background(name):
@@ -84,7 +126,7 @@ class TCBReconciliationLog(Document):
 			event_type="Reconciliation",
 			status="Success",
 			processing_mode="Queued",
-			endpoint="/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.run",
+			endpoint=RUN_ENDPOINT,
 			reconciliation_log=self.name,
 			request_payload={
 				"action": "run",
@@ -124,7 +166,7 @@ class TCBReconciliationLog(Document):
 			event_type="Reconciliation",
 			status="Success",
 			processing_mode="Stop Requested",
-			endpoint="/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.request_stop",
+			endpoint=REQUEST_STOP_ENDPOINT,
 			reconciliation_log=self.name,
 			request_payload={
 				"action": "request_stop",

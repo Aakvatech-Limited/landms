@@ -1,6 +1,16 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import now
+from frappe.utils import cint, now
+
+
+RETRY_REGISTRATION_ENDPOINT = (
+	"landms.landms.doctype.tcb_control_number.tcb_control_number."
+	"TCBControlNumber.retry_registration"
+)
+DECLINE_CONTROL_NUMBER_ENDPOINT = (
+	"landms.landms.doctype.tcb_control_number.tcb_control_number."
+	"TCBControlNumber.decline_control_number"
+)
 
 
 # Allowed status transitions. Anything not in this map is rejected.
@@ -14,6 +24,34 @@ ALLOWED_TRANSITIONS = {
 	"Expired":    set(),  # terminal
 	"Failed":     {"Generated", "Registered"},  # allow recovery on retry
 }
+
+
+def _endpoint_result_status(result):
+	status = (result or {}).get("status")
+	if status in {"Success", "Failed", "Ignored", "Stopped"}:
+		return status
+	if cint((result or {}).get("ok")):
+		mode = (result or {}).get("mode")
+		return "Ignored" if mode in {"Off", "Log Only"} else "Success"
+	return "Failed"
+
+
+def _log_manual_action(*, event_type, endpoint, control_number, sales_order, request_payload, result=None, error=None):
+	from landms.tcb import create_tcb_api_log
+
+	response_payload = result if isinstance(result, dict) else {"message": result or ""}
+	return create_tcb_api_log(
+		direction="Inbound",
+		event_type=event_type,
+		status="Failed" if error else _endpoint_result_status(result),
+		processing_mode="Form Action",
+		endpoint=endpoint,
+		external_reference=control_number,
+		sales_order=sales_order,
+		request_payload=request_payload,
+		response_payload=response_payload,
+		error=error or (result or {}).get("error"),
+	)
 
 
 class TCBControlNumber(Document):
@@ -86,16 +124,49 @@ class TCBControlNumber(Document):
 		Called from the form button. Works for Generated, Registered and Failed
 		statuses. Terminal statuses (Paid, Declined, Expired) are rejected.
 		"""
+		request_payload = {
+			"action": "decline_control_number",
+			"control_number": self.name,
+			"sales_order": self.sales_order,
+			"status": self.status,
+			"user": frappe.session.user,
+		}
 		TERMINAL = ("Paid", "Declined", "Expired")
 		if self.status in TERMINAL:
-			frappe.throw(
-				f"Control number {self.name} has status {self.status} and cannot be declined."
+			message = f"Control number {self.name} has status {self.status} and cannot be declined."
+			_log_manual_action(
+				event_type="Reference Decline",
+				endpoint=DECLINE_CONTROL_NUMBER_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=message,
 			)
+			frappe.throw(message)
 
 		from landms.tcb import decline_reference_for_sales_order
-		result = decline_reference_for_sales_order(
-			self.sales_order or "",
-			self.name,
+		try:
+			result = decline_reference_for_sales_order(
+				self.sales_order or "",
+				self.name,
+			)
+		except Exception:
+			_log_manual_action(
+				event_type="Reference Decline",
+				endpoint=DECLINE_CONTROL_NUMBER_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=frappe.get_traceback(),
+			)
+			raise
+		_log_manual_action(
+			event_type="Reference Decline",
+			endpoint=DECLINE_CONTROL_NUMBER_ENDPOINT,
+			control_number=self.name,
+			sales_order=self.sales_order,
+			request_payload=request_payload,
+			result=result,
 		)
 		return result
 
@@ -111,22 +182,66 @@ class TCBControlNumber(Document):
 		Called from the form button. Calls the same
 		register_reference_for_sales_order used during SO submission.
 		"""
+		request_payload = {
+			"action": "retry_registration",
+			"control_number": self.name,
+			"sales_order": self.sales_order,
+			"status": self.status,
+			"user": frappe.session.user,
+		}
 		RETRYABLE = ("Generated", "Failed")
 		if self.status not in RETRYABLE:
-			frappe.throw(
+			message = (
 				f"Control number {self.name} has status {self.status} and cannot be retried. "
 				f"Only Generated or Failed control numbers can be retried."
 			)
+			_log_manual_action(
+				event_type="Reference Create",
+				endpoint=RETRY_REGISTRATION_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=message,
+			)
+			frappe.throw(message)
 
 		if not self.sales_order:
-			frappe.throw(
+			message = (
 				f"Control number {self.name} has no linked Sales Order. Cannot retry registration."
 			)
+			_log_manual_action(
+				event_type="Reference Create",
+				endpoint=RETRY_REGISTRATION_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=message,
+			)
+			frappe.throw(message)
 
 		from landms.tcb import register_reference_for_sales_order
-		result = register_reference_for_sales_order(
-			self.sales_order,
-			self.name,
+		try:
+			result = register_reference_for_sales_order(
+				self.sales_order,
+				self.name,
+			)
+		except Exception:
+			_log_manual_action(
+				event_type="Reference Create",
+				endpoint=RETRY_REGISTRATION_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=frappe.get_traceback(),
+			)
+			raise
+		_log_manual_action(
+			event_type="Reference Create",
+			endpoint=RETRY_REGISTRATION_ENDPOINT,
+			control_number=self.name,
+			sales_order=self.sales_order,
+			request_payload=request_payload,
+			result=result,
 		)
 		return result
 

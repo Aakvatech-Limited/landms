@@ -29,6 +29,7 @@ from landms.tcb import (
 	decline_reference_for_sales_order,
 	generate_control_number,
 	is_valid_control_number,
+	is_valid_tcb_mobile,
 	register_reference_for_sales_order,
 )
 
@@ -106,6 +107,7 @@ def validate_sales_order(doc, method=None):
 		_ensure_single_sales_order_for_application(doc, application)
 
 	_validate_plot_state(plot)
+	_validate_customer_mobile_for_tcb(doc)
 	_ensure_items(doc, plot, settings)
 	_ensure_payment_schedule(doc, plot)
 
@@ -403,6 +405,8 @@ def _draft_contract_matches_sales_order(contract, source_doc) -> bool:
 		return False
 	if cstr(contract.payment_deadline or "") != cstr(source_doc.get("payment_deadline") or ""):
 		return False
+	if cint(contract.apply_auto_cancellation or 0) != cint(source_doc.get("apply_auto_cancellation", 1)):
+		return False
 
 	expected_rows = _build_contract_schedule_rows(source_doc)
 	actual_rows = sorted(
@@ -457,6 +461,7 @@ def _sync_contract_schedule(contract, source_doc):
 	contract.control_number = source_doc.get("control_number") or ""
 	contract.plot_application = source_doc.get("plot_application") or ""
 	contract.payment_deadline = source_doc.get("payment_deadline")
+	contract.apply_auto_cancellation = cint(source_doc.get("apply_auto_cancellation", 1))
 	contract.set("payment_schedule", [])
 
 	for row in _build_contract_schedule_rows(source_doc):
@@ -657,6 +662,21 @@ def _mark_plot_pending_advance(doc):
 	current = frappe.db.get_value("Plot Master", doc.plot, "status")
 	if current == "Available":
 		frappe.db.set_value("Plot Master", doc.plot, "status", "Pending Advance")
+
+
+def _validate_customer_mobile_for_tcb(doc):
+	customer = cstr(doc.get("customer") or "").strip()
+	if not customer:
+		return
+
+	customer_mobile = cstr(frappe.db.get_value("Customer", customer, "mobile_no") or "").strip()
+	if is_valid_tcb_mobile(customer_mobile):
+		return
+
+	frappe.throw(
+		f"Customer {customer} must have a valid phone number in the format "
+		"255XXXXXXXXX before this Sales Order can be created."
+	)
 
 
 def _block_cancel_if_paid(doc):
