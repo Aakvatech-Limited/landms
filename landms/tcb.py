@@ -175,6 +175,21 @@ def generate_control_number(sales_order_name: str | None = None) -> str:
 # ---------------------------------------------------------------------- #
 
 
+def _notify_so_owner(sales_order_name: str, message: str, indicator: str = "green"):
+	"""Send a visible popup notification to the Sales Order owner."""
+	try:
+		user = frappe.db.get_value("Sales Order", sales_order_name, "owner") if sales_order_name else None
+		if not user:
+			return
+		frappe.publish_realtime(
+			"msgprint",
+			{"message": message, "alert": True, "indicator": indicator},
+			user=user,
+		)
+	except Exception:
+		pass
+
+
 def _get_tcb_settings() -> dict[str, Any]:
 	"""Read TCB Integration Settings into a plain dict.
 
@@ -469,6 +484,11 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 				                     note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
 
 		if not ok:
+			_notify_so_owner(
+				sales_order_name,
+				f"TCB reference registration failed for <b>{control_number}</b>: {tcb_message or 'No message'}",
+				"red",
+			)
 			return {
 				"ok": False, "mode": "Live",
 				"message": (
@@ -478,10 +498,10 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			}
 
 		if ok:
-			frappe.publish_realtime(
-				"msgprint",
-				{"message": f"TCB reference <b>{control_number}</b> registered successfully.", "alert": True},
-				user=frappe.db.get_value("Sales Order", sales_order_name, "owner"),
+			_notify_so_owner(
+				sales_order_name,
+				f"TCB reference <b>{control_number}</b> registered successfully.",
+				"green",
 			)
 
 		return {
@@ -513,10 +533,10 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			                     event_type="Reference Create",
 			                     note="Reference Create raised an exception. See log.")
 
-		frappe.publish_realtime(
-			"msgprint",
-			{"message": f"TCB reference registration failed for <b>{control_number}</b>: {exc_short[:120]}", "indicator": "red"},
-			user=frappe.db.get_value("Sales Order", sales_order_name, "owner") if sales_order_name else None,
+		_notify_so_owner(
+			sales_order_name,
+			f"TCB reference registration failed for <b>{control_number}</b>: {exc_short[:120]}",
+			"red",
 		)
 
 		return {
@@ -603,9 +623,19 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 				                    note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
 
 		if ok:
+			frappe.msgprint(
+				f"TCB reference <b>{control_number}</b> declined successfully.",
+				indicator="green",
+				alert=True,
+			)
 			return {"ok": True, "status": "Success", "message": tcb_message or "TCB reference declined."}
 
 		block_cancel = policy == "Block Cancel"
+		frappe.msgprint(
+			f"TCB decline failed for <b>{control_number}</b>: {tcb_message or 'No message'}",
+			indicator="red",
+			alert=True,
+		)
 		return {
 			"ok": False, "status": "Failed", "block_cancel": block_cancel,
 			"message": (
@@ -635,6 +665,11 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			registry.append_log(log_name, "Reference Decline", "Failed",
 			                    note="Reference Decline raised an exception.")
 		block_cancel = policy == "Block Cancel"
+		frappe.msgprint(
+			f"TCB decline failed for <b>{control_number}</b>. Check TCB API Log.",
+			indicator="red",
+			alert=True,
+		)
 		return {
 			"ok": False, "status": "Failed", "block_cancel": block_cancel,
 			"message": "TCB decline call failed with exception. Check TCB API Log.",

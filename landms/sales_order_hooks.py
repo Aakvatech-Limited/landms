@@ -669,14 +669,35 @@ def _validate_customer_mobile_for_tcb(doc):
 	if not customer:
 		return
 
-	customer_mobile = cstr(frappe.db.get_value("Customer", customer, "mobile_no") or "").strip()
-	if is_valid_tcb_mobile(customer_mobile):
+	mobile = _get_customer_mobile(customer)
+	if is_valid_tcb_mobile(mobile):
 		return
 
 	frappe.throw(
 		f"Customer {customer} must have a valid phone number in the format "
-		"255XXXXXXXXX before this Sales Order can be created."
+		"255XXXXXXXXX before this Sales Order can be created. "
+		"Update the mobile number on the Customer's primary Contact."
 	)
+
+
+def _get_customer_mobile(customer: str) -> str:
+	"""Get mobile from Customer record or its primary Contact."""
+	# Try Customer.mobile_no first
+	mobile = cstr(frappe.db.get_value("Customer", customer, "mobile_no") or "").strip()
+	if mobile:
+		return mobile
+
+	# Fall back to primary Contact's mobile_no or phone
+	contact = frappe.db.get_value(
+		"Dynamic Link",
+		{"link_doctype": "Customer", "link_name": customer, "parenttype": "Contact"},
+		"parent",
+	)
+	if contact:
+		mobile = cstr(frappe.db.get_value("Contact", contact, "mobile_no") or "").strip()
+		if not mobile:
+			mobile = cstr(frappe.db.get_value("Contact", contact, "phone") or "").strip()
+	return mobile
 
 
 def _block_cancel_if_paid(doc):
