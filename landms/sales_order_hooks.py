@@ -490,42 +490,32 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		_link_plot_invoice_to_contract(contract_name, existing)
 		return existing
 
-	settings = frappe.get_single("LandMS Settings")
-	plot = _get_plot(doc)
-	item_code = PLOT_TYPE_TO_ITEM.get(plot.plot_type)
-	if not item_code:
-		frappe.throw(f"No item is mapped for plot type {plot.plot_type}.")
+	from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
 	posting_date = posting_date or today()
-	invoice = frappe.get_doc({
-		"doctype": "Sales Invoice",
-		"customer": doc.customer,
-		"posting_date": posting_date,
-		"due_date": doc.payment_deadline or add_days(doc.transaction_date or posting_date, cint(doc.payment_completion_days or 0)),
-		"ignore_default_payment_terms_template": 1,
-		"allocate_advances_automatically": 1,
-		"company": doc.company or settings.company,
-		"plot": doc.plot,
-		"land_acquisition": doc.land_acquisition,
-		"plot_contract": contract_name or "",
-		"is_plot_sale_invoice": 1,
-		"remarks": f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}",
-		"items": [{
-			"item_code": item_code,
-			"qty": 1,
-			"rate": flt(plot.selling_price),
-			"income_account": settings.customer_advance_account,
-			"sales_order": doc.name,
-			"so_detail": doc.items[0].name if doc.items else "",
-			"description": f"Plot sale for {doc.plot}",
-		}],
-		"payment_schedule": [{
+	invoice = make_sales_invoice(doc.name, ignore_permissions=True)
+	invoice.posting_date = posting_date
+	invoice.due_date = doc.payment_deadline or add_days(
+		doc.transaction_date or posting_date, cint(doc.payment_completion_days or 0)
+	)
+	invoice.ignore_default_payment_terms_template = 1
+	invoice.allocate_advances_automatically = 1
+	invoice.plot = doc.plot
+	invoice.land_acquisition = doc.land_acquisition
+	invoice.plot_contract = contract_name or ""
+	invoice.is_plot_sale_invoice = 1
+	invoice.remarks = f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}"
+
+	# Copy payment schedule from SO
+	invoice.set("payment_schedule", [])
+	for row in (doc.get("payment_schedule") or []):
+		invoice.append("payment_schedule", {
 			"description": row.description,
 			"due_date": row.due_date,
 			"invoice_portion": flt(row.invoice_portion),
 			"payment_amount": flt(row.payment_amount),
-		} for row in (doc.get("payment_schedule") or [])],
-	})
+		})
+
 	invoice.insert(ignore_permissions=True)
 	invoice.submit()
 
