@@ -39,9 +39,8 @@
   },
   {
    "fieldname": "delivery_note",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Delivery Note",
-   "options": "Delivery Note",
    "read_only": 1,
    "description": "Created automatically on submit to reduce serialized plot stock"
   },

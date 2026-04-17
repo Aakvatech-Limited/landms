@@ -1,10 +1,13 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import flt
 
+from landms.payment_sync import _build_pe_references_for_invoice
 from landms.sales_order_hooks import (
 	_build_contract_schedule_rows,
 	_draft_contract_matches_sales_order,
 	_validate_customer_mobile_for_tcb,
+	build_payment_schedule_rows,
 )
 from landms.tcb import is_valid_tcb_mobile
 
@@ -91,3 +94,67 @@ class TestTcbCustomerMobileValidation(FrappeTestCase):
 			_validate_customer_mobile_for_tcb(doc)
 		finally:
 			frappe.db.get_value = original_get_value
+
+
+class TestLandMsPaymentScheduleTerms(FrappeTestCase):
+	def test_schedule_rows_include_named_payment_terms(self):
+		rows = build_payment_schedule_rows(
+			total_amount=1000,
+			booking_fee_percent=10,
+			transaction_date="2026-04-17",
+			payment_deadline="2026-05-17",
+		)
+
+		self.assertEqual(len(rows), 2)
+		self.assertEqual(rows[0]["payment_term"], "Advance")
+		self.assertEqual(rows[1]["payment_term"], "Balance")
+
+	def test_single_row_schedule_keeps_advance_term(self):
+		rows = build_payment_schedule_rows(
+			total_amount=1000,
+			booking_fee_percent=0,
+			transaction_date="2026-04-17",
+			payment_deadline="2026-04-17",
+		)
+
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["payment_term"], "Advance")
+
+	def test_pe_references_allocate_to_invoice_terms_in_order(self):
+		si = frappe._dict({
+			"name": "ACC-SINV-TEST-0001",
+			"payment_schedule": [
+				frappe._dict({
+					"idx": 1,
+					"payment_term": "Advance",
+					"outstanding": 0.3,
+				}),
+				frappe._dict({
+					"idx": 2,
+					"payment_term": "Balance",
+					"outstanding": 2.7,
+				}),
+			],
+		})
+
+		refs = _build_pe_references_for_invoice(si, 1.0)
+
+		self.assertEqual(len(refs), 2)
+		self.assertEqual(refs[0]["payment_term"], "Advance")
+		self.assertEqual(flt(refs[0]["allocated_amount"]), 0.3)
+		self.assertEqual(refs[1]["payment_term"], "Balance")
+		self.assertEqual(flt(refs[1]["allocated_amount"]), 0.7)
+
+	def test_pe_references_fall_back_when_invoice_has_no_schedule(self):
+		si = frappe._dict({
+			"name": "ACC-SINV-TEST-0002",
+			"payment_schedule": [],
+		})
+
+		refs = _build_pe_references_for_invoice(si, 2.5)
+
+		self.assertEqual(refs, [{
+			"reference_doctype": "Sales Invoice",
+			"reference_name": "ACC-SINV-TEST-0002",
+			"allocated_amount": 2.5,
+		}])

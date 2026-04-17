@@ -25,42 +25,6 @@ frappe.ui.form.on('Plot Application', {
             }, __('Actions'));
         }
 
-        // Create Sales Order — only on Paid applications
-        if (frm.doc.docstatus === 1 && frm.doc.status === 'Paid' && !frm.doc.sales_order) {
-            frm.add_custom_button(__('Create Sales Order'), () => {
-                frappe.call({
-                    method: 'create_sales_order',
-                    doc: frm.doc,
-                    args: { notify: 1 },
-                    freeze: true,
-                    freeze_message: __('Creating Sales Order...'),
-                    callback(r) {
-                        if (!r.exc) frm.reload_doc();
-                    },
-                });
-            }, __('Actions'));
-        }
-
-        // Cancel Application — manual cancellation for Submitted or Paid
-        if (frm.doc.docstatus === 1 && ['Submitted', 'Paid'].includes(frm.doc.status)) {
-            frm.add_custom_button(__('Cancel Application'), () => {
-                frappe.confirm(
-                    __('Are you sure you want to cancel this Plot Application? The plot will be released and any linked Sales Order will be cancelled.'),
-                    () => {
-                        frappe.call({
-                            method: 'frappe.client.cancel',
-                            args: { doctype: 'Plot Application', name: frm.doc.name },
-                            freeze: true,
-                            freeze_message: __('Cancelling...'),
-                            callback(r) {
-                                if (!r.exc) frm.reload_doc();
-                            },
-                        });
-                    }
-                );
-            }, __('Actions'));
-        }
-
         // Jump to the linked Sales Order
         if (frm.doc.sales_order) {
             frm.add_custom_button(__('View Sales Order'), () => {
@@ -148,7 +112,7 @@ function open_fee_payment_dialog(frm) {
                         reference_no: values.reference_no || '',
                     },
                     freeze: true,
-                    freeze_message: __('Recording payment...'),
+                    freeze_message: __('Recording payment & creating Sales Order...'),
                     callback(r) {
                         if (!r.exc) {
                             d.hide();

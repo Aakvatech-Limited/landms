@@ -230,6 +230,7 @@ def build_payment_schedule_rows(total_amount, booking_fee_percent, transaction_d
 	# If no booking fee or both dates are the same, single row
 	if booking_fee_percent <= 0 or str(transaction_date) == str(payment_deadline):
 		return [{
+			"payment_term": "Advance",
 			"description": "Full Plot Payment",
 			"due_date": payment_deadline,
 			"invoice_portion": 100.0,
@@ -239,6 +240,7 @@ def build_payment_schedule_rows(total_amount, booking_fee_percent, transaction_d
 	booking_amount = flt(total_amount * booking_fee_percent / 100)
 	balance_amount = flt(total_amount - booking_amount)
 	rows = [{
+		"payment_term": "Advance",
 		"description": "Advance",
 		"due_date": transaction_date,
 		"invoice_portion": booking_fee_percent,
@@ -247,6 +249,7 @@ def build_payment_schedule_rows(total_amount, booking_fee_percent, transaction_d
 
 	if balance_amount > 0:
 		rows.append({
+			"payment_term": "Balance",
 			"description": "Balance",
 			"due_date": payment_deadline,
 			"invoice_portion": flt(100 - booking_fee_percent),
@@ -510,6 +513,7 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 	invoice.set("payment_schedule", [])
 	for row in (doc.get("payment_schedule") or []):
 		invoice.append("payment_schedule", {
+			"payment_term": row.get("payment_term") or row.description,
 			"description": row.description,
 			"due_date": row.due_date,
 			"invoice_portion": flt(row.invoice_portion),
@@ -619,24 +623,12 @@ def _create_registry_row(doc, control_number: str):
 
 
 def _register_with_tcb(doc, control_number: str):
-	"""Register the control number with TCB.
+	"""Register the control number with TCB synchronously during SO submit.
 
-	For Live mode the HTTP call runs in a background job so the SO
-	submit is not blocked by TCB network latency. Off / Log Only
-	modes run synchronously (no HTTP call involved).
+	Runs inline so the user gets immediate feedback (success/failure popup)
+	instead of waiting for a background worker to pick up the job.
 	"""
-	settings = _get_tcb_settings()
-	if not cint(settings.get("enabled")) or settings.get("outbound_mode") != "Live":
-		register_reference_for_sales_order(doc.name, control_number)
-		return
-
-	frappe.enqueue(
-		"landms.tcb.register_reference_for_sales_order",
-		queue="short",
-		timeout=300,
-		sales_order_name=doc.name,
-		control_number=control_number,
-	)
+	register_reference_for_sales_order(doc.name, control_number)
 
 
 def _link_application_to_sales_order(doc):

@@ -333,6 +333,7 @@ class PlotContract(Document):
 		invoice_name = self._get_plot_invoice_name()
 		if not invoice_name:
 			self._sync_header_from_sales_order(so_doc)
+			self._persist_payment_sync_state()
 			return
 
 		si_doc = frappe.get_doc("Sales Invoice", invoice_name)
@@ -346,23 +347,20 @@ class PlotContract(Document):
 		if len(self.payment_schedule or []) != len(si_doc.payment_schedule or []) and self.docstatus == 0:
 			self._rebuild_schedule_from_invoice(si_doc)
 
+		self._sync_header_from_sales_order(so_doc, invoice_name=si_doc.name)
+		self._sync_schedule_rows_from_invoice(si_doc, paid_dates)
+		self.total_contract_value = flt(si_doc.grand_total)
+		self.total_paid = total_paid
+		self.total_outstanding = total_outstanding
+		self.payment_progress = self._derive_payment_progress(total_paid, total_outstanding, si_doc=si_doc)
+		self._persist_payment_sync_state()
+
 		advance_met = self._is_advance_installment_met(si_doc)
 
-		# Only auto-submit the contract once the full advance is covered.
+		# Only auto-submit once the synced draft state is already safely saved.
 		if advance_met and self.docstatus == 0:
 			self.submit()
 			self.reload()
-
-		self._sync_header_from_sales_order(so_doc, invoice_name=si_doc.name)
-		self._sync_schedule_rows_from_invoice(si_doc, paid_dates)
-		self.db_set("total_contract_value", flt(si_doc.grand_total), update_modified=False)
-		self.db_set("total_paid", total_paid, update_modified=False)
-		self.db_set("total_outstanding", total_outstanding, update_modified=False)
-		self.db_set(
-			"payment_progress",
-			self._derive_payment_progress(total_paid, total_outstanding, si_doc=si_doc),
-			update_modified=False,
-		)
 
 		if so_doc.get("plot_application"):
 			app_status = frappe.db.get_value("Plot Application", so_doc.plot_application, "status")
@@ -372,38 +370,47 @@ class PlotContract(Document):
 					so_doc.plot_application,
 					"status",
 					"Converted",
+					update_modified=True,
 				)
+				frappe.clear_document_cache("Plot Application", so_doc.plot_application)
 
 		if total_outstanding <= 0 and self.docstatus == 1:
-			self.db_set("contract_status", "Completed", update_modified=False)
+			self.contract_status = "Completed"
 			plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
 			if plot_status not in ("Delivered", "Title Closed"):
-				frappe.db.set_value("Plot Master", self.plot, "status", "Ready for Handover")
+				frappe.db.set_value("Plot Master", self.plot, "status", "Ready for Handover", update_modified=True)
+				frappe.clear_document_cache("Plot Master", self.plot)
 			self._sync_land_acquisition_summary()
 
+			# Persist the submitted contract state before posting linked entries.
+			self._persist_payment_sync_state()
 			settings = frappe.get_single("LandMS Settings")
 			self.reload()
 			je_name = self._post_completion_entries(settings)
+			handover_name = self._ensure_handover_draft()
 
 			msg = f"Contract fully paid. Plot {self.plot} marked as Ready for Handover."
 			if je_name:
 				msg += f" Government fee posted — Journal Entry: {je_name}."
+			if handover_name:
+				msg += f" Plot Handover <b>{handover_name}</b> created (Draft) — fill the handover parties and submit."
 			frappe.msgprint(msg, indicator="green", alert=True)
+			return  # already saved above
 
 		elif advance_met and self.docstatus == 1:
-			self.db_set("contract_status", "Ongoing", update_modified=False)
+			self.contract_status = "Ongoing"
 			if frappe.db.get_value("Plot Master", self.plot, "status") == "Pending Advance":
-				frappe.db.set_value("Plot Master", self.plot, "status", "Reserved")
+				frappe.db.set_value("Plot Master", self.plot, "status", "Reserved", update_modified=True)
+				frappe.clear_document_cache("Plot Master", self.plot)
 				self._sync_land_acquisition_summary()
 
+		self._persist_payment_sync_state()
+
 	def _sync_header_from_sales_order(self, so_doc, *, invoice_name: str | None = None):
-		updates = {
-			"plot_application": so_doc.get("plot_application") or "",
-			"control_number": so_doc.get("control_number") or "",
-			"booking_fee_invoice": invoice_name or so_doc.get("plot_sales_invoice") or "",
-			"payment_deadline": so_doc.get("payment_deadline"),
-		}
-		frappe.db.set_value("Plot Contract", self.name, updates, update_modified=False)
+		self.plot_application = so_doc.get("plot_application") or ""
+		self.control_number = so_doc.get("control_number") or ""
+		self.booking_fee_invoice = invoice_name or so_doc.get("plot_sales_invoice") or ""
+		self.payment_deadline = so_doc.get("payment_deadline")
 
 	def _rebuild_schedule_from_invoice(self, invoice):
 		# Compute expected from the original grand_total * invoice_portion,
@@ -450,21 +457,39 @@ class PlotContract(Document):
 			status = self._derive_installment_status(source.due_date, expected, outstanding, today_date=today_date)
 			paid_date = paid_dates.get(idx) if outstanding <= 0 else None
 
-			frappe.db.set_value(
-				"Plot Contract Payment",
-				target.name,
-				{
-					"description": source.description or self._default_installment_label(idx),
-					"due_date": source.due_date,
-					"expected_amount": expected,
-					"paid_amount": paid_amount,
-					"outstanding_amount": outstanding,
-					"paid_date": paid_date,
-					"sales_invoice": invoice.name,
-					"status": status,
-				},
-				update_modified=False,
-			)
+			target.description = source.description or self._default_installment_label(idx)
+			target.due_date = source.due_date
+			target.expected_amount = expected
+			target.paid_amount = paid_amount
+			target.outstanding_amount = outstanding
+			target.paid_date = paid_date
+			target.sales_invoice = invoice.name
+			target.status = status
+			if self.docstatus == 1 and target.name:
+				target.db_update()
+
+	def _persist_payment_sync_state(self):
+		if self.docstatus == 0:
+			self.save(ignore_permissions=True)
+			return
+
+		frappe.db.set_value(
+			"Plot Contract",
+			self.name,
+			{
+				"plot_application": self.plot_application or "",
+				"control_number": self.control_number or "",
+				"booking_fee_invoice": self.booking_fee_invoice or "",
+				"payment_deadline": self.payment_deadline,
+				"total_contract_value": flt(self.total_contract_value),
+				"total_paid": flt(self.total_paid),
+				"total_outstanding": flt(self.total_outstanding),
+				"payment_progress": self.payment_progress or "",
+				"contract_status": self.contract_status or "Draft",
+			},
+			update_modified=True,
+		)
+		frappe.clear_document_cache("Plot Contract", self.name)
 
 	def _derive_installment_status(self, due_date, expected, outstanding, *, today_date=None):
 		today_date = today_date or getdate(today())
@@ -584,6 +609,31 @@ class PlotContract(Document):
 		je.submit()
 		self.db_set("government_fee_entry", je.name)
 		return je.name
+
+	def _ensure_handover_draft(self):
+		existing = frappe.db.get_value(
+			"Plot Handover",
+			{"contract": self.name, "docstatus": ["!=", 2]},
+			"name",
+		)
+		if existing:
+			return existing
+
+		handover = frappe.get_doc({
+			"doctype": "Plot Handover",
+			"contract": self.name,
+			"handover_date": today(),
+			"customer": self.customer,
+			"plot": self.plot,
+			"acquisition_name": self.get("acquisition_name") or "",
+			"land_acquisition": self.get("land_acquisition") or "",
+			"contract_date": self.get("contract_date"),
+			"selling_price": flt(self.selling_price),
+		})
+		handover.flags.ignore_permissions = True
+		handover.flags.ignore_mandatory = True
+		handover.insert()
+		return handover.name
 
 	def _post_termination_journal_entry(self, settings):
 		if self.forfeiture_entry:

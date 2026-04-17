@@ -1,0 +1,14 @@
+[
+ {
+  "doctype": "Payment Term",
+  "name": "Advance",
+  "payment_term_name": "Advance",
+  "description": "Booking fee / advance installment"
+ },
+ {
+  "doctype": "Payment Term",
+  "name": "Balance",
+  "payment_term_name": "Balance",
+  "description": "Remaining balance after advance"
+ }
+]

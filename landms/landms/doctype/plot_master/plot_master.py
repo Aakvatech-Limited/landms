@@ -211,24 +211,18 @@ class PlotMaster(Document):
 				"company":   settings.company,
 			}).insert(ignore_permissions=True)
 
-		se = frappe.get_doc({
-			"doctype":           "Stock Entry",
-			"stock_entry_type":  "Material Receipt",
-			"posting_date":      frappe.utils.today(),
-			"company":           settings.company,
-			"remarks":           f"Plot {self.plot_number} from {self.land_acquisition}",
-			"difference_account": land_account,
-			"items": [
-				{
-					"item_code":             item_code,
-					"qty":                   1,
-					"basic_rate":            flt(self.allocated_cost),
-					"t_warehouse":           warehouse,
-					"serial_no":             serial_number,
-					"use_serial_batch_fields": 1,
-				}
-			],
-		})
+		se = frappe.get_doc(
+			_build_plot_stock_entry_doc(
+				company=settings.company,
+				plot_number=self.plot_number,
+				land_acquisition=self.land_acquisition,
+				item_code=item_code,
+				basic_rate=flt(self.allocated_cost),
+				target_warehouse=warehouse,
+				serial_number=serial_number,
+				difference_account=land_account,
+			)
+		)
 		se.insert(ignore_permissions=True)
 		se.submit()
 
@@ -257,3 +251,42 @@ def get_plot_type_selling_rate(la_values, plot_type):
 	if not rate_field:
 		return 0
 	return flt((la_values or {}).get(rate_field))
+
+
+def _build_plot_stock_entry_doc(
+	*,
+	company: str,
+	plot_number: str,
+	land_acquisition: str,
+	item_code: str,
+	basic_rate: float,
+	target_warehouse: str,
+	serial_number: str,
+	difference_account: str,
+) -> dict:
+	"""Build the Stock Entry payload used when a plot enters inventory.
+
+	The plot items use a delivery-side item default expense account (COGS) for
+	handover. Plot creation must not inherit that value; it needs to post against
+	the Land Under Development asset account instead.
+	"""
+	return {
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Receipt",
+		"posting_date": frappe.utils.today(),
+		"company": company,
+		"remarks": f"Plot {plot_number} from {land_acquisition}",
+		"difference_account": difference_account,
+		"items": [
+			{
+				"item_code": item_code,
+				"qty": 1,
+				"basic_rate": flt(basic_rate),
+				"t_warehouse": target_warehouse,
+				"serial_no": serial_number,
+				"use_serial_batch_fields": 1,
+				# Prevent Stock Entry from inheriting the item default COGS account.
+				"expense_account": difference_account,
+			}
+		],
+	}

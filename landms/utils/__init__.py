@@ -15,6 +15,7 @@ def import_setup_data():
 	# Order matters: roles first, then fields that reference them.
 	files_to_import = [
 		"role.json",
+		"payment_term.json",
 		"custom_field.json",
 		"client_script.json",
 	]
