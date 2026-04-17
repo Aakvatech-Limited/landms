@@ -139,7 +139,7 @@
   "fieldtype": "Check",
   "label": "Apply Auto-Cancellation",
   "insert_after": "payment_deadline",
-  "default": "1",
+  "default": "0",
   "description": "When checked, the Sales Order and Plot Contract will be automatically cancelled if installment deadlines are missed. Uncheck to allow the customer to pay beyond the deadline."
  },
  {
@@ -175,9 +175,8 @@
   "dt": "Sales Order",
   "module": "LandMS",
   "fieldname": "plot_contract",
-  "fieldtype": "Link",
+  "fieldtype": "Data",
   "label": "Plot Contract",
-  "options": "Plot Contract",
   "insert_after": "control_number",
   "read_only": 1
  },
@@ -196,9 +195,8 @@
   "dt": "Sales Order",
   "module": "LandMS",
   "fieldname": "plot_sales_invoice",
-  "fieldtype": "Link",
+  "fieldtype": "Data",
   "label": "Plot Sales Invoice",
-  "options": "Sales Invoice",
   "insert_after": "lms_ref_col",
   "read_only": 1
  },
@@ -254,9 +252,8 @@
   "dt": "Sales Invoice",
   "module": "LandMS",
   "fieldname": "plot_contract",
-  "fieldtype": "Link",
+  "fieldtype": "Data",
   "label": "Plot Contract",
-  "options": "Plot Contract",
   "insert_after": "land_acquisition",
   "read_only": 1
  },

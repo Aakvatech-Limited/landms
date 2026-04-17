@@ -258,6 +258,9 @@ class PlotApplication(Document):
 		self._validate_receiving_account(bank_account, settings.company)
 
 		# --- Sales Invoice ---
+		if not settings.application_fee_item:
+			frappe.throw("Application Fee Item is not configured in LandMS Settings.")
+
 		si = frappe.get_doc({
 			"doctype":      "Sales Invoice",
 			"customer":     self.customer,
@@ -266,8 +269,7 @@ class PlotApplication(Document):
 			"company":      settings.company,
 			"remarks":      f"Application fee for Plot {self.plot} — Application {self.name}",
 			"items": [{
-				"item_name":      "Application Fee",
-				"description":    f"Plot application fee — {self.name} / Plot {self.plot}",
+				"item_code":      settings.application_fee_item,
 				"qty":            1,
 				"rate":           fee_amount,
 				"income_account": settings.application_fee_income_account,
@@ -313,11 +315,12 @@ class PlotApplication(Document):
 		frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
 		self._sync_land_acquisition_summary()
 
+		so_name = self.create_sales_order(notify=0)
+
 		frappe.msgprint(
 			f"Application fee of TZS {fee_amount:,.0f} recorded. "
-			f"Plot {self.plot} is now Pending Advance until {expiry}. "
-			f"Sales Invoice {si.name} settled via Payment Entry {pe.name}. "
-			"Next: create the Sales Order and collect the first advance within the validity window.",
+			f"Sales Order <b>{so_name}</b> created for Plot {self.plot}. "
+			f"Reservation valid until {expiry}.",
 			indicator="green",
 			alert=True,
 		)

@@ -91,6 +91,54 @@ def sync_plot_contract_from_payment_entry(doc, method=None):
 	_sync_landms_payment_entry_state(doc)
 
 
+def _build_pe_references_for_invoice(si, total_allocated: float) -> list[dict]:
+	"""Build PE reference rows that allocate payment across SI payment schedule terms.
+
+	ERPNext only updates per-row paid_amount on the SI payment schedule when the
+	PE reference row carries the matching payment_term. Without it, the overall
+	SI outstanding updates but individual schedule rows stay at zero — breaking
+	our contract sync which reads from those rows.
+	"""
+	schedule = si.get("payment_schedule") or []
+	if not schedule:
+		return [{
+			"reference_doctype": "Sales Invoice",
+			"reference_name": si.name,
+			"allocated_amount": flt(total_allocated),
+		}]
+
+	refs = []
+	remaining = flt(total_allocated)
+	for row in sorted(schedule, key=lambda r: r.idx):
+		if remaining <= 0:
+			break
+		row_outstanding = flt(row.outstanding or 0)
+		if row_outstanding <= 0:
+			continue
+		alloc = min(remaining, row_outstanding)
+		refs.append({
+			"reference_doctype": "Sales Invoice",
+			"reference_name": si.name,
+			"allocated_amount": alloc,
+			"payment_term": row.payment_term,
+		})
+		remaining -= alloc
+
+	# If there's still remaining (overpayment or no matching terms), add a catch-all row
+	if remaining > 0:
+		refs.append({
+			"reference_doctype": "Sales Invoice",
+			"reference_name": si.name,
+			"allocated_amount": remaining,
+		})
+
+	return refs or [{
+		"reference_doctype": "Sales Invoice",
+		"reference_name": si.name,
+		"allocated_amount": flt(total_allocated),
+	}]
+
+
 def create_payment_entry_for_sales_order(
 	*,
 	sales_order_name: str,
@@ -147,6 +195,8 @@ def create_payment_entry_for_sales_order(
 		)
 
 	allocated = min(flt(amount), outstanding)
+	pe_references = _build_pe_references_for_invoice(si, allocated)
+
 	pe = frappe.get_doc({
 		"doctype": "Payment Entry",
 		"payment_type": "Receive",
@@ -161,16 +211,15 @@ def create_payment_entry_for_sales_order(
 		"reference_no": cstr(reference_no),
 		"reference_date": payment_date or today(),
 		"remarks": remarks or f"Payment against {invoice_name}",
-		"references": [{
-			"reference_doctype": "Sales Invoice",
-			"reference_name": invoice_name,
-			"allocated_amount": allocated,
-		}],
+		"references": pe_references,
 	})
+	pe.name = cstr(reference_no)
+	pe.flags.name_set = True
+
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
-		pe.insert(ignore_permissions=True)
+		pe.insert(ignore_permissions=True, set_name=cstr(reference_no))
 		if submit:
 			pe.submit()
 	finally:
@@ -357,8 +406,9 @@ def _sync_sales_order_from_plot_invoice(sales_order_name: str):
 			"advance_paid": flt(total_paid, so.precision("advance_paid")),
 			"plot_outstanding_amount": flt(invoice.outstanding_amount),
 		},
-		update_modified=False,
+		update_modified=True,
 	)
+	frappe.clear_document_cache("Sales Order", so.name)
 
 
 def _sync_sales_order_billing_from_plot_invoice(so, invoice):
@@ -392,11 +442,11 @@ def _sync_sales_order_billing_from_plot_invoice(so, invoice):
 			"per_billed": per_billed,
 			"billing_status": billing_status,
 		},
-		update_modified=False,
+		update_modified=True,
 	)
 
 	so.reload()
-	so.set_status(update=True, update_modified=False)
+	so.set_status(update=True, update_modified=True)
 
 
 def _link_invoice_items_to_sales_order_rows(so, invoice):
@@ -441,7 +491,7 @@ def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice):
 				"base_paid_amount": flt(source.base_paid_amount or 0),
 				"base_outstanding": flt(source.base_outstanding or 0),
 			},
-			update_modified=False,
+			update_modified=True,
 		)
 
 

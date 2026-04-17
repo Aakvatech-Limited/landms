@@ -100,6 +100,14 @@
    "label": "Application Fee"
   },
   {
+   "fieldname": "application_fee_item",
+   "fieldtype": "Link",
+   "label": "Application Fee Item",
+   "options": "Item",
+   "reqd": 1,
+   "description": "Service item used on the application fee Sales Invoice"
+  },
+  {
    "fieldname": "application_fee_amount",
    "fieldtype": "Float",
    "label": "Application Fee Amount (TZS)",

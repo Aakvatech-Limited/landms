@@ -155,17 +155,15 @@
   },
   {
    "fieldname": "sales_invoice",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Sales Invoice",
-   "options": "Sales Invoice",
    "read_only": 1,
    "description": "Sales Invoice created for the application fee"
   },
   {
    "fieldname": "payment_entry",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Payment Entry",
-   "options": "Payment Entry",
    "read_only": 1,
    "description": "Payment Entry that settled the application fee SI"
   },
@@ -177,9 +175,8 @@
   },
   {
    "fieldname": "sales_order",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Sales Order",
-   "options": "Sales Order",
    "read_only": 1,
    "description": "ERP Sales Order created after application fee payment"
   },

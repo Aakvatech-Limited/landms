@@ -137,8 +137,8 @@
    "fieldname": "apply_auto_cancellation",
    "fieldtype": "Check",
    "label": "Apply Auto-Cancellation",
-   "default": "1",
-   "description": "Inherited from Sales Order. Uncheck to allow payment beyond deadline."
+   "read_only": 1,
+   "description": "Inherited from Sales Order. Change it on the Sales Order to update this value."
   },
   {
    "fieldname": "control_number",
@@ -264,16 +264,14 @@
   },
   {
    "fieldname": "sales_order",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Sales Order",
-   "options": "Sales Order",
    "read_only": 1
   },
   {
    "fieldname": "plot_application",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Plot Application",
-   "options": "Plot Application",
    "read_only": 1
   },
   {
@@ -282,24 +280,21 @@
   },
   {
    "fieldname": "booking_fee_invoice",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Plot Sales Invoice",
-   "options": "Sales Invoice",
    "read_only": 1
   },
   {
    "fieldname": "government_fee_entry",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Government Fee Journal Entry",
-   "options": "Journal Entry",
    "read_only": 1,
    "depends_on": "eval:doc.government_fee_entry"
   },
   {
    "fieldname": "forfeiture_entry",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Forfeiture Journal Entry",
-   "options": "Journal Entry",
    "read_only": 1,
    "depends_on": "eval:doc.forfeiture_entry"
   },
