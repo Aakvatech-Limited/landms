@@ -90,6 +90,8 @@ def ipn_callback() -> dict[str, Any]:
 				exc_info=True,
 			)
 
+	lock_name = ""
+	lock_acquired = False
 	try:
 		raw_payload, envelope = _read_request_payload()
 		# Unwrap the envelope: the real TCB body wraps payment details inside `param`.
@@ -101,6 +103,33 @@ def ipn_callback() -> dict[str, Any]:
 		transaction_id = cstr(body.get("transaction_id") or "").strip()
 		payment_date = body.get("transaction_date") or body.get("trans_date") or body.get("payment_date")
 		payment_ref = transaction_id or reference
+
+		# Serialize concurrent deliveries for the same transaction. TCB fires
+		# the IPN several times within microseconds; without this lock each
+		# request runs its duplicate check before any of them has committed,
+		# they all pass, and we end up with multiple Payment Entries for one
+		# payment. MySQL named lock; auto-released on connection close.
+		lock_name, lock_acquired = _acquire_ipn_lock(transaction_id, reference)
+		if lock_name and not lock_acquired:
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Ignored",
+				processing_mode=mode, endpoint=IPN_ENDPOINT, is_duplicate=1,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": "Concurrent IPN — another worker is processing."},
+			)
+			return {
+				"ok": True,
+				"status": "Ignored",
+				"message": "Concurrent IPN — another worker is processing this transaction.",
+			}
+
+		# We just unblocked on a lock held by the predecessor worker. MySQL's
+		# default REPEATABLE READ snapshots the connection at its first read;
+		# without this commit, subsequent queries would still see pre-commit
+		# state and the idempotency check would miss the winner's writes.
+		if lock_acquired:
+			frappe.db.commit()
 
 		# 2. Persist the notification record FIRST — even if we'll ignore it.
 		#    This is the canonical audit trail of what TCB sent us.
@@ -253,6 +282,15 @@ def ipn_callback() -> dict[str, Any]:
 			"status": "Failed",
 			"message": "Unhandled exception while processing IPN. Check TCB API Log.",
 		}
+	finally:
+		# Commit before releasing so the next worker waking on the lock sees
+		# our TCB API Log row and short-circuits via has_duplicate_ipn.
+		if lock_acquired and lock_name:
+			try:
+				frappe.db.commit()
+			except Exception:
+				frappe.logger("landms").error("IPN commit before release failed", exc_info=True)
+			_release_ipn_lock(lock_name)
 
 
 # ---------------------------------------------------------------------- #
@@ -336,6 +374,37 @@ def _get_client_ip() -> str:
 		return request.remote_addr or ""
 	except Exception:
 		return ""
+
+
+def _acquire_ipn_lock(transaction_id: str, reference: str) -> tuple[str, bool]:
+	"""Claim a per-transaction lock so simultaneous IPN deliveries don't
+	create duplicate Payment Entries.
+
+	Returns (lock_name, acquired). Empty lock_name means we couldn't key
+	(no transaction_id) — caller should proceed without serialization.
+	Fails open on DB errors: one duplicate PE is less bad than a swallowed
+	real payment.
+	"""
+	if not transaction_id:
+		return "", True
+	# MySQL named-lock identifiers are capped at 64 chars.
+	lock_name = (f"tcb_ipn:{transaction_id}:{reference}")[:64]
+	try:
+		row = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (lock_name, 10))
+		acquired = bool(row and row[0] and row[0][0] == 1)
+		return lock_name, acquired
+	except Exception:
+		frappe.logger("landms").error("IPN lock acquire failed", exc_info=True)
+		return lock_name, True
+
+
+def _release_ipn_lock(lock_name: str) -> None:
+	if not lock_name:
+		return
+	try:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_name,))
+	except Exception:
+		frappe.logger("landms").error("IPN lock release failed", exc_info=True)
 
 
 def _get_allowed_tcb_ips() -> list[str]:
