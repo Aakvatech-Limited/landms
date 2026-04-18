@@ -213,6 +213,19 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Order-forfeiture_entry",
+  "dt": "Sales Order",
+  "module": "LandMS",
+  "fieldname": "forfeiture_entry",
+  "fieldtype": "Link",
+  "options": "Journal Entry",
+  "label": "Forfeiture Entry",
+  "insert_after": "plot_outstanding_amount",
+  "read_only": 1,
+  "description": "Journal Entry that forfeited non-refundable payments when this SO was cancelled before the Plot Contract was submitted."
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Sales Invoice-lms_si_section",
   "dt": "Sales Invoice",
   "module": "LandMS",

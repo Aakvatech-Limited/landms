@@ -616,8 +616,23 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		registry = _get_registry(control_number)
 		if registry:
 			if ok:
-				registry.mark_declined(log_name=log_name,
-				                       note=tcb_message or "Declined at TCB.")
+				# Paid/Declined/Expired are terminal locally: TCB accepted the
+				# decline but we can't (and shouldn't) override a Paid registry —
+				# money was received. Just record the decline acknowledgment.
+				if registry.status in ("Paid", "Declined", "Expired"):
+					registry.append_log(
+						log_name, "Reference Decline", "Success",
+						note=(
+							f"TCB accepted decline but registry is already "
+							f"{registry.status}; local status left unchanged. "
+							f"{tcb_message or ''}"
+						).strip(),
+					)
+				else:
+					registry.mark_declined(
+						log_name=log_name,
+						note=tcb_message or "Declined at TCB.",
+					)
 			else:
 				registry.append_log(log_name, "Reference Decline", "Failed",
 				                    note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
