@@ -3,7 +3,7 @@ from frappe.model.document import Document
 from frappe.utils import get_fullname, today
 
 from landms.landms.doctype.land_acquisition.land_acquisition import sync_land_acquisition_plot_summary
-from landms.landms.doctype.plot_master.plot_master import PLOT_TYPE_TO_ITEM
+from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 
 
 class PlotHandover(Document):
@@ -126,9 +126,7 @@ class PlotHandover(Document):
 		return dn
 
 	def _make_delivery_note_direct(self, contract, plot, settings):
-		item_code = PLOT_TYPE_TO_ITEM.get(plot.plot_type)
-		if not item_code:
-			frappe.throw(f"No item is mapped for plot type '{plot.plot_type}'.")
+		item_code = get_plot_item_code(plot.plot_type)
 
 		return frappe.get_doc(
 			{

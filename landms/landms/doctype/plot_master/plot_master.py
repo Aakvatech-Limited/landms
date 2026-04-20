@@ -6,11 +6,10 @@ from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
 
-# Plot Type → stock Item code (must exist as fixtures with Maintain Stock = Yes)
-PLOT_TYPE_TO_ITEM = {
-	"Residential": "RESIDENTIAL PLOT",
-	"Commercial":  "COMMERCIAL PLOT",
-	"Mixed Use":   "MIXED USE PLOT",
+PLOT_TYPE_TO_SETTINGS_FIELD = {
+	"Residential": "residential_plot_item",
+	"Commercial":  "commercial_plot_item",
+	"Mixed Use":   "mixed_use_plot_item",
 }
 
 # Plot Type → Land Acquisition selling-rate field
@@ -184,9 +183,7 @@ class PlotMaster(Document):
 		warehouse, against a freshly minted Serial No tied to this plot."""
 		settings = frappe.get_single("LandMS Settings")
 
-		item_code = PLOT_TYPE_TO_ITEM.get(self.plot_type)
-		if not item_code:
-			frappe.throw(f"No stock item is mapped for plot type '{self.plot_type}'.")
+		item_code = get_plot_item_code(self.plot_type, settings)
 
 		warehouse = settings.plot_inventory_warehouse
 		if not warehouse:
@@ -243,6 +240,22 @@ class PlotMaster(Document):
 			se.cancel()
 		self.db_set("stock_entry", None)
 		self.db_set("serial_no", None)
+
+
+def get_plot_item_code(plot_type, settings=None):
+	"""Return the stock item code for the given plot type from LandMS Settings."""
+	field = PLOT_TYPE_TO_SETTINGS_FIELD.get(plot_type)
+	if not field:
+		frappe.throw(f"Unknown plot type '{plot_type}'.")
+	if settings is None:
+		settings = frappe.get_single("LandMS Settings")
+	item_code = settings.get(field)
+	if not item_code:
+		frappe.throw(
+			f"No stock item is set for plot type '{plot_type}'. "
+			f"Go to LandMS Settings → Plot Stock Items and set it."
+		)
+	return item_code
 
 
 def get_plot_type_selling_rate(la_values, plot_type):

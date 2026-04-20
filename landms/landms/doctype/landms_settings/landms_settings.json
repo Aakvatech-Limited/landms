@@ -7,6 +7,11 @@
  "track_changes": 1,
  "fields": [
   {
+   "fieldname": "tab_general",
+   "fieldtype": "Tab Break",
+   "label": "General"
+  },
+  {
    "fieldname": "company_section",
    "fieldtype": "Section Break",
    "label": "Company and Currency"
@@ -26,9 +31,58 @@
    "reqd": 1
   },
   {
-   "fieldname": "accounts_section",
+   "fieldname": "col_break_company",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "plot_inventory_warehouse",
+   "fieldtype": "Link",
+   "label": "Plot Inventory Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "plot_items_section",
    "fieldtype": "Section Break",
-   "label": "GL Account Mappings"
+   "label": "Plot Stock Items"
+  },
+  {
+   "fieldname": "residential_plot_item",
+   "fieldtype": "Link",
+   "label": "Residential Plot Item",
+   "options": "Item",
+   "reqd": 1,
+   "description": "Stock item used when a Residential plot enters inventory"
+  },
+  {
+   "fieldname": "commercial_plot_item",
+   "fieldtype": "Link",
+   "label": "Commercial Plot Item",
+   "options": "Item",
+   "reqd": 1,
+   "description": "Stock item used when a Commercial plot enters inventory"
+  },
+  {
+   "fieldname": "col_break_plot_items",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "mixed_use_plot_item",
+   "fieldtype": "Link",
+   "label": "Mixed Use Plot Item",
+   "options": "Item",
+   "reqd": 1,
+   "description": "Stock item used when a Mixed Use plot enters inventory"
+  },
+  {
+   "fieldname": "tab_accounts",
+   "fieldtype": "Tab Break",
+   "label": "Accounts"
+  },
+  {
+   "fieldname": "asset_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Asset Accounts"
   },
   {
    "fieldname": "land_under_development_account",
@@ -45,11 +99,15 @@
    "reqd": 1
   },
   {
-   "fieldname": "customer_advance_account",
+   "fieldname": "tcb_bank_account",
    "fieldtype": "Link",
-   "label": "Customer Advances Account",
+   "label": "TCB Bank Account",
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "fieldname": "col_break_accounts",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "revenue_account",
@@ -66,23 +124,21 @@
    "reqd": 1
   },
   {
-   "fieldname": "tcb_bank_account",
+   "fieldname": "customer_advance_account",
    "fieldtype": "Link",
-   "label": "TCB Bank Account",
+   "label": "Customer Advances Account",
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "fieldname": "liability_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Liability and Income Accounts"
   },
   {
    "fieldname": "government_payable_account",
    "fieldtype": "Link",
    "label": "Government Payable Account",
-   "options": "Account",
-   "reqd": 1
-  },
-  {
-   "fieldname": "forfeited_deposits_account",
-   "fieldtype": "Link",
-   "label": "Forfeited Deposits Income Account",
    "options": "Account",
    "reqd": 1
   },
@@ -95,9 +151,25 @@
    "description": "Creditors account used when land is acquired — Dr Land Under Development / Cr this account"
   },
   {
-   "fieldname": "application_fee_section",
-   "fieldtype": "Section Break",
+   "fieldname": "col_break_liabilities",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "forfeited_deposits_account",
+   "fieldtype": "Link",
+   "label": "Forfeited Deposits Income Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tab_application_fee",
+   "fieldtype": "Tab Break",
    "label": "Application Fee"
+  },
+  {
+   "fieldname": "app_fee_details_section",
+   "fieldtype": "Section Break",
+   "label": "Fee Details"
   },
   {
    "fieldname": "application_fee_item",
@@ -113,6 +185,10 @@
    "label": "Application Fee Amount (TZS)",
    "reqd": 1,
    "description": "Fixed application fee charged per plot before a Sales Order can be created"
+  },
+  {
+   "fieldname": "col_break_app_fee",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "unpaid_application_expiry_days",
@@ -131,8 +207,9 @@
    "description": "Days the paid application reserves the plot before the Sales Order must be created"
   },
   {
-   "fieldname": "application_fee_col_break",
-   "fieldtype": "Column Break"
+   "fieldname": "app_fee_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Fee Accounts"
   },
   {
    "fieldname": "application_fee_income_account",
@@ -143,6 +220,10 @@
    "description": "Income account where application fees are posted"
   },
   {
+   "fieldname": "col_break_app_fee_accounts",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "application_fee_receiving_account",
    "fieldtype": "Link",
    "label": "Application Fee Receiving Account",
@@ -150,21 +231,14 @@
    "description": "Default Bank/Cash account where application fee payments are received"
   },
   {
-   "fieldname": "warehouse_section",
-   "fieldtype": "Section Break",
-   "label": "Warehouse"
-  },
-  {
-   "fieldname": "plot_inventory_warehouse",
-   "fieldtype": "Link",
-   "label": "Plot Inventory Warehouse",
-   "options": "Warehouse",
-   "reqd": 1
+   "fieldname": "tab_naming",
+   "fieldtype": "Tab Break",
+   "label": "Naming Series"
   },
   {
    "fieldname": "naming_section",
    "fieldtype": "Section Break",
-   "label": "Naming Series"
+   "label": "Document Naming"
   },
   {
    "fieldname": "naming_series_contract",
@@ -177,6 +251,10 @@
    "fieldtype": "Data",
    "label": "Installment Schedule Naming Series",
    "default": "ISCH-.YYYY.-.####"
+  },
+  {
+   "fieldname": "col_break_naming",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "naming_series_tcb_log",

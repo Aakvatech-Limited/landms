@@ -24,12 +24,12 @@ frappe.ui.form.on('Land Acquisition', {
         refresh_plot_counts(frm);
 
         frm.add_custom_button('Purchase Order', () => {
-            frappe.route_options = { land_acquisition: frm.doc.name };
+            frappe.flags.new_po_land_acquisition = frm.doc.name;
             frappe.new_doc('Purchase Order');
         }, __('Create'));
 
         frm.add_custom_button('Purchase Invoice', () => {
-            frappe.route_options = { land_acquisition: frm.doc.name };
+            frappe.flags.new_pi_land_acquisition = frm.doc.name;
             frappe.new_doc('Purchase Invoice');
         }, __('Create'));
     }

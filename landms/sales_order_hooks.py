@@ -22,7 +22,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_days, cint, cstr, flt, getdate, today
 
-from landms.landms.doctype.plot_master.plot_master import PLOT_TYPE_TO_ITEM
+from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 from landms.tcb import (
 	_get_tcb_settings,
 	create_or_get_registry,
@@ -202,9 +202,7 @@ def ensure_plot_sales_invoice_for_sales_order(
 
 
 def build_sales_order_item_row(plot, warehouse, delivery_date):
-	item_code = PLOT_TYPE_TO_ITEM.get(plot.plot_type)
-	if not item_code:
-		frappe.throw(f"No item is mapped for plot type {plot.plot_type}.")
+	item_code = get_plot_item_code(plot.plot_type)
 
 	item = frappe.db.get_value(
 		"Item",
