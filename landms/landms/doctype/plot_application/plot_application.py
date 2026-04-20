@@ -32,6 +32,23 @@ class PlotApplication(Document):
 			)
 
 	def on_submit(self):
+		if flt(self.application_fee) <= 0:
+			# Fee is waived — fast-forward to the same end-state the paid flow
+			# produces (status=Paid, expiry stamped, plot Pending Advance, SO
+			# auto-created) so the user doesn't need to record a dummy fee PE.
+			payment_date = today()
+			self.db_set("status", "Paid")
+			self.db_set("payment_date", payment_date)
+			self.db_set("expiry_date",
+			            add_days(payment_date, int(self.validity_days or 7)))
+			if self.plot and frappe.db.get_value(
+				"Plot Master", self.plot, "status"
+			) == "Available":
+				frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
+				self._sync_land_acquisition_summary()
+			self.create_sales_order(notify=0)
+			return
+
 		self.db_set("status", "Submitted")
 		if not self.plot:
 			return
@@ -121,8 +138,6 @@ class PlotApplication(Document):
 		self.application_fee      = flt(settings.application_fee_amount)
 		self.unpaid_validity_days = int(settings.unpaid_application_expiry_days or 3)
 		self.validity_days        = int(settings.application_fee_validity_days or 7)
-		if not self.application_fee:
-			frappe.throw("Application Fee Amount is not configured in LandMS Settings.")
 
 	def _lock_plot_row(self):
 		"""Serialize submit/payment operations per plot to reduce race conditions."""
@@ -177,6 +192,9 @@ class PlotApplication(Document):
 		    (partial/full payment on the plot SI) — the Plot Contract owns it now
 		  - submitted SO with no payment yet: cancel it
 		"""
+		if self.flags.get("from_sales_order_cancel"):
+			# SO is already cancelling this PA — don't call back into SO.cancel().
+			return
 		if not self.sales_order or not frappe.db.exists("Sales Order", self.sales_order):
 			return
 

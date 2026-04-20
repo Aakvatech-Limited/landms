@@ -131,16 +131,27 @@ def submit_sales_order(doc, method=None):
 
 
 def before_cancel_sales_order(doc, method=None):
-	"""Delete the draft Plot Contract before Frappe's link-check runs.
+	"""Clean up links + forfeit non-refundable payments before Frappe's link-check.
 
 	Frappe v15 blocks cancellation if any submittable doc (even in Draft state)
-	has a Link field pointing to the Sales Order. The Plot Contract is
-	submittable and links here, so it must be removed in before_cancel —
-	which fires before the link validation — not in on_cancel.
+	has a Link field pointing to the Sales Order. Plot Contract and Plot
+	Application both qualify, so we:
+	  - Post forfeiture JE (if the contract is still Draft and had payments)
+	    while the contract still exists, since we read its total_paid.
+	  - Clear the Plot Application backlink so its submitted-state link doesn't
+	    block SO cancel.
+	  - Delete the draft Plot Contract.
+	  - When forfeiture JE is in play the Plot SI is deliberately left submitted
+	    as an audit trail; tell Frappe to skip the SI link check so SO cancel
+	    is not blocked (mirrors the termination flow).
 	"""
 	if not _is_landms_sales_order(doc):
 		return
+	_post_draft_contract_forfeiture_je(doc)
+	_clear_application_sales_order_link(doc)
 	_delete_draft_plot_contract(doc)
+	if doc.get("forfeiture_entry"):
+		doc.flags.ignore_links = True
 
 
 def cancel_sales_order(doc, method=None):
@@ -162,6 +173,7 @@ def cancel_sales_order(doc, method=None):
 				f"Cancellation aborted. Detail: {result.get('message')}"
 			)
 
+	_cancel_plot_application(doc)
 	_release_plot_if_no_active_application(doc)
 
 
@@ -478,16 +490,27 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		_link_plot_invoice_to_contract(contract_name, existing_invoice_name)
 		return existing_invoice_name
 
-	existing = frappe.db.get_value(
-		"Sales Invoice",
-		{
-			"plot": doc.plot,
-			"is_plot_sale_invoice": 1,
-			"is_return": 0,
-			"docstatus": 1,
-		},
-		"name",
+	# Find an existing plot SI for THIS customer+plot whose SO is still active.
+	# Audit-trail SIs from cancelled SOs (left ds=1 by Path B) must not be reused:
+	# they belong to a different sale (possibly a different customer, and certainly
+	# a different SO) and would cross-contaminate payment allocation.
+	candidates = frappe.db.sql(
+		"""
+		SELECT si.name
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+		LEFT JOIN `tabSales Order` so ON so.name = sii.sales_order
+		WHERE si.plot = %s
+		  AND si.customer = %s
+		  AND si.is_plot_sale_invoice = 1
+		  AND si.is_return = 0
+		  AND si.docstatus = 1
+		  AND (so.name IS NULL OR so.docstatus != 2)
+		LIMIT 1
+		""",
+		(doc.plot, doc.customer),
 	)
+	existing = candidates[0][0] if candidates else None
 	if existing:
 		_link_plot_invoice_to_sales_order(doc, existing)
 		_link_plot_invoice_to_contract(contract_name, existing)
@@ -691,6 +714,9 @@ def _block_cancel_if_paid(doc):
 	# Termination flow already handles accounting via forfeiture JE
 	if doc.flags.get("_from_termination"):
 		return
+	# Draft-contract forfeiture already handled in before_cancel: safe to cancel.
+	if doc.get("forfeiture_entry"):
+		return
 	plot_invoice = doc.get("plot_sales_invoice")
 	if plot_invoice and frappe.db.exists("Sales Invoice", plot_invoice):
 		outstanding, grand_total = frappe.db.get_value(
@@ -709,6 +735,10 @@ def _block_cancel_if_paid(doc):
 def _cancel_unpaid_plot_sales_invoice(doc):
 	# Termination flow already handled the SI before calling SO cancel
 	if doc.flags.get("_from_termination"):
+		return
+	# Draft-contract forfeiture posted: SI stays submitted as audit trail,
+	# matching the termination pattern for paid invoices.
+	if doc.get("forfeiture_entry"):
 		return
 	invoice_name = doc.get("plot_sales_invoice")
 	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
@@ -746,6 +776,85 @@ def _delete_draft_plot_contract(doc):
 	for name in candidates:
 		if frappe.db.get_value("Plot Contract", name, "docstatus") == 0:
 			frappe.delete_doc("Plot Contract", name, ignore_permissions=True, force=True)
+
+
+def _find_draft_plot_contract(doc):
+	if doc.get("plot_contract") and frappe.db.exists("Plot Contract", doc.plot_contract):
+		if frappe.db.get_value("Plot Contract", doc.plot_contract, "docstatus") == 0:
+			return doc.plot_contract
+	rows = frappe.db.get_all(
+		"Plot Contract",
+		filters={"sales_order": doc.name, "docstatus": 0},
+		pluck="name",
+		limit=1,
+	)
+	return rows[0] if rows else None
+
+
+def _post_draft_contract_forfeiture_je(doc):
+	"""Post forfeiture JE for payments received before the Plot Contract was submitted.
+
+	Mirrors `plot_contract._post_termination_journal_entry` but runs from the SO
+	side when the user cancels an SO whose contract never reached submit. Moves
+	`total_paid` from Customer Advance (liability) to Forfeited Deposits (income).
+	"""
+	if doc.flags.get("_from_termination"):
+		return
+	if doc.get("forfeiture_entry"):
+		return
+
+	contract_name = _find_draft_plot_contract(doc)
+	if not contract_name:
+		return
+
+	total_paid = flt(frappe.db.get_value("Plot Contract", contract_name, "total_paid") or 0)
+	if total_paid <= 0:
+		return
+
+	settings = frappe.get_single("LandMS Settings")
+	je = frappe.get_doc({
+		"doctype": "Journal Entry",
+		"posting_date": today(),
+		"company": settings.company,
+		"voucher_type": "Journal Entry",
+		"user_remark": (
+			f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
+			f"funds forfeited (no refund). Customer {doc.customer}, Plot {doc.get('plot') or ''}."
+		),
+		"accounts": [
+			{
+				"account": settings.customer_advance_account,
+				"debit_in_account_currency": total_paid,
+				"party_type": "Customer",
+				"party": doc.customer,
+			},
+			{
+				"account": settings.forfeited_deposits_account,
+				"credit_in_account_currency": total_paid,
+			},
+		],
+	})
+	je.insert(ignore_permissions=True)
+	je.submit()
+	doc.db_set("forfeiture_entry", je.name)
+
+
+def _cancel_plot_application(doc):
+	"""Cascade-cancel the linked Plot Application so the plot is released.
+
+	Uses `from_sales_order_cancel` flag so the PA's own on_cancel does not try
+	to cancel this Sales Order back (circular re-entry guard).
+	"""
+	if doc.flags.get("_from_termination"):
+		return  # Termination flow handles PA cancellation on the contract side.
+	app_name = doc.get("plot_application")
+	if not app_name or not frappe.db.exists("Plot Application", app_name):
+		return
+	if frappe.db.get_value("Plot Application", app_name, "docstatus") != 1:
+		return
+	app = frappe.get_doc("Plot Application", app_name)
+	app.flags.from_sales_order_cancel = True
+	app.cancel()
 
 
 def _release_plot_if_no_active_application(doc):

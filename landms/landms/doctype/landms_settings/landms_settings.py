@@ -61,8 +61,8 @@ class LandMSSettings(Document):
 			)
 
 	def _validate_fee_settings(self):
-		if flt(self.application_fee_amount) <= 0:
-			frappe.throw("Application Fee Amount must be greater than zero.")
+		if flt(self.application_fee_amount) < 0:
+			frappe.throw("Application Fee Amount cannot be negative. Set 0 to waive the fee.")
 		if cint(self.unpaid_application_expiry_days) < 1:
 			frappe.throw("Unpaid Application Expiry Days must be at least 1.")
 		if cint(self.application_fee_validity_days) < 1:
