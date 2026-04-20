@@ -161,7 +161,15 @@ def ipn_callback() -> dict[str, Any]:
 				request_payload=raw_payload,
 				response_payload={"message": "Duplicate IPN — already processed."},
 			)
-			_finalize("Duplicate", message="Duplicate IPN — already processed.", log_name=log_name or "")
+			# Only mark Duplicate if the winner hasn't already set it to Processed.
+			# Late-arriving workers (woke after the lock) would otherwise overwrite
+			# the winning request's Processed status and blank the linked documents.
+			current_status = (
+				frappe.db.get_value("TCB Payment Notification", notification_name, "status")
+				if notification_name else None
+			)
+			if current_status != "Processed":
+				_finalize("Duplicate", message="Duplicate IPN — already processed.", log_name=log_name or "")
 			return {"ok": True, "status": "Ignored", "message": "Duplicate IPN."}
 
 		# 5. Log Only — log and exit.
