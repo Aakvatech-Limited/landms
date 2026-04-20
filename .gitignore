@@ -99,3 +99,4 @@ build/
 landms/landms/cleanup.py
 DOCUMENTATION.md
 TCB_INTEGRATION.md
+docs/

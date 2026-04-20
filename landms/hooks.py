@@ -7,6 +7,11 @@ app_license = "mit"
 
 required_apps = ["erpnext"]
 
+doctype_js = {
+    "Purchase Order":   "public/js/purchase_order.js",
+    "Purchase Invoice": "public/js/purchase_invoice.js",
+}
+
 after_install = "landms.install.after_install"
 
 after_migrate = ["landms.utils.import_setup_data"]
