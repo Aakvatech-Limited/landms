@@ -1,0 +1,6 @@
+[
+ {"doctype": "Custom Field", "dt": "Supplier", "module": "LandMS", "fieldname": "lms_supplier_section", "fieldtype": "Section Break", "label": "Land Seller Details", "insert_after": "amended_from", "collapsible": 1},
+ {"doctype": "Custom Field", "dt": "Supplier", "module": "LandMS", "fieldname": "is_land_seller", "fieldtype": "Check", "label": "Is Land Seller", "insert_after": "lms_supplier_section", "default": "0"},
+ {"doctype": "Custom Field", "dt": "Supplier", "module": "LandMS", "fieldname": "seller_id_type", "fieldtype": "Select", "label": "Seller ID Type", "options": "\nNational ID\nPassport\nVoter ID\nOther", "insert_after": "is_land_seller", "depends_on": "eval:doc.is_land_seller"},
+ {"doctype": "Custom Field", "dt": "Supplier", "module": "LandMS", "fieldname": "seller_id_number", "fieldtype": "Data", "label": "Seller ID Number", "insert_after": "seller_id_type", "depends_on": "eval:doc.is_land_seller"}
+]
