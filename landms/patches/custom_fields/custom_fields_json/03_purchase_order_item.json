@@ -1,0 +1,12 @@
+[
+  {
+    "doctype": "Custom Field",
+    "dt": "Purchase Order Item",
+    "module": "LandMS",
+    "fieldname": "land_acquisition",
+    "fieldtype": "Link",
+    "label": "Land Acquisition",
+    "options": "Land Acquisition",
+    "insert_after": "description"
+  }
+]
