@@ -1,0 +1,55 @@
+[
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Invoice",
+    "module": "LandMS",
+    "fieldname": "lms_si_section",
+    "fieldtype": "Section Break",
+    "label": "Land Management",
+    "insert_after": "amended_from",
+    "collapsible": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Invoice",
+    "module": "LandMS",
+    "fieldname": "plot",
+    "fieldtype": "Link",
+    "label": "Plot",
+    "options": "Plot Master",
+    "insert_after": "lms_si_section",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Invoice",
+    "module": "LandMS",
+    "fieldname": "land_acquisition",
+    "fieldtype": "Link",
+    "label": "Land Acquisition",
+    "options": "Land Acquisition",
+    "insert_after": "plot",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Invoice",
+    "module": "LandMS",
+    "fieldname": "plot_contract",
+    "fieldtype": "Data",
+    "label": "Plot Contract",
+    "insert_after": "land_acquisition",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Invoice",
+    "module": "LandMS",
+    "fieldname": "is_plot_sale_invoice",
+    "fieldtype": "Check",
+    "label": "Is Plot Sale Invoice",
+    "insert_after": "plot_contract",
+    "read_only": 1,
+    "default": "0"
+  }
+]

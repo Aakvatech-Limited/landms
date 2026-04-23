@@ -1,0 +1,207 @@
+[
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_section",
+    "fieldtype": "Section Break",
+    "label": "Land Management",
+    "insert_after": "amended_from"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "plot_application",
+    "fieldtype": "Link",
+    "label": "Plot Application",
+    "options": "Plot Application",
+    "insert_after": "lms_section",
+    "reqd": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "plot",
+    "fieldtype": "Link",
+    "label": "Plot",
+    "options": "Plot Master",
+    "insert_after": "plot_application",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "land_acquisition",
+    "fieldtype": "Link",
+    "label": "Land Acquisition",
+    "options": "Land Acquisition",
+    "insert_after": "plot",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_col_1",
+    "fieldtype": "Column Break",
+    "insert_after": "land_acquisition"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "acquisition_name",
+    "fieldtype": "Data",
+    "label": "Acquisition Name",
+    "insert_after": "lms_col_1",
+    "read_only": 1,
+    "hidden": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "booking_fee_percent",
+    "fieldtype": "Percent",
+    "label": "Booking Fee %",
+    "insert_after": "acquisition_name",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "government_share_percent",
+    "fieldtype": "Percent",
+    "label": "Government Share %",
+    "insert_after": "booking_fee_percent",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_terms_section",
+    "fieldtype": "Section Break",
+    "label": "Payment Terms",
+    "insert_after": "government_share_percent",
+    "depends_on": "eval:doc.plot_application"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "payment_completion_days",
+    "fieldtype": "Int",
+    "label": "Payment Completion (Days)",
+    "insert_after": "lms_terms_section",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_terms_col",
+    "fieldtype": "Column Break",
+    "insert_after": "payment_completion_days"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "payment_deadline",
+    "fieldtype": "Date",
+    "label": "Payment Deadline",
+    "insert_after": "lms_terms_col",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "apply_auto_cancellation",
+    "fieldtype": "Check",
+    "label": "Apply Auto-Cancellation",
+    "insert_after": "payment_deadline",
+    "default": "0",
+    "description": "When checked, the Sales Order and Plot Contract will be automatically cancelled if installment deadlines are missed. Uncheck to allow the customer to pay beyond the deadline."
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_ref_section",
+    "fieldtype": "Section Break",
+    "label": "LMS References",
+    "insert_after": "apply_auto_cancellation",
+    "depends_on": "eval:doc.docstatus>=1"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "control_number",
+    "fieldtype": "Data",
+    "label": "TCB Control Number",
+    "insert_after": "lms_ref_section",
+    "read_only": 1,
+    "search_index": 1,
+    "unique": 1,
+    "no_copy": 1,
+    "in_list_view": 1,
+    "in_standard_filter": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "plot_contract",
+    "fieldtype": "Data",
+    "label": "Plot Contract",
+    "insert_after": "control_number",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "lms_ref_col",
+    "fieldtype": "Column Break",
+    "insert_after": "plot_contract"
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "plot_sales_invoice",
+    "fieldtype": "Data",
+    "label": "Plot Sales Invoice",
+    "insert_after": "lms_ref_col",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "plot_outstanding_amount",
+    "fieldtype": "Currency",
+    "label": "Plot Outstanding Amount",
+    "insert_after": "plot_sales_invoice",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "dt": "Sales Order",
+    "module": "LandMS",
+    "fieldname": "forfeiture_entry",
+    "fieldtype": "Link",
+    "options": "Journal Entry",
+    "label": "Forfeiture Entry",
+    "insert_after": "plot_outstanding_amount",
+    "read_only": 1,
+    "description": "Journal Entry that forfeited non-refundable payments when this SO was cancelled before the Plot Contract was submitted."
+  }
+]

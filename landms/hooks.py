@@ -8,13 +8,17 @@ app_license = "mit"
 required_apps = ["erpnext"]
 
 doctype_js = {
+    "Sales Order":      "public/js/sales_order.js",
     "Purchase Order":   "public/js/purchase_order.js",
     "Purchase Invoice": "public/js/purchase_invoice.js",
 }
 
 after_install = "landms.install.after_install"
 
-after_migrate = ["landms.utils.import_setup_data"]
+after_migrate = [
+	"landms.patches.custom_fields.create_custom_fields.execute",
+	"landms.patches.property_setter.create_property_setters.execute",
+]
 
 doc_events = {
 	"Purchase Order": {
