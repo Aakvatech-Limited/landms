@@ -162,6 +162,14 @@
    "reqd": 1
   },
   {
+   "fieldname": "forfeiture_percentage",
+   "fieldtype": "Percent",
+   "label": "Forfeiture Percentage",
+   "default": "100",
+   "reqd": 1,
+   "description": "Percentage of total paid amount to forfeit on contract termination. The remainder stays in Customer Advance for refund."
+  },
+  {
    "fieldname": "tab_application_fee",
    "fieldtype": "Tab Break",
    "label": "Application Fee"
