@@ -523,11 +523,14 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		doc.transaction_date or posting_date, cint(doc.payment_completion_days or 0)
 	)
 	invoice.ignore_default_payment_terms_template = 1
-	invoice.allocate_advances_automatically = 1
+	invoice.allocate_advances_automatically = 0
 	invoice.plot = doc.plot
 	invoice.land_acquisition = doc.land_acquisition
 	invoice.plot_contract = contract_name or ""
 	invoice.is_plot_sale_invoice = 1
+	invoice.update_stock = 0
+	invoice.enabled_auto_create_delivery_notes = 0
+	invoice.is_not_vfd_invoice = 1
 	invoice.remarks = f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}"
 
 	# Copy payment schedule from SO
@@ -810,6 +813,9 @@ def _post_draft_contract_forfeiture_je(doc):
 		return
 
 	settings = frappe.get_single("LandMS Settings")
+	forfeiture_pct = flt(settings.forfeiture_percentage or 100)
+	forfeited_amount = total_paid * forfeiture_pct / 100.0
+
 	je = frappe.get_doc({
 		"doctype": "Journal Entry",
 		"posting_date": today(),
@@ -817,18 +823,19 @@ def _post_draft_contract_forfeiture_je(doc):
 		"voucher_type": "Journal Entry",
 		"user_remark": (
 			f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
-			f"funds forfeited (no refund). Customer {doc.customer}, Plot {doc.get('plot') or ''}."
+			f"{forfeiture_pct:.0f}% of paid amount forfeited. "
+			f"Customer {doc.customer}, Plot {doc.get('plot') or ''}."
 		),
 		"accounts": [
 			{
 				"account": settings.customer_advance_account,
-				"debit_in_account_currency": total_paid,
+				"debit_in_account_currency": forfeited_amount,
 				"party_type": "Customer",
 				"party": doc.customer,
 			},
 			{
 				"account": settings.forfeited_deposits_account,
-				"credit_in_account_currency": total_paid,
+				"credit_in_account_currency": forfeited_amount,
 			},
 		],
 	})

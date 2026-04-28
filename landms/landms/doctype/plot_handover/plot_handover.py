@@ -108,6 +108,7 @@ class PlotHandover(Document):
 		dn.remarks = f"Plot handover {self.name} for contract {self.contract} / plot {self.plot}"
 		dn.insert(ignore_permissions=True)
 		dn.submit()
+		frappe.db.commit()
 		return dn.name
 
 	def _make_delivery_note_from_sales_order(self, sales_order_name, plot):

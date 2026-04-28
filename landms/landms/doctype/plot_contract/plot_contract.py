@@ -643,25 +643,28 @@ class PlotContract(Document):
 		if total_paid <= 0:
 			return None
 
+		forfeiture_pct = flt(settings.forfeiture_percentage or 100)
+		forfeited_amount = total_paid * forfeiture_pct / 100.0
+
 		je = frappe.get_doc({
 			"doctype": "Journal Entry",
 			"posting_date": today(),
 			"company": settings.company,
 			"voucher_type": "Journal Entry",
 			"user_remark": (
-				f"Contract termination — funds forfeited (no refund). "
+				f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited. "
 				f"Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
 			),
 			"accounts": [
 				{
 					"account": settings.customer_advance_account,
-					"debit_in_account_currency": total_paid,
+					"debit_in_account_currency": forfeited_amount,
 					"party_type": "Customer",
 					"party": self.customer,
 				},
 				{
 					"account": settings.forfeited_deposits_account,
-					"credit_in_account_currency": total_paid,
+					"credit_in_account_currency": forfeited_amount,
 				},
 			],
 		})
@@ -711,8 +714,10 @@ class PlotContract(Document):
 		msg = f"Contract terminated. Plot {self.plot} is now Available for new contracts."
 		if je_name:
 			total_paid = flt(self.total_paid)
+			forfeiture_pct = flt(settings.forfeiture_percentage or 100)
+			forfeited_amount = total_paid * forfeiture_pct / 100.0
 			msg += (
-				f" TZS {total_paid:,.0f} paid by customer is forfeited (no refund) — "
+				f" TZS {forfeited_amount:,.0f} ({forfeiture_pct:.0f}% of TZS {total_paid:,.0f} paid) forfeited — "
 				f"Journal Entry: {je_name}."
 			)
 		frappe.msgprint(msg, indicator="orange", alert=True)
