@@ -1,0 +1,17 @@
+{
+ "chart_name": "Monthly Revenue",
+ "chart_type": "Report",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "filters_json": "{}",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "LandMS",
+ "name": "Monthly Revenue",
+ "number_of_groups": 0,
+ "report_name": "LandMS Revenue",
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 1,
+ "y_axis": []
+}
