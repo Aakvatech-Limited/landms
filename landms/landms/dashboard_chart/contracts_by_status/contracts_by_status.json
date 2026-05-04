@@ -1,0 +1,19 @@
+{
+ "chart_name": "Contracts by Status",
+ "chart_type": "Group By",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Plot Contract",
+ "filters_json": "[[\"Plot Contract\",\"docstatus\",\"=\",\"1\"]]",
+ "group_by_based_on": "contract_status",
+ "group_by_type": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "LandMS",
+ "name": "Contracts by Status",
+ "number_of_groups": 0,
+ "timeseries": 0,
+ "type": "Bar",
+ "use_report_chart": 0,
+ "y_axis": []
+}

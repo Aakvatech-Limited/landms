@@ -1,0 +1,21 @@
+{
+ "chart_name": "Monthly Collections",
+ "chart_type": "Sum",
+ "based_on": "posting_date",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Payment Entry",
+ "filters_json": "[[\"Payment Entry\",\"payment_type\",\"=\",\"Receive\"],[\"Payment Entry\",\"docstatus\",\"=\",\"1\"]]",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "LandMS",
+ "name": "Monthly Collections",
+ "number_of_groups": 0,
+ "time_interval": "Monthly",
+ "timespan": "Last Year",
+ "timeseries": 1,
+ "type": "Line",
+ "use_report_chart": 0,
+ "value_based_on": "paid_amount",
+ "y_axis": []
+}

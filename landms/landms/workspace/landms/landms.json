@@ -1,0 +1,357 @@
+{
+ "charts": [
+  {"chart_name": "Plots by Status", "label": "Plots by Status"},
+  {"chart_name": "Contracts by Status", "label": "Contracts by Status"},
+  {"chart_name": "Monthly Collections", "label": "Monthly Collections"},
+  {"chart_name": "Monthly Revenue", "label": "Monthly Revenue"}
+ ],
+ "content": "[{\"id\":\"lms_hc\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Land Management System </b></span>\",\"col\":12}},{\"id\":\"lms_nc1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Available Plots\",\"col\":3}},{\"id\":\"lms_nc2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Reserved Plots\",\"col\":3}},{\"id\":\"lms_nc3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Ongoing Contracts\",\"col\":3}},{\"id\":\"lms_nc4\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"LANDMS Cash Collected\",\"col\":3}},{\"id\":\"lms_sp_nc\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"lms_ch1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Plots by Status\",\"col\":6}},{\"id\":\"lms_ch2\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Contracts by Status\",\"col\":6}},{\"id\":\"lms_ch3\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Monthly Collections\",\"col\":6}},{\"id\":\"lms_ch4\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Monthly Revenue\",\"col\":6}},{\"id\":\"lms_sp0\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"lms_h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"lms_sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Land Acquisition\",\"col\":3}},{\"id\":\"lms_sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Master\",\"col\":3}},{\"id\":\"lms_sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Application\",\"col\":3}},{\"id\":\"lms_sc4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Contract\",\"col\":3}},{\"id\":\"lms_sc5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Plot Handover\",\"col\":3}},{\"id\":\"lms_sc6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"lms_sc7\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"LandMS Collections\",\"col\":3}},{\"id\":\"lms_sc8\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"LandMS Revenue\",\"col\":3}},{\"id\":\"lms_sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"lms_h2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Land Management</b></span>\",\"col\":12}},{\"id\":\"lms_c1\",\"type\":\"card\",\"data\":{\"card_name\":\"Land Acquisition\",\"col\":4}},{\"id\":\"lms_c2\",\"type\":\"card\",\"data\":{\"card_name\":\"Plot Management\",\"col\":4}},{\"id\":\"lms_c3\",\"type\":\"card\",\"data\":{\"card_name\":\"Sales\",\"col\":4}},{\"id\":\"lms_sp2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"lms_h3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"lms_c4\",\"type\":\"card\",\"data\":{\"card_name\":\"LandMS Reports\",\"col\":4}},{\"id\":\"lms_sp3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"lms_h4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Settings</b></span>\",\"col\":12}},{\"id\":\"lms_c5\",\"type\":\"card\",\"data\":{\"card_name\":\"LandMS Settings\",\"col\":4}}]",
+ "number_cards": [
+  {"number_card_name": "LANDMS Available Plots", "label": "LANDMS Available Plots"},
+  {"number_card_name": "LANDMS Reserved Plots", "label": "LANDMS Reserved Plots"},
+  {"number_card_name": "LANDMS Ongoing Contracts", "label": "LANDMS Ongoing Contracts"},
+  {"number_card_name": "LANDMS Cash Collected", "label": "LANDMS Cash Collected"}
+ ],
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "stock",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Land Management System",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Land Acquisition",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Land Acquisition",
+   "link_count": 0,
+   "link_to": "Land Acquisition",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Management",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Master",
+   "link_count": 0,
+   "link_to": "Plot Master",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Application",
+   "link_count": 0,
+   "link_to": "Plot Application",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Order",
+   "link_count": 0,
+   "link_to": "Sales Order",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Contract",
+   "link_count": 0,
+   "link_to": "Plot Contract",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plot Handover",
+   "link_count": 0,
+   "link_to": "Plot Handover",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Invoice",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Entry",
+   "link_count": 0,
+   "link_to": "Payment Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LandMS Reports",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Collections",
+   "link_count": 0,
+   "link_to": "LandMS Collections",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Revenue",
+   "link_count": 0,
+   "link_to": "LandMS Revenue",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Revenue Recognition",
+   "link_count": 0,
+   "link_to": "LandMS Revenue Recognition",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Plot Inventory",
+   "link_count": 0,
+   "link_to": "LandMS Plot Inventory",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Sales Pipeline",
+   "link_count": 0,
+   "link_to": "LandMS Sales Pipeline",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Government Payable",
+   "link_count": 0,
+   "link_to": "LandMS Government Payable",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Unearned Revenue",
+   "link_count": 0,
+   "link_to": "LandMS Unearned Revenue",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Business Trend",
+   "link_count": 0,
+   "link_to": "LandMS Business Trend",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LandMS Executive Dashboard",
+   "link_count": 0,
+   "link_to": "LandMS Executive Dashboard",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LandMS Settings",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LandMS Settings",
+   "link_count": 0,
+   "link_to": "LandMS Settings",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Integration Settings",
+   "link_count": 0,
+   "link_to": "TCB Integration Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Control Number",
+   "link_count": 0,
+   "link_to": "TCB Control Number",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "TCB Payment Notification",
+   "link_count": 0,
+   "link_to": "TCB Payment Notification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "module": "LandMS",
+ "name": "LandMS",
+ "title": "LandMS",
+ "public": 1,
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "format": "{} Active",
+   "label": "Land Acquisition",
+   "link_to": "Land Acquisition",
+   "stats_filter": "{\"status\": [\"in\", [\"Approved\", \"Subdivided\"]]}",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "format": "{} Available",
+   "label": "Plot Master",
+   "link_to": "Plot Master",
+   "stats_filter": "{\"status\": \"Available\"}",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "label": "Plot Application",
+   "link_to": "Plot Application",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "label": "Plot Contract",
+   "link_to": "Plot Contract",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "label": "Plot Handover",
+   "link_to": "Plot Handover",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "label": "Sales Order",
+   "link_to": "Sales Order",
+   "type": "DocType"
+  },
+  {
+   "label": "LandMS Collections",
+   "link_to": "LandMS Collections",
+   "type": "Report"
+  },
+  {
+   "label": "LandMS Revenue",
+   "link_to": "LandMS Revenue",
+   "type": "Report"
+  }
+ ]
+}

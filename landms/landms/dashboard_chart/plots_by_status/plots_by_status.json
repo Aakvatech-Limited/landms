@@ -1,0 +1,19 @@
+{
+ "chart_name": "Plots by Status",
+ "chart_type": "Group By",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Plot Master",
+ "filters_json": "[[\"Plot Master\",\"docstatus\",\"=\",\"1\"]]",
+ "group_by_based_on": "status",
+ "group_by_type": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "LandMS",
+ "name": "Plots by Status",
+ "number_of_groups": 0,
+ "timeseries": 0,
+ "type": "Donut",
+ "use_report_chart": 0,
+ "y_axis": []
+}
