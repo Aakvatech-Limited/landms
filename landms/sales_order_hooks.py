@@ -333,6 +333,8 @@ def _ensure_single_sales_order_for_application(doc, application):
 def _ensure_items(doc, plot, settings):
 	delivery_date = add_days(doc.transaction_date or today(), cint(doc.payment_completion_days or 0))
 	row_values = build_sales_order_item_row(plot, settings.plot_inventory_warehouse, delivery_date)
+	row_values["cost_center"] = settings.cost_center
+	row_values["land_acquisition"] = doc.land_acquisition
 
 	if len(doc.items or []) == 1 and doc.items[0].get("item_code") == row_values["item_code"]:
 		row = doc.items[0]
@@ -532,6 +534,20 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 	invoice.enabled_auto_create_delivery_notes = 0
 	invoice.is_not_vfd_invoice = 1
 	invoice.remarks = f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}"
+
+	# Deferred revenue: all customer payments sit in Customer Advances (liability)
+	# until the contract is fully paid. Revenue is recognised only at completion
+	# via the JE in plot_contract._post_completion_entries — never on the SI itself.
+	settings = frappe.get_single("LandMS Settings")
+	customer_advance_account = settings.customer_advance_account
+	cost_center = settings.cost_center
+	for item in invoice.get("items") or []:
+		item.income_account = customer_advance_account
+		item.cost_center = cost_center
+		item.enable_deferred_revenue = 0
+		item.deferred_revenue_account = ""
+		item.service_start_date = None
+		item.service_end_date = None
 
 	# Copy payment schedule from SO
 	invoice.set("payment_schedule", [])

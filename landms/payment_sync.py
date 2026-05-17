@@ -471,25 +471,86 @@ def _link_invoice_items_to_sales_order_rows(so, invoice):
 
 
 def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice):
+	"""Sync SO payment schedule rows using booking_fee_percent and SI header
+	outstanding_amount as the source of truth.
+
+	SI row-level paid_amount/outstanding are not trusted because ERPNext's
+	set_payment_schedule resets them on every SI validate. The SI header
+	outstanding_amount is always correct regardless of row state.
+	booking_fee_percent on the SO never drifts — it is set once at SO creation
+	from the Land Acquisition and never modified.
+	"""
 	source_rows = invoice.get("payment_schedule") or []
 	target_rows = parent_doc.get("payment_schedule") or []
-	limit = min(len(source_rows), len(target_rows))
+	if not target_rows:
+		return
 
-	for idx in range(limit):
-		source = source_rows[idx]
-		target = target_rows[idx]
+	grand_total = flt(invoice.grand_total)
+	if grand_total <= 0:
+		return
+
+	total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
+	booking_fee_percent = flt(parent_doc.get("booking_fee_percent") or 0)
+
+	# Single row — full amount, no advance split
+	if len(target_rows) == 1 or booking_fee_percent <= 0 or booking_fee_percent >= 100:
+		due_date = source_rows[0].due_date if source_rows else target_rows[0].due_date
+		outstanding = max(0.0, grand_total - total_paid)
 		frappe.db.set_value(
-			"Payment Schedule",
-			target.name,
+			"Payment Schedule", target_rows[0].name,
 			{
-				"due_date": source.due_date,
-				"invoice_portion": flt(source.invoice_portion),
-				"payment_amount": flt(source.payment_amount),
-				"base_payment_amount": flt(source.base_payment_amount or 0),
-				"paid_amount": flt(source.paid_amount or 0),
-				"outstanding": flt(source.outstanding or 0),
-				"base_paid_amount": flt(source.base_paid_amount or 0),
-				"base_outstanding": flt(source.base_outstanding or 0),
+				"due_date":            due_date,
+				"invoice_portion":     100.0,
+				"payment_amount":      grand_total,
+				"base_payment_amount": grand_total,
+				"paid_amount":         total_paid,
+				"outstanding":         outstanding,
+				"base_paid_amount":    total_paid,
+				"base_outstanding":    outstanding,
+			},
+			update_modified=True,
+		)
+		return
+
+	# Two rows: Row 1 = Advance, Row 2 = Balance
+	advance_amount  = flt(grand_total * booking_fee_percent / 100)
+	balance_amount  = flt(grand_total - advance_amount)
+	balance_percent = flt(100.0 - booking_fee_percent)
+
+	row1_paid        = min(total_paid, advance_amount)
+	row1_outstanding = max(0.0, advance_amount - row1_paid)
+	row2_paid        = max(0.0, total_paid - row1_paid)
+	row2_outstanding = max(0.0, balance_amount - row2_paid)
+
+	due_date_1 = source_rows[0].due_date if source_rows else target_rows[0].due_date
+	frappe.db.set_value(
+		"Payment Schedule", target_rows[0].name,
+		{
+			"due_date":            due_date_1,
+			"invoice_portion":     booking_fee_percent,
+			"payment_amount":      advance_amount,
+			"base_payment_amount": advance_amount,
+			"paid_amount":         row1_paid,
+			"outstanding":         row1_outstanding,
+			"base_paid_amount":    row1_paid,
+			"base_outstanding":    row1_outstanding,
+		},
+		update_modified=True,
+	)
+
+	if len(target_rows) >= 2:
+		due_date_2 = source_rows[1].due_date if len(source_rows) > 1 else target_rows[1].due_date
+		frappe.db.set_value(
+			"Payment Schedule", target_rows[1].name,
+			{
+				"due_date":            due_date_2,
+				"invoice_portion":     balance_percent,
+				"payment_amount":      balance_amount,
+				"base_payment_amount": balance_amount,
+				"paid_amount":         row2_paid,
+				"outstanding":         row2_outstanding,
+				"base_paid_amount":    row2_paid,
+				"base_outstanding":    row2_outstanding,
 			},
 			update_modified=True,
 		)

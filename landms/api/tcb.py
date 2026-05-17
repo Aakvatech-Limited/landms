@@ -549,6 +549,11 @@ def _upsert_payment_notification(
 			"raw_payload":      _to_text(raw_payload),
 		})
 		doc.insert(ignore_permissions=True)
+		# Commit immediately so the audit record survives any later rollback
+		# triggered by payment processing errors. The notification is the
+		# canonical record of what TCB sent — it must persist regardless of
+		# whether the payment itself succeeds or fails.
+		frappe.db.commit()
 		return doc.name
 	except Exception:
 		frappe.logger("landms").error(
@@ -566,7 +571,8 @@ def _safe_int(value) -> int | None:
 
 
 def _parse_tcb_datetime(value) -> str | None:
-	"""TCB sends `2020-12-29T15:05:21.000+0300`. Convert to a Frappe-friendly string.
+	"""TCB sends `2020-12-29T15:05:21.000+0300`. Convert to a MySQL-compatible
+	naive datetime string (no timezone offset) for the DATETIME column.
 
 	Falls back to None on parse failure — the field accepts empty values.
 	"""
@@ -574,7 +580,14 @@ def _parse_tcb_datetime(value) -> str | None:
 		return None
 	try:
 		from frappe.utils import get_datetime
-		return str(get_datetime(value))
+		dt = get_datetime(value)
+		if dt is None:
+			return None
+		# Strip timezone info — MySQL DATETIME does not accept offsets.
+		# The value is stored as received (in TCB's local time) without conversion.
+		if hasattr(dt, "replace"):
+			dt = dt.replace(tzinfo=None)
+		return str(dt)[:19]
 	except Exception:
 		return cstr(value)[:30] or None
 

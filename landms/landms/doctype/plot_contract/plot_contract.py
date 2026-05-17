@@ -119,13 +119,9 @@ class PlotContract(Document):
 		if self._is_advance_installment_met(si_doc):
 			return
 
-		advance_expected = 0.0
 		grand_total = flt(si_doc.grand_total)
-		for row in si_doc.get("payment_schedule") or []:
-			advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
-			break
-
-		total_paid = max(0.0, flt(si_doc.grand_total) - flt(si_doc.outstanding_amount))
+		advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
+		total_paid = max(0.0, grand_total - flt(si_doc.outstanding_amount))
 		frappe.throw(
 			f"Cannot submit contract — advance of TZS {advance_expected:,.0f} has not been met. "
 			f"Only TZS {total_paid:,.0f} received so far."
@@ -254,9 +250,7 @@ class PlotContract(Document):
 		advance_expected = 0.0
 		if si_doc:
 			grand_total = flt(si_doc.grand_total)
-			for row in si_doc.get("payment_schedule") or []:
-				advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
-				break
+			advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
 		else:
 			for row in self.payment_schedule:
 				if cint(row.installment_number or 0) == 1:
@@ -283,12 +277,9 @@ class PlotContract(Document):
 		if total_paid <= 0:
 			return False
 
-		# Compute the advance amount from the first schedule row's portion.
-		for row in si_doc.get("payment_schedule") or []:
-			advance_expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
-			if advance_expected > 0:
-				return total_paid >= advance_expected
-			break
+		advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
+		if advance_expected > 0:
+			return total_paid >= advance_expected
 
 		# No schedule rows — any payment counts.
 		return True
@@ -413,13 +404,18 @@ class PlotContract(Document):
 		self.payment_deadline = so_doc.get("payment_deadline")
 
 	def _rebuild_schedule_from_invoice(self, invoice):
-		# Compute expected from the original grand_total * invoice_portion,
-		# NOT from payment_amount which ERPNext recalculates after payments.
 		grand_total = flt(invoice.grand_total)
+		booking_fee_percent = flt(self.booking_fee_percent or 0)
+		total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
+		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		balance_amount = flt(grand_total - advance_amount)
+		row1_paid = min(total_paid, advance_amount)
+		row2_paid = max(0.0, total_paid - row1_paid)
+
 		self.set("payment_schedule", [])
 		for idx, row in enumerate(invoice.get("payment_schedule") or [], start=1):
-			expected = flt(grand_total * flt(row.invoice_portion) / 100) if grand_total else flt(row.payment_amount)
-			paid_amount = flt(row.paid_amount or 0)
+			expected = advance_amount if idx == 1 else balance_amount
+			paid_amount = row1_paid if idx == 1 else row2_paid
 			outstanding = max(0.0, expected - paid_amount)
 			self.append("payment_schedule", {
 				"installment_number": idx,
@@ -437,6 +433,13 @@ class PlotContract(Document):
 	def _sync_schedule_rows_from_invoice(self, invoice, paid_dates):
 		today_date = getdate(today())
 		grand_total = flt(invoice.grand_total)
+		booking_fee_percent = flt(self.booking_fee_percent or 0)
+		total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
+		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		balance_amount = flt(grand_total - advance_amount)
+		row1_paid = min(total_paid, advance_amount)
+		row2_paid = max(0.0, total_paid - row1_paid)
+
 		rows = sorted(self.payment_schedule, key=lambda d: cint(d.installment_number or 0))
 
 		for idx, source in enumerate(invoice.get("payment_schedule") or [], start=1):
@@ -444,15 +447,12 @@ class PlotContract(Document):
 				break
 
 			target = rows[idx - 1]
-			# Preserve the original expected_amount on the contract row.
-			# Only recompute from grand_total * invoice_portion if the
-			# contract row has no expected_amount yet (first sync).
 			existing_expected = flt(target.expected_amount)
 			if existing_expected > 0:
 				expected = existing_expected
 			else:
-				expected = flt(grand_total * flt(source.invoice_portion) / 100) if grand_total else flt(source.payment_amount)
-			paid_amount = flt(source.paid_amount or 0)
+				expected = advance_amount if idx == 1 else balance_amount
+			paid_amount = row1_paid if idx == 1 else row2_paid
 			outstanding = max(0.0, expected - paid_amount)
 			status = self._derive_installment_status(source.due_date, expected, outstanding, today_date=today_date)
 			paid_date = paid_dates.get(idx) if outstanding <= 0 else None
@@ -503,11 +503,12 @@ class PlotContract(Document):
 		return "Advance" if idx == 1 else f"Installment {idx}"
 
 	def _get_paid_dates_by_installment(self, invoice):
-		thresholds = []
-		running = 0.0
-		for row in invoice.get("payment_schedule") or []:
-			running += flt(row.payment_amount)
-			thresholds.append(running)
+		grand_total = flt(invoice.grand_total)
+		booking_fee_percent = flt(self.booking_fee_percent or 0)
+		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		balance_amount = flt(grand_total - advance_amount)
+		schedule = invoice.get("payment_schedule") or []
+		thresholds = [advance_amount + (balance_amount * (i > 0)) for i in range(len(schedule))]
 
 		payment_events = []
 		for advance in invoice.get("advances") or []:
@@ -581,17 +582,23 @@ class PlotContract(Document):
 			"debit_in_account_currency": selling_price,
 			"party_type": "Customer",
 			"party": self.customer,
+			"cost_center": settings.cost_center,
+			"land_acquisition": self.land_acquisition,
 		}]
 
 		if govt_fee > 0:
 			accounts.append({
 				"account": settings.government_payable_account,
 				"credit_in_account_currency": govt_fee,
+				"cost_center": settings.cost_center,
+				"land_acquisition": self.land_acquisition,
 			})
 
 		accounts.append({
 			"account": settings.revenue_account,
 			"credit_in_account_currency": net_revenue,
+			"cost_center": settings.cost_center,
+			"land_acquisition": self.land_acquisition,
 		})
 
 		je = frappe.get_doc({
@@ -661,10 +668,14 @@ class PlotContract(Document):
 					"debit_in_account_currency": forfeited_amount,
 					"party_type": "Customer",
 					"party": self.customer,
+					"cost_center": settings.cost_center,
+					"land_acquisition": self.land_acquisition,
 				},
 				{
 					"account": settings.forfeited_deposits_account,
 					"credit_in_account_currency": forfeited_amount,
+					"cost_center": settings.cost_center,
+					"land_acquisition": self.land_acquisition,
 				},
 			],
 		})

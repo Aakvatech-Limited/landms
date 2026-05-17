@@ -157,6 +157,20 @@
    "depends_on": "eval:doc.message"
   },
   {
+   "fieldname": "rows_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Rows",
+   "depends_on": "eval:doc.status !== 'Draft' && doc.rows && doc.rows.length > 0"
+  },
+  {
+   "fieldname": "rows",
+   "fieldtype": "Table",
+   "label": "Payment Rows",
+   "options": "TCB Reconciliation Log Row",
+   "read_only": 1,
+   "description": "One row per payment returned from TCB. Shows what was applied, ignored, and failed."
+  },
+  {
    "fieldname": "error_section",
    "fieldtype": "Section Break",
    "label": "Error",

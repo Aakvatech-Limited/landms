@@ -106,20 +106,14 @@ function recalculate(frm, la) {
 }
 
 function selling_rate(la, plot_type) {
-    if (!la) return 0;
-    const map = {
-        'Residential': 'residential_selling_price_per_sqm',
-        'Commercial':  'commercial_selling_price_per_sqm',
-        'Mixed Use':   'mixed_use_selling_price_per_sqm',
-    };
-    const field = map[plot_type];
-    return field ? flt(la[field]) : 0;
+    if (!la || !plot_type) return 0;
+    const rates = la.plot_type_rates || [];
+    const row = rates.find(r => r.plot_type === plot_type);
+    return row ? flt(row.selling_price_per_sqm) : 0;
 }
 
 function rate_label(plot_type) {
-    return ({
-        'Residential': 'Residential Selling Price per Sqm',
-        'Commercial':  'Commercial Selling Price per Sqm',
-        'Mixed Use':   'Mixed Use Selling Price per Sqm',
-    })[plot_type] || 'plot-type selling rate';
+    return plot_type
+        ? `${plot_type} selling rate per sqm`
+        : 'plot-type selling rate';
 }
