@@ -9,8 +9,8 @@ frappe.query_reports["LMS Plot Inventory"] = {
 		{
 			fieldname: "plot_type",
 			label: "Plot Type",
-			fieldtype: "Select",
-			options: "\nResidential\nCommercial\nMixed-Use"
+			fieldtype: "Link",
+			options: "Plot Type"
 		},
 		{
 			fieldname: "status",

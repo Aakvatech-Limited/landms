@@ -1,0 +1,42 @@
+{
+ "doctype": "DocType",
+ "name": "Plot Type",
+ "module": "LandMS",
+ "autoname": "field:plot_type_name",
+ "title_field": "plot_type_name",
+ "fields": [
+  {
+   "fieldname": "plot_type_name",
+   "fieldtype": "Data",
+   "label": "Plot Type Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Stock Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "ERPNext item used when this plot type enters inventory on Plot Master submit"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ]
+}

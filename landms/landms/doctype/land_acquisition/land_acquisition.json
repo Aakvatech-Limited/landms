@@ -138,12 +138,12 @@
   {
    "fieldname": "tab_pricing",
    "fieldtype": "Tab Break",
-   "label": "Pricing & Terms"
+   "label": "Pricing"
   },
   {
    "fieldname": "sales_section",
    "fieldtype": "Section Break",
-   "label": "Sales Defaults"
+   "label": "Terms"
   },
   {
    "fieldname": "booking_fee_percent",
@@ -167,23 +167,16 @@
    "default": "30"
   },
   {
-   "fieldname": "col_break_sales",
-   "fieldtype": "Column Break"
+   "fieldname": "plot_type_rates_section",
+   "fieldtype": "Section Break",
+   "label": "Plot Type Rates"
   },
   {
-   "fieldname": "residential_selling_price_per_sqm",
-   "fieldtype": "Currency",
-   "label": "Residential Selling Price per Sqm"
-  },
-  {
-   "fieldname": "commercial_selling_price_per_sqm",
-   "fieldtype": "Currency",
-   "label": "Commercial Selling Price per Sqm"
-  },
-  {
-   "fieldname": "mixed_use_selling_price_per_sqm",
-   "fieldtype": "Currency",
-   "label": "Mixed Use Selling Price per Sqm"
+   "fieldname": "plot_type_rates",
+   "fieldtype": "Table",
+   "label": "Plot Type Rates",
+   "options": "Land Acquisition Plot Type Rate",
+   "description": "Selling price per sqm for each plot type on this land acquisition"
   },
   {
    "fieldname": "tab_costs",

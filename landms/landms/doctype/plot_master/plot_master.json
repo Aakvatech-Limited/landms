@@ -48,10 +48,11 @@
   },
   {
    "fieldname": "plot_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Plot Type",
-   "options": "Residential\nCommercial\nMixed Use",
-   "reqd": 1
+   "options": "Plot Type",
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "status",

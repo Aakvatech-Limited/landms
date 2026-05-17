@@ -17,7 +17,8 @@
     "label": "Plot Application",
     "options": "Plot Application",
     "insert_after": "lms_section",
-    "reqd": 1
+    "reqd": 0,
+    "mandatory_depends_on": "eval:doc.plot"
   },
   {
     "doctype": "Custom Field",

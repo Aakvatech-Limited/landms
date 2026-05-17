@@ -88,4 +88,28 @@ function _render_status_indicator(frm) {
 		__(frm.doc.status),
 		colors[frm.doc.status] || 'gray'
 	);
+
+	// Color-code each row in the Payment Rows child table so the accountant
+	// can immediately see what passed, what was skipped, and what failed.
+	setTimeout(() => {
+		const grid = frm.fields_dict.rows && frm.fields_dict.rows.grid;
+		if (!grid) return;
+
+		const rowColors = {
+			Applied: { bg: '#d3f9d8', color: '#1b7a2e', label: '✓ Applied' },
+			Ignored: { bg: '#fff3cd', color: '#856404', label: '⚠ Ignored' },
+			Failed:  { bg: '#fde8e8', color: '#c0392b', label: '✗ Failed'  },
+		};
+
+		grid.wrapper.find('.grid-row').each(function () {
+			const row_name = $(this).attr('data-name');
+			if (!row_name) return;
+			const row_doc = frappe.get_doc('TCB Reconciliation Log Row', row_name);
+			if (!row_doc) return;
+			const cfg = rowColors[row_doc.row_status];
+			if (!cfg) return;
+			$(this).css({ 'background-color': cfg.bg, 'border-left': `4px solid ${cfg.color}` });
+			$(this).find('[data-fieldname="row_status"]').css({ color: cfg.color, 'font-weight': '700' });
+		});
+	}, 300);
 }
