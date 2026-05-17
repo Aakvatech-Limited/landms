@@ -11,6 +11,23 @@ frappe.ui.form.on('Land Acquisition', {
             return;
         }
 
+        // Cancelled — show Delete button only
+        if (frm.doc.docstatus === 2) {
+            frm.clear_custom_buttons();
+            if (frappe.model.can_delete('Land Acquisition')) {
+                frm.add_custom_button(__('Delete'), function() {
+                    frappe.confirm(__('Permanently delete this Land Acquisition?'), function() {
+                        frappe.call({
+                            method: 'frappe.client.delete',
+                            args: { doctype: 'Land Acquisition', name: frm.doc.name },
+                            callback: function() { frappe.set_route('List', 'Land Acquisition'); }
+                        });
+                    });
+                }).addClass('btn-danger');
+            }
+            return;
+        }
+
         // Workflow status alerts
         if (frm.doc.docstatus === 0 && frm.doc.status === 'Pending Approval') {
             frm.dashboard.set_headline_alert('Waiting for approval', 'orange');

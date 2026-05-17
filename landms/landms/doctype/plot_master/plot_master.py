@@ -6,24 +6,6 @@ from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
 
-PLOT_TYPE_TO_SETTINGS_FIELD = {
-	"Residential": "residential_plot_item",
-	"Commercial":  "commercial_plot_item",
-	"Mixed Use":   "mixed_use_plot_item",
-}
-
-# Plot Type → Land Acquisition selling-rate field
-PLOT_TYPE_TO_RATE_FIELD = {
-	"Residential": "residential_selling_price_per_sqm",
-	"Commercial":  "commercial_selling_price_per_sqm",
-	"Mixed Use":   "mixed_use_selling_price_per_sqm",
-}
-
-PLOT_TYPE_RATE_LABEL = {
-	"Residential": "Residential Selling Price per Sqm",
-	"Commercial":  "Commercial Selling Price per Sqm",
-	"Mixed Use":   "Mixed Use Selling Price per Sqm",
-}
 
 
 class PlotMaster(Document):
@@ -70,21 +52,14 @@ class PlotMaster(Document):
 		la = frappe.db.get_value(
 			"Land Acquisition",
 			self.land_acquisition,
-			[
-				"booking_fee_percent",
-				"government_share_percent",
-				"payment_completion_days",
-				"residential_selling_price_per_sqm",
-				"commercial_selling_price_per_sqm",
-				"mixed_use_selling_price_per_sqm",
-			],
+			["booking_fee_percent", "government_share_percent", "payment_completion_days"],
 			as_dict=True,
 		) or {}
 
-		self.booking_fee_percent     = flt(la.get("booking_fee_percent"))
+		self.booking_fee_percent      = flt(la.get("booking_fee_percent"))
 		self.government_share_percent = flt(la.get("government_share_percent"))
-		self.payment_completion_days = int(la.get("payment_completion_days") or 0)
-		self.selling_price_per_sqm   = get_plot_type_selling_rate(la, self.plot_type)
+		self.payment_completion_days  = int(la.get("payment_completion_days") or 0)
+		self.selling_price_per_sqm    = get_plot_type_selling_rate(self.land_acquisition, self.plot_type)
 
 	def fill_location_coordinates(self):
 		"""If the plot has no coordinates, fall back to the LA's coordinates."""
@@ -161,10 +136,10 @@ class PlotMaster(Document):
 
 	def validate_selling_price(self):
 		if flt(self.selling_price_per_sqm) <= 0:
-			label = PLOT_TYPE_RATE_LABEL.get(self.plot_type, "selling rate")
 			frappe.throw(
-				f"Set the '{label}' on Land Acquisition {self.land_acquisition} "
-				f"before creating this plot."
+				f"No selling rate found for plot type '{self.plot_type}' on "
+				f"Land Acquisition {self.land_acquisition}. "
+				"Add a row for this plot type in the Plot Type Rates table on the Land Acquisition."
 			)
 		if flt(self.selling_price) <= 0:
 			frappe.throw("Selling Price must be greater than zero.")
@@ -183,7 +158,7 @@ class PlotMaster(Document):
 		warehouse, against a freshly minted Serial No tied to this plot."""
 		settings = frappe.get_single("LandMS Settings")
 
-		item_code = get_plot_item_code(self.plot_type, settings)
+		item_code = get_plot_item_code(self.plot_type)
 
 		warehouse = settings.plot_inventory_warehouse
 		if not warehouse:
@@ -242,28 +217,29 @@ class PlotMaster(Document):
 		self.db_set("serial_no", None)
 
 
-def get_plot_item_code(plot_type, settings=None):
-	"""Return the stock item code for the given plot type from LandMS Settings."""
-	field = PLOT_TYPE_TO_SETTINGS_FIELD.get(plot_type)
-	if not field:
-		frappe.throw(f"Unknown plot type '{plot_type}'.")
-	if settings is None:
-		settings = frappe.get_single("LandMS Settings")
-	item_code = settings.get(field)
+def get_plot_item_code(plot_type):
+	"""Return the stock item code for the given plot type from the Plot Type doctype."""
+	if not plot_type:
+		frappe.throw("Plot Type is required.")
+	item_code = frappe.db.get_value("Plot Type", plot_type, "item_code")
 	if not item_code:
 		frappe.throw(
 			f"No stock item is set for plot type '{plot_type}'. "
-			f"Go to LandMS Settings → Plot Stock Items and set it."
+			"Go to Plot Type → open the record and set the Stock Item."
 		)
 	return item_code
 
 
-def get_plot_type_selling_rate(la_values, plot_type):
-	"""Look up the per-sqm selling rate for the given plot type on the LA."""
-	rate_field = PLOT_TYPE_TO_RATE_FIELD.get(plot_type)
-	if not rate_field:
+def get_plot_type_selling_rate(land_acquisition, plot_type):
+	"""Look up the per-sqm selling rate for the given plot type from the LA's rate table."""
+	if not land_acquisition or not plot_type:
 		return 0
-	return flt((la_values or {}).get(rate_field))
+	result = frappe.db.get_value(
+		"Land Acquisition Plot Type Rate",
+		{"parent": land_acquisition, "plot_type": plot_type},
+		"selling_price_per_sqm",
+	)
+	return flt(result)
 
 
 def _build_plot_stock_entry_doc(

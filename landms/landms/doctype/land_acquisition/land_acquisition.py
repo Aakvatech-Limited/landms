@@ -9,6 +9,7 @@ class LandAcquisition(Document):
         self._validate_area()
         self._validate_coordinates()
         self._validate_sales_defaults()
+        self._validate_plot_type_rates()
 
     def before_submit(self):
         if self.status != "Approved":
@@ -23,6 +24,10 @@ class LandAcquisition(Document):
         sync_land_acquisition_plot_summary(self.name)
 
     def before_cancel(self):
+        self._block_if_active_plots()
+        self._block_or_cancel_purchase_documents()
+
+    def _block_if_active_plots(self):
         if not frappe.db.exists("DocType", "Plot Master"):
             return
         active_plots = frappe.db.count(
@@ -49,9 +54,94 @@ class LandAcquisition(Document):
             ).format(names, extra)
         )
 
+    def _block_or_cancel_purchase_documents(self):
+        """Block cancellation if any PI or PO has payments against it.
+        Auto-cancel unpaid submitted PIs and POs so the LA can be cancelled cleanly.
+        """
+        for doctype, item_doctype in (
+            ("Purchase Invoice", "Purchase Invoice Item"),
+            ("Purchase Order", "Purchase Order Item"),
+        ):
+            linked = frappe.db.sql(
+                f"""
+                SELECT DISTINCT p.name
+                FROM `tab{doctype}` p
+                INNER JOIN `tab{item_doctype}` pi ON pi.parent = p.name
+                WHERE pi.land_acquisition = %s AND p.docstatus = 1
+                """,
+                self.name,
+                as_dict=True,
+            )
+
+            for row in linked:
+                has_payment = frappe.db.sql(
+                    """
+                    SELECT COUNT(*) FROM `tabPayment Entry Reference` per
+                    INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+                    WHERE per.reference_doctype = %s
+                      AND per.reference_name = %s
+                      AND pe.docstatus = 1
+                    """,
+                    (doctype, row.name),
+                )[0][0]
+
+                if has_payment:
+                    frappe.throw(
+                        f"Cannot cancel — {doctype} {row.name} has payments posted. "
+                        "Cancel the Payment Entry first."
+                    )
+
+            for row in linked:
+                doc = frappe.get_doc(doctype, row.name)
+                doc.flags.ignore_permissions = True
+                doc.cancel()
+
     def on_cancel(self):
+        self.db_set("status", "Cancelled")
         sync_land_acquisition_cost_summary(self.name)
         sync_land_acquisition_plot_summary(self.name)
+        self._clear_land_acquisition_references()
+
+    def _clear_land_acquisition_references(self):
+        """Clear the land_acquisition dimension from all linked doctypes after cancel.
+
+        Allows the cancelled LA to be deleted without ERPNext's link-check blocking it.
+        land_acquisition is a reporting dimension — clearing it does not affect
+        debit/credit amounts or financial totals.
+        """
+        doctypes = [
+            "GL Entry",
+            "Payment Ledger Entry",
+            "Purchase Invoice",
+            "Purchase Invoice Item",
+            "Purchase Order",
+            "Purchase Order Item",
+            "Payment Entry",
+            "Journal Entry Account",
+            "Stock Entry",
+            "Stock Entry Detail",
+            "Purchase Receipt",
+            "Purchase Receipt Item",
+            "Sales Invoice",
+            "Sales Invoice Item",
+            "Sales Order",
+            "Sales Order Item",
+            "Delivery Note",
+            "Delivery Note Item",
+        ]
+        for doctype in doctypes:
+            try:
+                names = frappe.get_all(
+                    doctype,
+                    filters={"land_acquisition": self.name},
+                    pluck="name",
+                )
+                for name in names:
+                    frappe.db.set_value(
+                        doctype, name, "land_acquisition", None, update_modified=False
+                    )
+            except Exception:
+                pass
 
     # ── Private validators ───────────────────────────────────────────────────
 
@@ -79,6 +169,18 @@ class LandAcquisition(Document):
             frappe.throw(_("Government Share % must be between 0 and 100."))
         if cint(self.payment_completion_days) <= 0:
             frappe.throw(_("Payment Completion Days must be greater than zero."))
+
+    def _validate_plot_type_rates(self):
+        seen = set()
+        for row in self.get("plot_type_rates") or []:
+            if not row.plot_type:
+                frappe.throw(f"Row {row.idx} in Plot Type Rates is missing a Plot Type.")
+            if row.plot_type in seen:
+                frappe.throw(
+                    f"Plot Type '{row.plot_type}' appears more than once in the rates table. "
+                    "Each plot type can only have one rate per Land Acquisition."
+                )
+            seen.add(row.plot_type)
 
 
 # =============================================================================
@@ -617,3 +719,41 @@ def sync_costs_from_payment_entry(doc, method=None):
             if row.land_acquisition:
                 la_names.add(row.land_acquisition)
     _sync_many(la_names)
+
+
+def set_land_acquisition_expense_account(doc, method=None):
+    """Auto-fill land_acquisition on item rows from the header, then set
+    expense_account to Land Under Development on all tagged items.
+
+    ERPNext's accounting dimension already copies land_acquisition from header
+    to items. This hook is a safety net — it ensures the expense_account is
+    always Land Under Development regardless of the item's default, so survey
+    fees, legal fees, and land price all capitalise correctly.
+    """
+    header_la = doc.get("land_acquisition")
+
+    # Propagate header land_acquisition to any item rows that missed it
+    if header_la:
+        for item in doc.get("items") or []:
+            if not item.get("land_acquisition"):
+                item.land_acquisition = header_la
+
+    has_la_items = any(
+        row.get("land_acquisition") for row in (doc.get("items") or [])
+    )
+    if not has_la_items:
+        return
+
+    land_account = frappe.db.get_single_value(
+        "LandMS Settings", "land_under_development_account"
+    )
+    if not land_account:
+        return
+
+    cost_center = frappe.db.get_single_value("LandMS Settings", "cost_center")
+
+    for item in doc.get("items") or []:
+        if item.get("land_acquisition"):
+            item.expense_account = land_account
+            if cost_center:
+                item.cost_center = cost_center

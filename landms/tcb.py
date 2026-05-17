@@ -953,6 +953,7 @@ def run_tcb_reconciliation_job(
 			payment_date = row.get("trans_date")
 
 			if not reference or amount <= 0:
+				msg = "Row skipped — TCB did not include a control number or the amount is zero."
 				create_tcb_api_log(
 					direction="Inbound",
 					event_type="Reconciliation",
@@ -963,13 +964,22 @@ def run_tcb_reconciliation_job(
 					external_reference=reference,
 					transaction_id=transaction_id,
 					request_payload=row,
-					response_payload={"message": "Skipped row due to missing reference or non-positive amount."},
+					response_payload={"message": msg},
+				)
+				_append_recon_log_row(
+					log_name,
+					reference=reference,
+					amount=amount,
+					transaction_id=transaction_id,
+					row_status="Failed",
+					message=msg,
 				)
 				failed += 1
 				processed += 1
 				continue
 
 			if not cint(settings.get("auto_apply_reconciliation_payments")):
+				msg = "Payment found on TCB but not posted — auto-apply is turned off. Review and post manually."
 				create_tcb_api_log(
 					direction="Inbound",
 					event_type="Reconciliation",
@@ -980,7 +990,15 @@ def run_tcb_reconciliation_job(
 					external_reference=reference,
 					transaction_id=transaction_id,
 					request_payload=row,
-					response_payload={"message": "Auto-apply reconciliation switch is OFF."},
+					response_payload={"message": msg},
+				)
+				_append_recon_log_row(
+					log_name,
+					reference=reference,
+					amount=amount,
+					transaction_id=transaction_id,
+					row_status="Ignored",
+					message=msg,
 				)
 				ignored += 1
 				processed += 1
@@ -1011,10 +1029,37 @@ def run_tcb_reconciliation_job(
 			row_status = result.get("status")
 			if row_status == "Success":
 				applied += 1
+				_append_recon_log_row(
+					log_name,
+					reference=reference,
+					amount=amount,
+					transaction_id=transaction_id,
+					row_status="Applied",
+					sales_order=result.get("sales_order") or "",
+					payment_entry=result.get("payment_entry") or "",
+					message=result.get("message") or "",
+				)
 			elif row_status == "Ignored":
 				ignored += 1
+				_append_recon_log_row(
+					log_name,
+					reference=reference,
+					amount=amount,
+					transaction_id=transaction_id,
+					row_status="Ignored",
+					sales_order=result.get("sales_order") or "",
+					message=result.get("message") or "",
+				)
 			else:
 				failed += 1
+				_append_recon_log_row(
+					log_name,
+					reference=reference,
+					amount=amount,
+					transaction_id=transaction_id,
+					row_status="Failed",
+					message=result.get("message") or result.get("error") or "",
+				)
 			processed += 1
 
 		stop_result = _stop_reconciliation_if_requested(
@@ -1163,6 +1208,37 @@ def _update_recon_log(
 		frappe.db.commit()
 	except Exception:
 		frappe.logger("landms").error("Failed to update TCB Reconciliation Log", exc_info=True)
+
+
+def _append_recon_log_row(
+	log_name: str | None,
+	*,
+	reference: str = "",
+	amount: float = 0.0,
+	transaction_id: str = "",
+	row_status: str,
+	sales_order: str = "",
+	payment_entry: str = "",
+	message: str = "",
+) -> None:
+	"""Append one detail row to the TCB Reconciliation Log child table. Best-effort."""
+	if not log_name:
+		return
+	try:
+		doc = frappe.get_doc("TCB Reconciliation Log", log_name)
+		doc.append("rows", {
+			"reference":      reference,
+			"amount":         flt(amount),
+			"transaction_id": transaction_id,
+			"row_status":     row_status,
+			"sales_order":    sales_order,
+			"payment_entry":  payment_entry,
+			"message":        (message or "")[:500],
+		})
+		doc.save(ignore_permissions=True)
+		frappe.db.commit()
+	except Exception:
+		frappe.logger("landms").error("Failed to append TCB Reconciliation Log row", exc_info=True)
 
 
 def _is_reconciliation_stop_requested(log_name: str | None) -> bool:

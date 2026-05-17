@@ -22,11 +22,13 @@ after_migrate = [
 
 doc_events = {
 	"Purchase Order": {
+		"validate":               "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
 		"on_submit":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
 		"on_cancel":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
 	},
 	"Purchase Invoice": {
+		"validate":               "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
 		"on_submit":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 		"on_cancel":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",

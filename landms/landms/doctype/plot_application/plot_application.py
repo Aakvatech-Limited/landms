@@ -105,13 +105,20 @@ class PlotApplication(Document):
 		self.sales_order = ""
 
 	def validate_plot_available(self):
-		"""Draft-time checks: plot must be Available and have no active rival application."""
+		"""Draft-time checks: plot must be submitted and Available."""
 		if not self.plot or self.docstatus != 0:
 			return
-		plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
-		if plot_status != "Available":
+		plot_doc = frappe.db.get_value(
+			"Plot Master", self.plot, ["docstatus", "status"], as_dict=True
+		)
+		if not plot_doc or plot_doc.docstatus != 1:
 			frappe.throw(
-				f"Plot {self.plot} is not Available (current status: {plot_status}). "
+				f"Plot {self.plot} has not been submitted yet. "
+				"Submit the Plot Master before creating an application."
+			)
+		if plot_doc.status != "Available":
+			frappe.throw(
+				f"Plot {self.plot} is not Available (current status: {plot_doc.status}). "
 				"Only Available plots can be applied for."
 			)
 		active = self._get_other_active_application(("Submitted", "Paid", "Converted"))

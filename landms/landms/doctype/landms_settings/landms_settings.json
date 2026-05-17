@@ -42,42 +42,22 @@
    "reqd": 1
   },
   {
-   "fieldname": "plot_items_section",
-   "fieldtype": "Section Break",
-   "label": "Plot Stock Items"
-  },
-  {
-   "fieldname": "residential_plot_item",
-   "fieldtype": "Link",
-   "label": "Residential Plot Item",
-   "options": "Item",
-   "reqd": 1,
-   "description": "Stock item used when a Residential plot enters inventory"
-  },
-  {
-   "fieldname": "commercial_plot_item",
-   "fieldtype": "Link",
-   "label": "Commercial Plot Item",
-   "options": "Item",
-   "reqd": 1,
-   "description": "Stock item used when a Commercial plot enters inventory"
-  },
-  {
-   "fieldname": "col_break_plot_items",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "mixed_use_plot_item",
-   "fieldtype": "Link",
-   "label": "Mixed Use Plot Item",
-   "options": "Item",
-   "reqd": 1,
-   "description": "Stock item used when a Mixed Use plot enters inventory"
-  },
-  {
    "fieldname": "tab_accounts",
    "fieldtype": "Tab Break",
    "label": "Accounts"
+  },
+  {
+   "fieldname": "posting_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Posting Defaults"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "reqd": 1,
+   "description": "Cost center applied to all plot-related accounting entries — Sales Orders, Sales Invoices, and Journal Entries"
   },
   {
    "fieldname": "asset_accounts_section",
