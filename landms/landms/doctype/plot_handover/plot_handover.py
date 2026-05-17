@@ -106,6 +106,13 @@ class PlotHandover(Document):
 		dn.posting_date = self.handover_date or today()
 		dn.set_posting_time = 1
 		dn.remarks = f"Plot handover {self.name} for contract {self.contract} / plot {self.plot}"
+
+		# Override expense account and cost center on all items.
+		# COGS must post to Cost of Land Sold; cost center from LandMS Settings.
+		for item in dn.items:
+			item.expense_account = settings.cogs_account
+			item.cost_center = settings.cost_center
+
 		dn.insert(ignore_permissions=True)
 		dn.submit()
 		frappe.db.commit()

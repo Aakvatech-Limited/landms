@@ -25,6 +25,7 @@ BANK_CASH_ACCOUNTS = (
 class LandMSSettings(Document):
 
 	def validate(self):
+		self._validate_cost_center()
 		self._validate_accounts()
 		self._validate_fee_settings()
 		self._validate_no_account_overlap()
@@ -58,6 +59,15 @@ class LandMSSettings(Document):
 		if root_type and root_type != expected:
 			frappe.throw(
 				f"{self.meta.get_label(field)} must be a {expected} account (got {root_type})."
+			)
+
+	def _validate_cost_center(self):
+		if not self.cost_center:
+			frappe.throw("Cost Center is required.")
+		company = frappe.db.get_value("Cost Center", self.cost_center, "company")
+		if company and company != self.company:
+			frappe.throw(
+				f"Cost Center '{self.cost_center}' belongs to company '{company}', not '{self.company}'."
 			)
 
 	def _validate_fee_settings(self):
