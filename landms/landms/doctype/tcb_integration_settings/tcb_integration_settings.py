@@ -10,7 +10,7 @@ from frappe.utils import cint, flt, get_url
 # certainly a typo, not a real TCB requirement.
 PATTERN_MIN_LENGTH = 5
 PATTERN_MAX_LENGTH = 20
-PATTERN_ALLOWED_CHARS = re.compile(r"^[0-9#]+$")
+PATTERN_ALLOWED_CHARS = re.compile(r"^[0-9A-Za-z#]+$")
 
 
 IPN_CALLBACK_PATH = "/api/method/landms.api.tcb.ipn_callback"
@@ -51,7 +51,7 @@ class TCBIntegrationSettings(Document):
 
 		if not PATTERN_ALLOWED_CHARS.match(pattern):
 			frappe.throw(
-				"Control Number Pattern may only contain digits 0-9 and the '#' character "
+				"Control Number Pattern may only contain digits 0-9, letters A-Z, and the '#' character "
 				"(where '#' represents a randomly generated digit)."
 			)
 
