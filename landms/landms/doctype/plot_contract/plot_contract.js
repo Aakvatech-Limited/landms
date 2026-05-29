@@ -18,6 +18,7 @@ frappe.ui.form.on('Plot Contract', {
 			frm.doc.contract_status,
 			colors[frm.doc.contract_status] || 'gray'
 		);
+		_render_payment_countdown(frm);
 
 		render_payment_progress_bar(frm);
 		refresh_linked_documents(frm);
@@ -204,6 +205,36 @@ function render_payment_progress_bar(frm) {
 		}
 		bar_el.html(bar_html);
 	}
+}
+
+function _render_payment_countdown(frm) {
+	if (frm.is_new()) return;
+	if (!frm.doc.payment_deadline) return;
+	if (['Completed', 'Terminated', 'Cancelled'].includes(frm.doc.contract_status)) return;
+
+	const today = frappe.datetime.get_today();
+	const deadline = frm.doc.payment_deadline;
+	const days_remaining = frappe.datetime.get_day_diff(deadline, today);
+
+	let color, icon, message;
+	if (days_remaining < 0) {
+		color = '#fde8e8';
+		icon = '🔴';
+		message = `Overdue by <strong>${Math.abs(days_remaining)} days</strong> — deadline was ${frappe.datetime.str_to_user(deadline)}`;
+	} else if (days_remaining <= 30) {
+		color = '#fff3cd';
+		icon = '🟡';
+		message = `<strong>${days_remaining} days remaining</strong> — deadline: ${frappe.datetime.str_to_user(deadline)}`;
+	} else {
+		color = '#d4edda';
+		icon = '🟢';
+		message = `<strong>${days_remaining} days remaining</strong> — deadline: ${frappe.datetime.str_to_user(deadline)}`;
+	}
+
+	frm.dashboard.set_headline_alert(
+		`${icon} Payment Deadline: ${message}`,
+		days_remaining < 0 ? 'red' : days_remaining <= 30 ? 'orange' : 'green'
+	);
 }
 
 function refresh_linked_documents(frm) {

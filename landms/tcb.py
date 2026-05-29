@@ -54,17 +54,23 @@ TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
 # ---------------------------------------------------------------------- #
 
 
-def _get_pattern() -> str:
+def _get_pattern(related: bool = False) -> str:
 	"""Read the control number pattern from TCB Integration Settings.
 
 	Falls back to DEFAULT_PATTERN if the setting doc doesn't exist or the
 	field is empty. We never raise here — generation should be possible
 	even before the user has touched the settings.
 	"""
+	field = "related_control_number_pattern" if related else "control_number_pattern"
 	try:
-		pattern = frappe.db.get_single_value("TCB Integration Settings", "control_number_pattern")
+		pattern = frappe.db.get_single_value("TCB Integration Settings", field)
 	except Exception:
 		pattern = None
+	if related and not (pattern or "").strip():
+		frappe.throw(
+			"Related Control Number Pattern is not configured in TCB Integration Settings. "
+			"Set it before generating a related control number."
+		)
 	return (pattern or DEFAULT_PATTERN).strip()
 
 
@@ -82,12 +88,12 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
 	return re.compile("^" + "".join(parts) + "$")
 
 
-def is_valid_control_number(value: str, pattern: str | None = None) -> bool:
+def is_valid_control_number(value: str, pattern: str | None = None, *, related: bool = False) -> bool:
 	"""Strict pattern check — same shape used by generation."""
 	value = cstr(value).strip()
 	if not value:
 		return False
-	pattern = (pattern or _get_pattern()).strip()
+	pattern = (pattern or _get_pattern(related=related)).strip()
 	if not pattern:
 		return False
 	return bool(_pattern_to_regex(pattern).match(value))
@@ -120,11 +126,12 @@ def _fill_pattern(pattern: str) -> str:
 def _control_number_exists(candidate: str) -> bool:
 	"""True if the candidate is already in use anywhere we care about.
 
-	Two sources of truth:
-	  - tabSales Order.control_number (the field that drives lookups)
-	  - tabTCB Control Number          (the registry — DB-level unique by name)
+	Sources of truth:
+	  - tabSales Order.control_number         (primary CN field)
+	  - tabSales Order.related_control_number  (related CN field)
+	  - tabTCB Control Number                  (the registry — DB-level unique by name)
 
-	Both are checked. Wrapped in try/except so a missing column on a fresh
+	All are checked. Wrapped in try/except so a missing column on a fresh
 	install can't break generation.
 	"""
 	try:
@@ -134,27 +141,40 @@ def _control_number_exists(candidate: str) -> bool:
 	except Exception:
 		pass
 	try:
+		if frappe.db.has_column("Sales Order", "related_control_number"):
+			if frappe.db.exists("Sales Order", {"related_control_number": candidate}):
+				return True
+	except Exception:
+		pass
+	try:
 		if frappe.db.exists("TCB Control Number", candidate):
 			return True
+	except Exception:
+		pass
+	try:
+		if frappe.db.has_column("TCB Control Number", "related_control_number"):
+			if frappe.db.exists("TCB Control Number", {"related_control_number": candidate}):
+				return True
 	except Exception:
 		pass
 	return False
 
 
-def generate_control_number(sales_order_name: str | None = None) -> str:
+def generate_control_number(sales_order_name: str | None = None, *, related: bool = False) -> str:
 	"""Generate a unique TCB control number.
 
-	The pattern is read from TCB Integration Settings. The result is checked
-	against both the Sales Order column and the TCB Control Number registry
-	to avoid collisions. Retries up to GENERATION_RETRIES times before throwing.
+	The pattern is read from TCB Integration Settings (primary or related pattern
+	depending on the `related` flag). The result is checked against Sales Order
+	fields and the TCB Control Number registry to avoid collisions.
 
 	`sales_order_name` is accepted for symmetry with the legacy signature; it
 	does NOT influence the generated value (which is fully random).
 	"""
-	pattern = _get_pattern()
+	pattern = _get_pattern(related=related)
 	if "#" not in pattern:
+		label = "Related Control Number Pattern" if related else "Control Number Pattern"
 		frappe.throw(
-			"Control Number Pattern in TCB Integration Settings is missing '#'. "
+			f"{label} in TCB Integration Settings is missing '#'. "
 			"Cannot generate randomized references."
 		)
 
@@ -203,6 +223,7 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"outbound_mode": "Off",
 			"inbound_mode": "Off",
 			"control_number_pattern": DEFAULT_PATTERN,
+			"related_control_number_pattern": "",
 			"auto_apply_callback_payments": 0,
 			"auto_apply_reconciliation_payments": 0,
 			"reconciliation_enabled": 0,
@@ -227,6 +248,7 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"outbound_mode": get_value("outbound_mode") or "Off",
 		"inbound_mode": get_value("inbound_mode") or "Off",
 		"control_number_pattern": get_value("control_number_pattern") or DEFAULT_PATTERN,
+		"related_control_number_pattern": (get_value("related_control_number_pattern") or "").strip(),
 		"auto_apply_callback_payments": get_value("auto_apply_callback_payments"),
 		"auto_apply_reconciliation_payments": get_value("auto_apply_reconciliation_payments"),
 		"reconciliation_enabled": get_value("reconciliation_enabled"),
@@ -286,19 +308,21 @@ def should_auto_apply_reconciliation_payments() -> bool:
 
 
 def create_or_get_registry(*, control_number: str, sales_order: str,
-                           customer: str | None = None, amount: float = 0):
+                           customer: str | None = None, amount: float = 0,
+                           related_control_number: str = ""):
 	"""Idempotent registry creation. Returns the registry doc."""
 	if frappe.db.exists("TCB Control Number", control_number):
 		return frappe.get_doc("TCB Control Number", control_number)
 	doc = frappe.get_doc({
-		"doctype":        "TCB Control Number",
-		"control_number": control_number,
-		"sales_order":    sales_order,
-		"customer":       customer or "",
-		"amount":         flt(amount),
-		"status":         "Generated",
-		"generated_at":   now(),
-		"last_event":     f"Generated for {sales_order}",
+		"doctype":                "TCB Control Number",
+		"control_number":         control_number,
+		"sales_order":            sales_order,
+		"customer":               customer or "",
+		"amount":                 flt(amount),
+		"related_control_number": related_control_number or "",
+		"status":                 "Generated",
+		"generated_at":           now(),
+		"last_event":             f"Generated for {sales_order}",
 	})
 	doc.insert(ignore_permissions=True)
 	return doc
@@ -318,33 +342,32 @@ def _get_registry(control_number: str):
 
 
 def _build_reference_payload(*, control_number: str, sales_order_name: str = "") -> dict[str, Any]:
-	"""Build the full outbound payload for TCB Reference Create.
+	"""Build the full outbound payload for TCB Reference Create (v0.6).
 
-	TCB requires: partnerCode, profileID, reference, name, mobile, message.
-	Per TCB docs (form-urlencoded POST over HTTPS):
-	  - partnerCode: STRING — assigned by TCB during registration
-	  - profileID:   LONG   — collection account number
-	  - reference:   STRING — control number generated by partner
-	  - name:        STRING — payer name
-	  - mobile:      LONG   — payer mobile (255...)
-	  - message:     STRING — descriptive message / remark
+	Mandatory: partnerCode, profileID, reference, name, mobile, message.
+	Optional:  relatedRef, paymentOption, expireDate.
+	Sent as application/x-www-form-urlencoded POST.
 	"""
 	settings = _get_tcb_settings()
 	customer_name = ""
 	mobile = ""
 	message = f"Plot payment - {control_number}"
+	related_ref = ""
+	payment_option = ""
+	expire_date = ""
+	amount = 0.0
 
 	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
 		so = frappe.db.get_value(
 			"Sales Order", sales_order_name,
-			["customer", "customer_name", "contact_mobile", "contact_phone"],
+			["customer", "customer_name", "contact_mobile", "contact_phone",
+			 "related_control_number", "payment_option", "include_amount",
+			 "payment_deadline", "include_expire_date", "grand_total"],
 			as_dict=True,
 		)
 		if so:
 			customer_name = so.customer_name or so.customer or ""
 			message = f"Plot payment for {customer_name} - {control_number}"
-			# Cascade: Customer mobile_no → SO contact_mobile → SO contact_phone
-			# → linked Contact mobile/phone.  TCB rejects empty mobile.
 			mobile = (
 				frappe.db.get_value("Customer", so.customer, "mobile_no")
 				or so.contact_mobile
@@ -352,8 +375,14 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 				or _get_contact_mobile(so.customer)
 				or "0"
 			)
+			related_ref = cstr(so.related_control_number or "").strip()
+			payment_option = cstr(so.payment_option or "").strip()
+			if cint(so.include_expire_date) and so.payment_deadline:
+				expire_date = cstr(so.payment_deadline).strip()
+			if cint(so.include_amount):
+				amount = flt(so.grand_total)
 
-	return {
+	payload = {
 		"partnerCode": settings.get("partner_code") or "",
 		"profileID":   settings.get("profile_id") or "",
 		"reference":   control_number,
@@ -361,6 +390,15 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 		"mobile":      mobile,
 		"message":     message,
 	}
+	if related_ref:
+		payload["relatedRef"] = related_ref
+	if payment_option:
+		payload["paymentOption"] = payment_option
+	if expire_date:
+		payload["expireDate"] = expire_date
+	if amount > 0:
+		payload["amount"] = amount
+	return payload
 
 
 def _get_contact_mobile(customer: str) -> str:
@@ -390,6 +428,11 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 	payload = _build_reference_payload(control_number=control_number, sales_order_name=sales_order_name)
 	endpoint = _masked_reference_endpoint(settings)
 
+	plot_contract = ""
+	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
+		plot_contract = frappe.db.get_value("Sales Order", sales_order_name, "plot_contract") or ""
+	related_ref = payload.get("relatedRef") or ""
+
 	if not enabled or outbound_mode == "Off":
 		log_name = create_tcb_api_log(
 			direction="Outbound",
@@ -398,7 +441,9 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			processing_mode="Off",
 			endpoint=endpoint,
 			external_reference=control_number,
+			related_ref=related_ref,
 			sales_order=sales_order_name,
+			plot_contract=plot_contract,
 			request_payload=payload,
 			response_payload={"message": "Outbound reference registration skipped (integration disabled or mode Off)."},
 		)
@@ -415,7 +460,9 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			processing_mode="Log Only",
 			endpoint=endpoint,
 			external_reference=control_number,
+			related_ref=related_ref,
 			sales_order=sales_order_name,
+			plot_contract=plot_contract,
 			request_payload=payload,
 			response_payload={"message": "Outbound Log Only mode — no call sent to TCB."},
 		)
@@ -467,7 +514,9 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			tcb_status_code=tcb_status,
 			tcb_message=tcb_message,
 			external_reference=control_number,
+			related_ref=related_ref,
 			sales_order=sales_order_name,
+			plot_contract=plot_contract,
 			request_payload=payload,
 			response_payload=parsed_body,
 			error=None if ok else "TCB reference API returned non-success status.",
@@ -522,7 +571,9 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			tcb_status_code=tcb_status,
 			tcb_message=tcb_message,
 			external_reference=control_number,
+			related_ref=related_ref,
 			sales_order=sales_order_name,
+			plot_contract=plot_contract,
 			request_payload=payload,
 			response_payload=parsed_body,
 			error=traceback,
@@ -1311,6 +1362,7 @@ def create_tcb_api_log(
 	tcb_status_code: int | None = None,
 	tcb_message: str | None = None,
 	external_reference: str | None = None,
+	related_ref: str | None = None,
 	transaction_id: str | None = None,
 	sales_order: str | None = None,
 	plot_contract: str | None = None,
@@ -1346,6 +1398,7 @@ def create_tcb_api_log(
 			"tcb_status_code":    cint(tcb_status_code),
 			"tcb_message":        (tcb_message or "")[:140],
 			"external_reference": external_reference or "",
+			"related_ref":        related_ref or "",
 			"transaction_id":     transaction_id or "",
 			"sales_order":        sales_order or "",
 			"plot_contract":      plot_contract or "",
