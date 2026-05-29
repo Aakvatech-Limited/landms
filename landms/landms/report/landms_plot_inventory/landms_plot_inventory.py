@@ -85,8 +85,7 @@ def get_summary(data):
 	pending_advance = sum(1 for r in data if r["status"] == "Pending Advance")
 	reserved = sum(1 for r in data if r["status"] == "Reserved")
 	ready_for_handover = sum(1 for r in data if r["status"] == "Ready for Handover")
-	delivered = sum(1 for r in data if r["status"] == "Delivered")
-	title_closed = sum(1 for r in data if r["status"] == "Title Closed")
+	delivered = sum(1 for r in data if r["status"] in ("Delivered", "Title Closed"))
 
 	total_cost = sum(flt(r["allocated_cost"]) for r in data)
 	total_price = sum(flt(r["selling_price"]) for r in data)
@@ -101,7 +100,6 @@ def get_summary(data):
 		{"label": "Reserved", "value": reserved, "datatype": "Int", "indicator": "Orange"},
 		{"label": "Ready for Handover", "value": ready_for_handover, "datatype": "Int", "indicator": "Cyan"},
 		{"label": "Delivered", "value": delivered, "datatype": "Int", "indicator": "Blue"},
-		{"label": "Title Closed", "value": title_closed, "datatype": "Int", "indicator": "Purple"},
 		{"label": "Inventory Cost (TZS)", "value": total_cost, "datatype": "Float", "indicator": "Grey"},
 		{"label": "Asking Value (TZS)", "value": total_price, "datatype": "Float", "indicator": "Blue"},
 		{"label": "Potential Margin (TZS)", "value": total_margin, "datatype": "Float", "indicator": "Green"},
@@ -113,11 +111,12 @@ def get_chart(data):
 	if not data:
 		return None
 
-	status_order = ["Available", "Pending Fee", "Pending Advance", "Reserved", "Ready for Handover", "Delivered", "Title Closed"]
+	status_order = ["Available", "Pending Fee", "Pending Advance", "Reserved", "Ready for Handover", "Delivered"]
 	status_counts = {status: 0 for status in status_order}
 	for row in data:
-		if row["status"] in status_counts:
-			status_counts[row["status"]] += 1
+		status = "Delivered" if row["status"] == "Title Closed" else row["status"]
+		if status in status_counts:
+			status_counts[status] += 1
 
 	labels = [status for status in status_order if status_counts[status] > 0]
 	values = [status_counts[status] for status in labels]
@@ -132,7 +131,6 @@ def get_chart(data):
 		"Reserved": "#f08c00",
 		"Ready for Handover": "#15aabf",
 		"Delivered": "#1c7ed6",
-		"Title Closed": "#7b2cbf",
 	}
 
 	return {

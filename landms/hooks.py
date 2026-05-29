@@ -33,6 +33,11 @@ doc_events = {
 		"on_cancel":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 	},
+	"Journal Entry": {
+		"before_save": "landms.journal_entry_hooks.before_save_journal_entry",
+		"on_submit":   "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
+		"on_cancel":   "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
+	},
 	"Payment Entry": {
 		"validate": [
 			"landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
@@ -46,6 +51,9 @@ doc_events = {
 			"landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_payment_entry",
 			"landms.payment_sync.on_cancel_payment_entry",
 		],
+	},
+	"Sales Invoice": {
+		"before_save": "landms.sales_invoice_hooks.before_save_sales_invoice",
 	},
 	"Sales Order": {
 		"validate":      "landms.sales_order_hooks.validate_sales_order",
