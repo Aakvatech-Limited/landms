@@ -35,6 +35,7 @@
   "total_paid",
   "col_break_3",
   "total_outstanding",
+  "overpaid_amount",
   "payment_progress",
   "tab_payments",
   "payment_schedule_section",
@@ -226,6 +227,15 @@
    "label": "Total Outstanding (TZS)",
    "read_only": 1,
    "bold": 1
+  },
+  {
+   "fieldname": "overpaid_amount",
+   "fieldtype": "Currency",
+   "label": "Overpaid Amount (TZS)",
+   "read_only": 1,
+   "bold": 1,
+   "depends_on": "eval:doc.overpaid_amount > 0",
+   "description": "Customer has paid more than the total contract value. Accountant action required."
   },
   {
    "fieldname": "payment_progress",

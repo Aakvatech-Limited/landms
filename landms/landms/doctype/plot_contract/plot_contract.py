@@ -7,6 +7,7 @@ from frappe.utils import add_days, cint, escape_html, flt, get_url_to_form, getd
 from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
+from landms.sales_order_hooks import _post_credit_note_for_outstanding
 
 
 class PlotContract(Document):
@@ -333,6 +334,7 @@ class PlotContract(Document):
 
 		total_paid = max(0.0, flt(si_doc.grand_total) - flt(si_doc.outstanding_amount))
 		total_outstanding = max(0.0, flt(si_doc.outstanding_amount))
+		overpaid_amount = max(0.0, -(flt(si_doc.outstanding_amount)))
 		paid_dates = self._get_paid_dates_by_installment(si_doc)
 
 		if len(self.payment_schedule or []) != len(si_doc.payment_schedule or []) and self.docstatus == 0:
@@ -343,15 +345,22 @@ class PlotContract(Document):
 		self.total_contract_value = flt(si_doc.grand_total)
 		self.total_paid = total_paid
 		self.total_outstanding = total_outstanding
+		self.overpaid_amount = overpaid_amount
 		self.payment_progress = self._derive_payment_progress(total_paid, total_outstanding, si_doc=si_doc)
 		self._persist_payment_sync_state()
 
 		advance_met = self._is_advance_installment_met(si_doc)
 
 		# Only auto-submit once the synced draft state is already safely saved.
+		# Reload before submitting to avoid TimestampMismatchError from concurrent syncs.
 		if advance_met and self.docstatus == 0:
-			self.submit()
-			self.reload()
+			try:
+				self.reload()
+				if self.docstatus == 0:
+					self.submit()
+					self.reload()
+			except frappe.TimestampMismatchError:
+				pass
 
 		if so_doc.get("plot_application"):
 			app_status = frappe.db.get_value("Plot Application", so_doc.plot_application, "status")
@@ -470,7 +479,26 @@ class PlotContract(Document):
 
 	def _persist_payment_sync_state(self):
 		if self.docstatus == 0:
-			self.save(ignore_permissions=True)
+			frappe.db.set_value(
+				"Plot Contract",
+				self.name,
+				{
+					"total_contract_value": flt(self.total_contract_value),
+					"total_paid":           flt(self.total_paid),
+					"total_outstanding":    flt(self.total_outstanding),
+					"overpaid_amount":      flt(self.overpaid_amount),
+					"payment_progress":     self.payment_progress or "",
+					"contract_status":      self.contract_status or "Draft",
+					"booking_fee_invoice":  self.booking_fee_invoice or "",
+					"payment_deadline":     self.payment_deadline,
+				},
+				update_modified=True,
+			)
+			# Also persist individual payment schedule rows for draft contracts
+			for row in (self.payment_schedule or []):
+				if row.name:
+					row.db_update()
+			frappe.clear_document_cache("Plot Contract", self.name)
 			return
 
 		frappe.db.set_value(
@@ -484,6 +512,7 @@ class PlotContract(Document):
 				"total_contract_value": flt(self.total_contract_value),
 				"total_paid": flt(self.total_paid),
 				"total_outstanding": flt(self.total_outstanding),
+				"overpaid_amount": flt(self.overpaid_amount),
 				"payment_progress": self.payment_progress or "",
 				"contract_status": self.contract_status or "Draft",
 			},
@@ -580,8 +609,6 @@ class PlotContract(Document):
 		accounts = [{
 			"account": settings.customer_advance_account,
 			"debit_in_account_currency": selling_price,
-			"party_type": "Customer",
-			"party": self.customer,
 			"cost_center": settings.cost_center,
 			"land_acquisition": self.land_acquisition,
 		}]
@@ -652,12 +679,14 @@ class PlotContract(Document):
 
 		forfeiture_pct = flt(settings.forfeiture_percentage or 100)
 		forfeited_amount = total_paid * forfeiture_pct / 100.0
+		refund_amount = total_paid - forfeited_amount
 
 		je = frappe.get_doc({
 			"doctype": "Journal Entry",
 			"posting_date": today(),
 			"company": settings.company,
 			"voucher_type": "Journal Entry",
+			"lms_refund_amount": refund_amount,
 			"user_remark": (
 				f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited. "
 				f"Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
@@ -666,8 +695,6 @@ class PlotContract(Document):
 				{
 					"account": settings.customer_advance_account,
 					"debit_in_account_currency": forfeited_amount,
-					"party_type": "Customer",
-					"party": self.customer,
 					"cost_center": settings.cost_center,
 					"land_acquisition": self.land_acquisition,
 				},
@@ -711,6 +738,11 @@ class PlotContract(Document):
 		# Cancel the SI only if it has no payment allocations — if payments exist
 		# the forfeiture JE above already handles the accounting
 		self._cancel_plot_invoice_on_termination()
+
+		# If the SI was left open (payments existed), issue a credit note to clear AR
+		si_name = self._get_plot_invoice_name()
+		if si_name and flt(frappe.db.get_value("Sales Invoice", si_name, "outstanding_amount") or 0) > 0:
+			_post_credit_note_for_outstanding(si_name)
 
 		# Cancel the linked Sales Order — the cancel_sales_order hook fires
 		# automatically and declines the TCB control number with the reference decline URL
@@ -757,22 +789,29 @@ class PlotContract(Document):
 		# If any payment exists, leave the SI — forfeiture JE handles the accounting
 
 	def _cancel_linked_sales_order_on_termination(self):
-		"""Cancel the Sales Order linked to this contract on termination.
+		"""Close the Sales Order on termination — keeps docstatus=1 as audit trail.
 
-		Sets _from_termination so that cancel_sales_order skips its payment-block
-		and SI-cancel guards (both already handled above). The TCB control number
-		decline still runs automatically via the cancel_sales_order on_cancel hook.
+		Sets status='Closed' directly (same as the Close button) rather than
+		cancelling, so accounting entries are preserved. Declines the TCB control
+		number explicitly since the on_cancel hook no longer fires.
 		"""
+		from landms.sales_order_hooks import decline_reference_for_sales_order
+		from frappe.utils import cstr
+
 		so_name = self.sales_order
 		if not so_name or not frappe.db.exists("Sales Order", so_name):
 			return
 		so_doc = frappe.get_doc("Sales Order", so_name)
 		if so_doc.docstatus != 1:
 			return
-		so_doc.flags.ignore_permissions = True
-		so_doc.flags.ignore_links = True
-		so_doc.flags._from_termination = True
-		so_doc.cancel()
+
+		# Close instead of cancel — preserves docstatus=1 and all accounting
+		frappe.db.set_value("Sales Order", so_name, "status", "Closed", update_modified=False)
+
+		# Decline the TCB control number
+		control_number = cstr(so_doc.get("control_number") or "").strip()
+		if control_number:
+			decline_reference_for_sales_order(so_name, control_number)
 
 	def _cancel_plot_application_on_termination(self):
 		"""Cancel the Plot Application so the plot is fully released."""

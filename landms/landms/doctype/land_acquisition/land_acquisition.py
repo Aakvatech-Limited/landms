@@ -6,6 +6,7 @@ from frappe.utils import today, flt, cint
 
 class LandAcquisition(Document):
     def validate(self):
+        self._convert_payment_period_to_days()
         self._validate_area()
         self._validate_coordinates()
         self._validate_sales_defaults()
@@ -162,6 +163,22 @@ class LandAcquisition(Document):
             if lng < -180 or lng > 180:
                 frappe.throw(_("Longitude must be between -180 and 180."))
 
+    def _convert_payment_period_to_days(self):
+        total = (
+            cint(self.payment_years or 0) * 365
+            + cint(self.payment_months or 0) * 30
+            + cint(self.payment_days_input or 0)
+        )
+        if total <= 0:
+            frappe.throw(_("Payment period must be greater than zero."))
+        self.payment_completion_days = total
+        self.payment_period_summary = _build_period_summary(
+            cint(self.payment_years or 0),
+            cint(self.payment_months or 0),
+            cint(self.payment_days_input or 0),
+            total,
+        )
+
     def _validate_sales_defaults(self):
         if not (0 <= flt(self.booking_fee_percent) <= 100):
             frappe.throw(_("Booking Fee % must be between 0 and 100."))
@@ -205,6 +222,7 @@ def sync_land_acquisition_cost_summary(land_acquisition):
             "total_paid_tzs": t["paid"],
             "total_outstanding_tzs": t["outstanding"],
             "total_unbilled_po_tzs": t["unbilled_po"],
+            "je_billed_tzs": t["je_billed"],
         },
         update_modified=False,
     )
@@ -262,6 +280,16 @@ def get_land_acquisition_cost_summary(land_acquisition):
     others = [s for s in suppliers if not s["is_land_seller"]]
     totals = _compute_totals(sellers, others, flt(la.total_area_sqm))
 
+    plot_inv_account = frappe.db.get_single_value("LandMS Settings", "plot_inventory_account")
+    je_billed = _fetch_billed_from_je(land_acquisition, lud_account, plot_inv_account)
+    je_rows = _fetch_je_rows(land_acquisition, lud_account, plot_inv_account)
+    totals["je_billed"] = je_billed
+    if je_billed:
+        area = flt(la.total_area_sqm)
+        totals["acquisition_cost_tzs"] = flt(totals["acquisition_cost_tzs"]) + je_billed
+        totals["billed"] = flt(totals["billed"]) + je_billed
+        totals["cost_per_sqm_tzs"] = (totals["acquisition_cost_tzs"] / area) if area else 0.0
+
     return {
         "land_acquisition": land_acquisition,
         "total_area_sqm": flt(la.total_area_sqm),
@@ -269,6 +297,7 @@ def get_land_acquisition_cost_summary(land_acquisition):
         "sellers": sellers,
         "others": others,
         "totals": totals,
+        "je_rows": je_rows,
     }
 
 
@@ -338,6 +367,44 @@ def _fetch_billed(la_name, lud_account):
         {"la": la_name, "lud": lud_account},
         as_dict=True,
     )
+
+
+def _fetch_je_rows(la_name, lud_account, plot_inv_account):
+    """Return individual submitted JE rows tagged to this LA on land cost accounts."""
+    accounts = tuple(a for a in [lud_account, plot_inv_account] if a)
+    if not accounts:
+        return []
+    return frappe.db.sql("""
+        SELECT
+            je.name          AS je_name,
+            je.posting_date,
+            je.user_remark,
+            jea.debit_in_account_currency AS amount
+        FROM `tabJournal Entry Account` jea
+        INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+        WHERE jea.land_acquisition = %(la)s
+          AND je.docstatus = 1
+          AND jea.account IN %(accounts)s
+          AND jea.debit_in_account_currency > 0
+        ORDER BY je.posting_date DESC, je.name
+    """, {"la": la_name, "accounts": accounts}, as_dict=True)
+
+
+def _fetch_billed_from_je(la_name, lud_account, plot_inv_account):
+    """Sum debit amounts from submitted JEs tagged with this LA on land cost accounts."""
+    accounts = tuple(a for a in [lud_account, plot_inv_account] if a)
+    if not accounts:
+        return 0.0
+    result = frappe.db.sql("""
+        SELECT COALESCE(SUM(jea.debit_in_account_currency), 0)
+        FROM `tabJournal Entry Account` jea
+        INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+        WHERE jea.land_acquisition = %(la)s
+          AND je.docstatus = 1
+          AND jea.account IN %(accounts)s
+          AND jea.debit_in_account_currency > 0
+    """, {"la": la_name, "accounts": accounts})
+    return flt(result[0][0]) if result else 0.0
 
 
 def _fetch_paid(pi_names):
@@ -573,7 +640,7 @@ def _empty_summary(la_name):
                 "other_committed", "other_billed", "other_paid",
                 "other_outstanding", "other_unbilled_po",
                 "committed", "billed", "paid", "outstanding", "unbilled_po",
-                "acquisition_cost_tzs", "cost_per_sqm_tzs",
+                "acquisition_cost_tzs", "cost_per_sqm_tzs", "je_billed",
             )
         },
     }
@@ -657,6 +724,14 @@ def sync_costs_from_purchase_invoice(doc, method=None):
     _sync_many({
         row.land_acquisition
         for row in (doc.get("items") or [])
+        if row.get("land_acquisition")
+    })
+
+
+def sync_costs_from_journal_entry(doc, method=None):
+    _sync_many({
+        row.land_acquisition
+        for row in (doc.get("accounts") or [])
         if row.get("land_acquisition")
     })
 
@@ -757,3 +832,214 @@ def set_land_acquisition_expense_account(doc, method=None):
             item.expense_account = land_account
             if cost_center:
                 item.cost_center = cost_center
+
+
+def _build_period_summary(years, months, days, total_days):
+    parts = []
+    if years:
+        parts.append(f"{years} year{'s' if years > 1 else ''}")
+    if months:
+        parts.append(f"{months} month{'s' if months > 1 else ''}")
+    if days:
+        parts.append(f"{days} day{'s' if days > 1 else ''}")
+    label = " + ".join(parts) if parts else "0 days"
+    return f"{label} = {total_days} days total"
+
+
+# =============================================================================
+# Recalculate Plot Costs
+# =============================================================================
+
+@frappe.whitelist()
+def recalculate_plot_costs(land_acquisition):
+    """Enqueue a background job to update plot stock valuations to the current LA cost."""
+    la = frappe.db.get_value(
+        "Land Acquisition", land_acquisition,
+        ["docstatus", "recalculation_in_progress"],
+        as_dict=True,
+    )
+    if not la or la.docstatus != 1:
+        frappe.throw("Land Acquisition must be submitted.")
+    if la.recalculation_in_progress:
+        frappe.throw("A recalculation is already running. Please wait for it to complete.")
+
+    frappe.db.set_value(
+        "Land Acquisition", land_acquisition,
+        "recalculation_in_progress", 1,
+        update_modified=False,
+    )
+    frappe.db.commit()
+
+    frappe.enqueue(
+        "landms.landms.doctype.land_acquisition.land_acquisition._run_plot_cost_recalculation",
+        land_acquisition=land_acquisition,
+        queue="long",
+        timeout=3600,
+        job_name=f"recalc_plot_costs_{land_acquisition}",
+        now=frappe.conf.get("developer_mode"),
+    )
+    return {"status": "queued"}
+
+
+def _run_plot_cost_recalculation(land_acquisition):
+    """Background job: post Stock Reconciliations to update un-delivered plot valuations."""
+    from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
+
+    def _finish(log, cost_to_save=None):
+        update = {
+            "recalculation_in_progress": 0,
+            "last_recalculation_date": frappe.utils.now(),
+            "last_recalculation_log": log,
+        }
+        if cost_to_save is not None:
+            update["last_recalculation_cost"] = cost_to_save
+        frappe.db.set_value("Land Acquisition", land_acquisition, update, update_modified=False)
+        frappe.db.commit()
+
+    try:
+        settings = frappe.get_single("LandMS Settings")
+        lud_account = settings.land_under_development_account
+        warehouse   = settings.plot_inventory_warehouse
+        cost_center = settings.cost_center or ""
+
+        if not lud_account:
+            _finish("FAILED: Land Under Development Account not set in LandMS Settings.")
+            return
+        if not warehouse:
+            _finish("FAILED: Plot Inventory Warehouse not set in LandMS Settings.")
+            return
+
+        la = frappe.db.get_value(
+            "Land Acquisition", land_acquisition,
+            ["company", "total_area_sqm", "acquisition_cost_tzs", "last_recalculation_cost", "last_recalculation_log"],
+            as_dict=True,
+        )
+
+        if not flt(la.total_area_sqm):
+            _finish("FAILED: Total Area (sqm) is not set on this Land Acquisition.")
+            return
+
+        new_total_cost = flt(la.acquisition_cost_tzs)
+        if not new_total_cost:
+            _finish("FAILED: Acquisition cost is zero. Submit Purchase Invoices first.")
+            return
+
+        # Guard — only skip if last run was clean (no failures recorded)
+        prev_log = la.last_recalculation_log or ""
+        prev_had_failures = "FAILED" in prev_log or "✗" in prev_log
+        if flt(la.last_recalculation_cost) == new_total_cost and not prev_had_failures:
+            _finish("Nothing to do — plot costs are already up to date.", cost_to_save=new_total_cost)
+            return
+
+        cost_per_sqm = new_total_cost / flt(la.total_area_sqm)
+
+        plots = frappe.get_all(
+            "Plot Master",
+            filters={"land_acquisition": land_acquisition, "docstatus": 1},
+            fields=["name", "plot_type", "plot_size_sqm", "allocated_cost", "serial_no", "stock_entry", "status"],
+        )
+
+        updated  = []
+        skipped  = []
+        failures = []
+        item_codes_touched = set()
+
+        for plot in plots:
+            if plot.status in ("Delivered", "Title Closed"):
+                skipped.append(f"{plot.name} — already delivered (manual JE adjustment needed)")
+                continue
+            if not plot.stock_entry:
+                skipped.append(f"{plot.name} — not in inventory (no stock entry)")
+                continue
+            if not flt(plot.plot_size_sqm):
+                skipped.append(f"{plot.name} — plot area is 0, cannot calculate cost")
+                continue
+
+            new_plot_cost = flt(cost_per_sqm) * flt(plot.plot_size_sqm)
+            old_plot_cost = flt(plot.allocated_cost)
+
+            if abs(new_plot_cost - old_plot_cost) < 0.01:
+                # Allocated cost is already correct — but sync cost_per_sqm if stale
+                if abs(flt(plot.cost_per_sqm) - flt(cost_per_sqm)) > 0.01:
+                    frappe.db.set_value("Plot Master", plot.name, "cost_per_sqm", flt(cost_per_sqm), update_modified=False)
+                skipped.append(f"{plot.name} — cost unchanged ({old_plot_cost:.2f})")
+                continue
+
+            try:
+                item_code = get_plot_item_code(plot.plot_type)
+            except Exception as e:
+                failures.append(f"{plot.name} — item code error: {e}")
+                continue
+
+            try:
+                sr = frappe.get_doc({
+                    "doctype": "Stock Reconciliation",
+                    "purpose": "Stock Reconciliation",
+                    "company": la.company,
+                    "posting_date": today(),
+                    "expense_account": lud_account,
+                    "cost_center": cost_center,
+                    "items": [{
+                        "item_code": item_code,
+                        "warehouse": warehouse,
+                        "qty": 1,
+                        "valuation_rate": new_plot_cost,
+                        "serial_no": plot.serial_no or plot.name,
+                        "use_serial_batch_fields": 1,
+                    }],
+                })
+                sr.insert(ignore_permissions=True)
+                sr.submit()
+
+                frappe.db.set_value("Plot Master", plot.name, {
+                    "allocated_cost": new_plot_cost,
+                    "cost_per_sqm":   flt(cost_per_sqm),
+                }, update_modified=False)
+                item_codes_touched.add(item_code)
+                updated.append(f"{plot.name} ({old_plot_cost:.0f} → {new_plot_cost:.0f})")
+
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), f"Plot cost recalc SR failed: {plot.name}")
+                failures.append(f"{plot.name} — stock reconciliation failed (see Error Log)")
+
+        # Repost Item Valuation — one per unique item code
+        for ic in item_codes_touched:
+            try:
+                riv = frappe.get_doc({
+                    "doctype": "Repost Item Valuation",
+                    "based_on": "Item and Warehouse",
+                    "item_code": ic,
+                    "warehouse": warehouse,
+                    "posting_date": today(),
+                    "posting_time": "00:00:00",
+                    "company": la.company,
+                })
+                riv.insert(ignore_permissions=True)
+                riv.submit()
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), f"Repost Item Valuation failed: {ic}")
+
+        # Build result log
+        lines = [
+            f"Run: {frappe.utils.now()}",
+            f"Total cost: {new_total_cost:,.0f} TZS  |  Cost/sqm: {cost_per_sqm:,.2f} TZS",
+            "",
+            f"✓ Updated:  {len(updated)}",
+        ]
+        for item in updated:
+            lines.append(f"   {item}")
+        lines += ["", f"→ Skipped:  {len(skipped)}"]
+        for item in skipped:
+            lines.append(f"   {item}")
+        if failures:
+            lines += ["", f"✗ Failed:   {len(failures)}  ← re-run to retry"]
+            for item in failures:
+                lines.append(f"   {item}")
+
+        log = "\n".join(lines)
+        cost_to_save = new_total_cost if not failures else None
+        _finish(log, cost_to_save=cost_to_save)
+
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Plot cost recalculation crashed: {land_acquisition}")
+        _finish(f"FAILED (crash) — see Error Log for details.")

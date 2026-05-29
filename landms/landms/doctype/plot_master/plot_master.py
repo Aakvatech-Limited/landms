@@ -265,6 +265,7 @@ def _build_plot_stock_entry_doc(
 		"posting_date": frappe.utils.today(),
 		"company": company,
 		"remarks": f"Plot {plot_number} from {land_acquisition}",
+		"land_acquisition": land_acquisition,
 		"difference_account": difference_account,
 		"items": [
 			{

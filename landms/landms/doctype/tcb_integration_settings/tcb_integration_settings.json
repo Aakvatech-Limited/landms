@@ -41,6 +41,12 @@
    "description": "Pattern used to generate TCB control numbers. '#' = random digit (filled by secrets.randbelow). All other characters are literal. Example: 99911####00## generates 13-digit references like 9991143790087."
   },
   {
+   "fieldname": "related_control_number_pattern",
+   "fieldtype": "Data",
+   "label": "Related Control Number Pattern",
+   "description": "Pattern for the optional related control number. Same '#' rules as the primary pattern. Must produce values that do not collide with the primary pattern."
+  },
+  {
    "fieldname": "outbound_col_break",
    "fieldtype": "Column Break"
   },
