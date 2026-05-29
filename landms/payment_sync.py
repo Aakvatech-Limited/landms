@@ -79,16 +79,79 @@ def validate_payment_entry(doc, method=None):
 
 def on_submit_payment_entry(doc, method=None):
 	_ensure_first_advance_plot_invoices(doc)
-	_sync_landms_payment_entry_state(doc)
+	_post_government_share_je(doc)
+	_enqueue_plot_payment_sync(doc, "submit")
 
 
 def on_cancel_payment_entry(doc, method=None):
-	_sync_landms_payment_entry_state(doc)
+	_cancel_government_share_je(doc)
+	_enqueue_plot_payment_sync(doc, "cancel")
 
 
 def sync_plot_contract_from_payment_entry(doc, method=None):
 	"""Backward-compatible hook name kept for older wiring."""
 	_sync_landms_payment_entry_state(doc)
+
+
+def _enqueue_plot_payment_sync(doc, event):
+	"""Run payment sync synchronously for each related plot SO.
+	Only fires for plot sale invoices — safe to call on any Payment Entry.
+	"""
+	related = _get_related_landms_documents_from_payment_entry(doc)
+	for so_name in sorted(related["sales_orders"]):
+		try:
+			_run_plot_payment_sync(so_name, pe_name=doc.name)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"plot_pay sync failed for {so_name}")
+
+
+def _run_plot_payment_sync(so_name, pe_name=None):
+	"""Sync SO + SI + Contract for one plot Sales Order.
+	Only runs for is_plot_sale_invoice SOs — safe to ignore all others.
+	"""
+	if not frappe.db.exists("Sales Order", so_name):
+		return
+
+	inv_name = frappe.db.get_value("Sales Order", so_name, "plot_sales_invoice")
+	if not inv_name:
+		return
+	if not frappe.db.get_value("Sales Invoice", inv_name, "is_plot_sale_invoice"):
+		return
+
+	_sync_sales_order_from_plot_invoice(so_name)
+	_sync_si_schedule_for_so(so_name, inv_name)
+
+	contract_name = frappe.db.get_value("Sales Order", so_name, "plot_contract")
+	if contract_name and frappe.db.exists("Plot Contract", contract_name):
+		_sync_contract_after_payment(contract_name, pe_name=pe_name)
+
+
+def _sync_si_schedule_for_so(so_name, inv_name):
+	"""Sync the Sales Invoice payment schedule rows using the SO's booking_fee_percent."""
+	booking_fee_pct = flt(frappe.db.get_value("Sales Order", so_name, "booking_fee_percent") or 0)
+	invoice = frappe.get_doc("Sales Invoice", inv_name)
+	if not getattr(invoice, "is_plot_sale_invoice", 0):
+		return
+	_sync_payment_schedule_rows_from_invoice(invoice, invoice, booking_fee_percent=booking_fee_pct)
+
+
+def _sync_contract_after_payment(contract_name, pe_name=None):
+	"""Sync Plot Contract payment status after a payment.
+	Reads pe.unallocated_amount to detect overpayment (only for plot sale PEs).
+	"""
+	contract = frappe.get_doc("Plot Contract", contract_name)
+	contract.sync_payment_status()
+
+	# Overpayment: if the PE had more money than the SI outstanding, the
+	# excess sits in pe.unallocated_amount — show it on the contract.
+	if pe_name:
+		unallocated = flt(frappe.db.get_value("Payment Entry", pe_name, "unallocated_amount") or 0)
+		if unallocated > 0:
+			frappe.db.set_value(
+				"Plot Contract", contract_name,
+				"overpaid_amount", unallocated,
+				update_modified=False,
+			)
 
 
 def _build_pe_references_for_invoice(si, total_allocated: float) -> list[dict]:
@@ -470,7 +533,7 @@ def _link_invoice_items_to_sales_order_rows(so, invoice):
 			frappe.db.set_value("Sales Invoice Item", item.name, updates, update_modified=False)
 
 
-def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice):
+def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice, booking_fee_percent=None):
 	"""Sync SO payment schedule rows using booking_fee_percent and SI header
 	outstanding_amount as the source of truth.
 
@@ -490,7 +553,10 @@ def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice):
 		return
 
 	total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
-	booking_fee_percent = flt(parent_doc.get("booking_fee_percent") or 0)
+	if booking_fee_percent is None:
+		booking_fee_percent = flt(parent_doc.get("booking_fee_percent") or 0)
+	else:
+		booking_fee_percent = flt(booking_fee_percent)
 
 	# Single row — full amount, no advance split
 	if len(target_rows) == 1 or booking_fee_percent <= 0 or booking_fee_percent >= 100:
@@ -619,3 +685,105 @@ def _payment_reference_exists(invoice_name: str, reference_no: str) -> bool:
 		(reference_no, invoice_name),
 	)
 	return bool(rows)
+
+
+# ---------------------------------------------------------------------- #
+#  Government share JE                                                     #
+# ---------------------------------------------------------------------- #
+
+def _post_government_share_je(pe_doc):
+	"""Post government share JE for each plot sale payment.
+
+	Dr Customer Advances Account  (reducing deferred revenue)
+	Cr Government Payable Account (recording govt share payable)
+	Amount = government_share_percent × paid_amount
+	"""
+	if pe_doc.docstatus != 1:
+		return
+
+	so_name, govt_pct, land_acquisition = _get_govt_share_fields_from_pe(pe_doc)
+	if not so_name or flt(govt_pct) <= 0:
+		return
+
+	settings = frappe.get_single("LandMS Settings")
+	if not settings.government_payable_account or not settings.customer_advance_account:
+		return
+
+	govt_amount = flt(pe_doc.paid_amount) * flt(govt_pct) / 100.0
+	if govt_amount <= 0:
+		return
+
+	je = frappe.get_doc({
+		"doctype": "Journal Entry",
+		"posting_date": pe_doc.posting_date or today(),
+		"company": pe_doc.company,
+		"voucher_type": "Journal Entry",
+		"lms_payment_entry": pe_doc.name,
+		"user_remark": (
+			f"Government share {flt(govt_pct):.2f}% on payment {pe_doc.name} "
+			f"— Sales Order {so_name}"
+		),
+		"accounts": [
+			{
+				"account": settings.customer_advance_account,
+				"debit_in_account_currency": govt_amount,
+				"cost_center": settings.cost_center,
+				"land_acquisition": land_acquisition or "",
+			},
+			{
+				"account": settings.government_payable_account,
+				"credit_in_account_currency": govt_amount,
+				"cost_center": settings.cost_center,
+				"land_acquisition": land_acquisition or "",
+			},
+		],
+	})
+	je.insert(ignore_permissions=True)
+	je.submit()
+
+
+def _cancel_government_share_je(pe_doc):
+	"""Cancel the government share JE linked to this Payment Entry."""
+	je_name = frappe.db.get_value(
+		"Journal Entry",
+		{"lms_payment_entry": pe_doc.name, "docstatus": 1},
+		"name",
+	)
+	if not je_name:
+		return
+	je = frappe.get_doc("Journal Entry", je_name)
+	je.cancel()
+
+
+def _get_govt_share_fields_from_pe(pe_doc):
+	"""Return (sales_order_name, government_share_percent, land_acquisition) from PE references."""
+	for row in pe_doc.get("references") or []:
+		if row.reference_doctype == "Sales Invoice":
+			si = frappe.db.get_value(
+				"Sales Invoice", row.reference_name,
+				["is_plot_sale_invoice", "plot_contract"],
+				as_dict=True,
+			)
+			if not si or not si.is_plot_sale_invoice:
+				continue
+			so_name = frappe.db.get_value(
+				"Sales Invoice Item",
+				{"parent": row.reference_name},
+				"sales_order",
+			)
+			if not so_name:
+				continue
+			govt_pct, land_acquisition = frappe.db.get_value(
+				"Sales Order", so_name,
+				["government_share_percent", "land_acquisition"],
+			) or (0, "")
+			return so_name, flt(govt_pct), land_acquisition
+
+		if row.reference_doctype == "Sales Order":
+			govt_pct, land_acquisition = frappe.db.get_value(
+				"Sales Order", row.reference_name,
+				["government_share_percent", "land_acquisition"],
+			) or (0, "")
+			return row.reference_name, flt(govt_pct), land_acquisition
+
+	return None, 0, ""

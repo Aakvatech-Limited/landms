@@ -160,11 +160,47 @@
    "default": "0"
   },
   {
+   "fieldname": "payment_period_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Period",
+   "collapsible": 0
+  },
+  {
+   "fieldname": "payment_years",
+   "fieldtype": "Int",
+   "label": "Years",
+   "default": "0"
+  },
+  {
+   "fieldname": "payment_months",
+   "fieldtype": "Int",
+   "label": "Months",
+   "default": "0"
+  },
+  {
+   "fieldname": "payment_days_input",
+   "fieldtype": "Int",
+   "label": "Days",
+   "default": "30"
+  },
+  {
+   "fieldname": "payment_period_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_period_summary",
+   "fieldtype": "Data",
+   "label": "Total Period",
+   "read_only": 1,
+   "description": "Calculated total in days"
+  },
+  {
    "fieldname": "payment_completion_days",
    "fieldtype": "Int",
    "label": "Payment Completion (Days)",
    "reqd": 1,
-   "default": "30"
+   "default": "30",
+   "hidden": 1
   },
   {
    "fieldname": "plot_type_rates_section",
@@ -194,7 +230,7 @@
    "label": "Total Land Cost (TZS)",
    "read_only": 1,
    "bold": 1,
-   "description": "Sum of submitted Purchase Invoices tagged to this Land Acquisition (capitalized to the Land Under Development account). This is the cost basis Plot Master uses for allocation."
+   "description": "Sum of submitted Purchase Invoices and Journal Entries tagged to this Land Acquisition (capitalized to land cost accounts). This is the cost basis Plot Master uses for allocation."
   },
   {
    "fieldname": "cost_per_sqm_tzs",
@@ -238,6 +274,56 @@
    "label": "Unbilled PO (TZS)",
    "read_only": 1,
    "description": "Committed minus Billed — work ordered through Purchase Orders but not yet invoiced."
+  },
+  {
+   "fieldname": "je_billed_tzs",
+   "fieldtype": "Currency",
+   "label": "JE Billed (TZS)",
+   "read_only": 1,
+   "description": "Total debited to land cost accounts via Journal Entries tagged to this Land Acquisition. Included in Total Land Cost."
+  },
+  {
+   "fieldname": "recalculation_section",
+   "fieldtype": "Section Break",
+   "label": "Plot Cost Recalculation",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "last_recalculation_cost",
+   "fieldtype": "Currency",
+   "label": "Last Recalculation Cost (TZS)",
+   "read_only": 1,
+   "description": "Acquisition cost at the time the last recalculation ran successfully."
+  },
+  {
+   "fieldname": "last_recalculation_date",
+   "fieldtype": "Datetime",
+   "label": "Last Recalculation Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recalculation_in_progress",
+   "fieldtype": "Check",
+   "label": "Recalculation In Progress",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "last_recalculation_log",
+   "fieldtype": "Text",
+   "label": "Recalculation Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "je_costs_section",
+   "fieldtype": "Section Break",
+   "label": "Journal Entry Costs",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "je_summary_html",
+   "fieldtype": "HTML",
+   "label": "Journal Entry Costs"
   },
   {
    "fieldname": "land_seller_section",

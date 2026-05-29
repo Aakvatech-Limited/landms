@@ -5,81 +5,74 @@ from frappe.utils import flt
 def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
-	data    = get_data(filters)
+	data = get_data(filters)
 	summary = get_summary(data)
-	chart   = get_chart(data)
+	chart = get_chart(data)
 	return columns, data, None, chart, summary
 
 
 def get_columns():
 	return [
-		{"label": "Contract",        "fieldname": "contract",                "fieldtype": "Link",    "options": "Plot Contract",   "width": 160},
-		{"label": "Sales Order",     "fieldname": "sales_order",             "fieldtype": "Link",    "options": "Sales Order",     "width": 150},
-		{"label": "Customer",        "fieldname": "customer",                "fieldtype": "Link",    "options": "Customer",        "width": 200},
-		{"label": "Plot",            "fieldname": "plot",                    "fieldtype": "Link",    "options": "Plot Master",     "width": 130},
-		{"label": "Contract Value (TZS)", "fieldname": "selling_price",      "fieldtype": "Float",                                 "width": 170},
-		{"label": "Govt Share %",    "fieldname": "government_share_percent","fieldtype": "Percent",                               "width": 110},
-		{"label": "Govt Fee (TZS)",  "fieldname": "government_fee_withheld", "fieldtype": "Float",                                 "width": 170},
-		{"label": "Journal Entry",   "fieldname": "government_fee_entry",    "fieldtype": "Link",    "options": "Journal Entry",   "width": 170},
-		{"label": "Fee Posted Date", "fieldname": "fee_posted_date",         "fieldtype": "Date",                                  "width": 140},
-		{"label": "Status",          "fieldname": "fee_status",              "fieldtype": "Data",                                  "width": 100},
+		{"label": "Date",            "fieldname": "posting_date",   "fieldtype": "Date",   "width": 110},
+		{"label": "Journal Entry",   "fieldname": "journal_entry",  "fieldtype": "Link",   "options": "Journal Entry",   "width": 180},
+		{"label": "Payment Entry",   "fieldname": "payment_entry",  "fieldtype": "Link",   "options": "Payment Entry",   "width": 180},
+		{"label": "Land Acquisition","fieldname": "land_acquisition","fieldtype": "Link",   "options": "Land Acquisition","width": 180},
+		{"label": "Customer",        "fieldname": "customer",        "fieldtype": "Link",   "options": "Customer",        "width": 200},
+		{"label": "Govt Share (TZS)","fieldname": "govt_amount",    "fieldtype": "Currency",                              "width": 170},
 	]
 
 
 def get_data(filters):
-	status_filter = filters.get("status") or "All"
-	from_date     = filters.get("from_date")
-	to_date       = filters.get("to_date")
+	from_date       = filters.get("from_date")
+	to_date         = filters.get("to_date")
+	land_acquisition = filters.get("land_acquisition")
 
 	conditions = [
-		"pc.docstatus = 1",
-		"pc.contract_status = 'Completed'",
-		"pc.government_fee_withheld > 0",
+		"je.docstatus = 1",
+		"(je.lms_payment_entry IS NOT NULL AND je.lms_payment_entry != '')",
+		"jea.credit_in_account_currency > 0",
 	]
-
-	if status_filter == "Posted":
-		conditions.append("pc.government_fee_entry IS NOT NULL AND pc.government_fee_entry != ''")
-	elif status_filter == "Pending":
-		conditions.append("(pc.government_fee_entry IS NULL OR pc.government_fee_entry = '')")
+	params = {}
 
 	if from_date:
 		conditions.append("je.posting_date >= %(from_date)s")
+		params["from_date"] = from_date
 	if to_date:
-		conditions.append("(je.posting_date <= %(to_date)s OR je.posting_date IS NULL)")
+		conditions.append("je.posting_date <= %(to_date)s")
+		params["to_date"] = to_date
+	if land_acquisition:
+		conditions.append("jea.land_acquisition = %(land_acquisition)s")
+		params["land_acquisition"] = land_acquisition
 
 	where = " AND ".join(conditions)
 
 	rows = frappe.db.sql(f"""
 		SELECT
-			pc.name                    AS contract,
-			pc.sales_order,
-			pc.customer,
-			pc.plot,
-			pc.selling_price,
-			pc.government_share_percent,
-			pc.government_fee_withheld,
-			pc.government_fee_entry,
-			je.posting_date            AS fee_posted_date
-		FROM `tabPlot Contract` pc
-		LEFT JOIN `tabJournal Entry` je
-			ON je.name = pc.government_fee_entry
+			je.name                            AS journal_entry,
+			je.posting_date,
+			je.lms_payment_entry               AS payment_entry,
+			jea.land_acquisition,
+			pe.party                           AS customer,
+			jea.credit_in_account_currency     AS govt_amount
+		FROM `tabJournal Entry` je
+		INNER JOIN `tabJournal Entry Account` jea
+			ON jea.parent = je.name
+			AND jea.credit_in_account_currency > 0
+		LEFT JOIN `tabPayment Entry` pe
+			ON pe.name = je.lms_payment_entry
 		WHERE {where}
-		ORDER BY je.posting_date DESC, pc.name
-	""", {"from_date": from_date, "to_date": to_date}, as_dict=True)
+		ORDER BY je.posting_date DESC, je.name
+	""", params, as_dict=True)
 
 	data = []
 	for row in rows:
 		data.append({
-			"contract":                 row.contract,
-			"sales_order":              row.sales_order,
-			"customer":                 row.customer,
-			"plot":                     row.plot,
-			"selling_price":            flt(row.selling_price),
-			"government_share_percent": flt(row.government_share_percent),
-			"government_fee_withheld":  flt(row.government_fee_withheld),
-			"government_fee_entry":     row.government_fee_entry,
-			"fee_posted_date":          row.fee_posted_date,
-			"fee_status":               "Posted" if row.government_fee_entry else "Pending",
+			"posting_date":    row.posting_date,
+			"journal_entry":   row.journal_entry,
+			"payment_entry":   row.payment_entry,
+			"land_acquisition": row.land_acquisition,
+			"customer":        row.customer,
+			"govt_amount":     flt(row.govt_amount),
 		})
 
 	return data
@@ -88,13 +81,11 @@ def get_data(filters):
 def get_summary(data):
 	if not data:
 		return []
-	total_fee   = sum(flt(r["government_fee_withheld"]) for r in data)
-	posted_fee  = sum(flt(r["government_fee_withheld"]) for r in data if r["fee_status"] == "Posted")
-	pending_fee = total_fee - posted_fee
+	total = sum(flt(r["govt_amount"]) for r in data)
+	count = len(data)
 	return [
-		{"label": "Total Government Fee",     "value": total_fee,   "datatype": "Float", "indicator": "Blue"},
-		{"label": "Posted to Govt Payable",   "value": posted_fee,  "datatype": "Float", "indicator": "Green"},
-		{"label": "Still Pending",            "value": pending_fee, "datatype": "Float", "indicator": "Red"},
+		{"label": "Total Government Payable", "value": total, "datatype": "Currency", "indicator": "Blue"},
+		{"label": "Number of Payments",        "value": count, "datatype": "Int",      "indicator": "Grey"},
 	]
 
 
@@ -102,21 +93,22 @@ def get_chart(data):
 	if not data:
 		return None
 
-	posted_fee = sum(flt(r["government_fee_withheld"]) for r in data if r["fee_status"] == "Posted")
-	pending_fee = sum(flt(r["government_fee_withheld"]) for r in data if r["fee_status"] == "Pending")
-	if posted_fee <= 0 and pending_fee <= 0:
+	by_la = {}
+	for row in data:
+		la = row.get("land_acquisition") or "Unassigned"
+		by_la[la] = by_la.get(la, 0) + flt(row["govt_amount"])
+
+	if not by_la:
 		return None
+
+	labels = list(by_la.keys())
+	values = [by_la[la] for la in labels]
 
 	return {
 		"data": {
-			"labels": ["Posted", "Pending"],
-			"datasets": [
-				{
-					"name": "Government Fee",
-					"values": [posted_fee, pending_fee],
-				}
-			],
+			"labels": labels,
+			"datasets": [{"name": "Govt Share (TZS)", "values": values}],
 		},
-		"type": "donut",
-		"colors": ["#2f9e44", "#e03131"],
+		"type": "bar",
+		"colors": ["#1971c2"],
 	}

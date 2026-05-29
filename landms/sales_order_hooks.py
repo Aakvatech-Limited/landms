@@ -121,6 +121,7 @@ def submit_sales_order(doc, method=None):
 
 	control_number = _ensure_control_number(doc)
 	_create_registry_row(doc, control_number)
+	_ensure_related_control_number(doc)
 	_link_application_to_sales_order(doc)
 	contract_name = _ensure_draft_plot_contract(doc)
 	if contract_name and doc.get("plot_contract") != contract_name:
@@ -175,6 +176,43 @@ def cancel_sales_order(doc, method=None):
 
 	_cancel_plot_application(doc)
 	_release_plot_if_no_active_application(doc)
+
+
+@frappe.whitelist()
+def close_sales_order(sales_order_name):
+	"""Close a plot Sales Order with no payments — releases plot, declines TCB CN, cancels application."""
+	doc = frappe.get_doc("Sales Order", sales_order_name)
+	if not _is_landms_sales_order(doc):
+		frappe.throw("This Sales Order is not a LandMS plot sale.")
+	if doc.docstatus != 1:
+		frappe.throw("Only submitted Sales Orders can be closed.")
+	if doc.status == "Closed":
+		frappe.throw("This Sales Order is already closed.")
+
+	_block_close_if_paid(doc)
+	_post_draft_contract_forfeiture_je(doc)
+	_clear_application_sales_order_link(doc)
+	_cancel_unpaid_plot_sales_invoice(doc)
+	if doc.get("forfeiture_entry"):
+		si_name = doc.get("plot_sales_invoice")
+		if si_name:
+			_post_credit_note_for_outstanding(si_name)
+	_delete_draft_plot_contract(doc)
+
+	control_number = cstr(doc.get("control_number") or "").strip()
+	if control_number:
+		result = decline_reference_for_sales_order(doc.name, control_number)
+		if not result.get("ok") and result.get("block_cancel"):
+			frappe.throw(
+				f"TCB Decline call failed for control number {control_number} and "
+				f"the Decline Failure Policy is set to 'Block Cancel'. "
+				f"Close aborted. Detail: {result.get('message')}"
+			)
+
+	_cancel_plot_application(doc)
+	_release_plot_if_no_active_application(doc)
+
+	doc.db_set("status", "Closed", update_modified=False)
 
 
 def ensure_plot_sales_invoice_for_sales_order(
@@ -491,9 +529,9 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		return existing_invoice_name
 
 	# Find an existing plot SI for THIS customer+plot whose SO is still active.
-	# Audit-trail SIs from cancelled SOs (left ds=1 by Path B) must not be reused:
-	# they belong to a different sale (possibly a different customer, and certainly
-	# a different SO) and would cross-contaminate payment allocation.
+	# Audit-trail SIs from cancelled or closed SOs must not be reused: they belong
+	# to a different sale and would cross-contaminate payment allocation.
+	# Closed SOs keep docstatus=1 so we must also exclude status='Closed'.
 	candidates = frappe.db.sql(
 		"""
 		SELECT si.name
@@ -505,7 +543,7 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		  AND si.is_plot_sale_invoice = 1
 		  AND si.is_return = 0
 		  AND si.docstatus = 1
-		  AND (so.name IS NULL OR so.docstatus != 2)
+		  AND (so.name IS NULL OR (so.docstatus = 1 AND so.status NOT IN ('Closed', 'Cancelled')))
 		LIMIT 1
 		""",
 		(doc.plot, doc.customer),
@@ -653,13 +691,28 @@ def _block_manual_control_number(doc):
 		)
 
 
-def _create_registry_row(doc, control_number: str):
+def _create_registry_row(doc, control_number: str, related_control_number: str = ""):
 	create_or_get_registry(
 		control_number=control_number,
 		sales_order=doc.name,
 		customer=doc.customer,
 		amount=flt(doc.grand_total),
+		related_control_number=related_control_number,
 	)
+
+
+def _ensure_related_control_number(doc):
+	if not cint(doc.get("include_related_ref")):
+		return
+	existing = cstr(doc.get("related_control_number") or "").strip()
+	if existing and is_valid_control_number(existing, related=True):
+		return
+	related_cn = generate_control_number(doc.name, related=True)
+	doc.db_set("related_control_number", related_cn, update_modified=False)
+	doc.related_control_number = related_cn
+	primary_cn = cstr(doc.get("control_number") or "").strip()
+	if primary_cn and frappe.db.exists("TCB Control Number", primary_cn):
+		frappe.db.set_value("TCB Control Number", primary_cn, "related_control_number", related_cn)
 
 
 def _register_with_tcb(doc, control_number: str):
@@ -749,6 +802,19 @@ def _block_cancel_if_paid(doc):
 			)
 
 
+def _block_close_if_paid(doc):
+	submitted_contract = frappe.db.get_value(
+		"Plot Contract",
+		{"sales_order": doc.name, "docstatus": 1},
+		"name",
+	)
+	if submitted_contract:
+		frappe.throw(
+			f"Sales Order {doc.name} cannot be closed — Plot Contract {submitted_contract} "
+			"has been submitted. Use Plot Contract → Terminate Contract instead."
+		)
+
+
 def _cancel_unpaid_plot_sales_invoice(doc):
 	# Termination flow already handled the SI before calling SO cancel
 	if doc.flags.get("_from_termination"):
@@ -770,9 +836,8 @@ def _cancel_unpaid_plot_sales_invoice(doc):
 		return
 
 	if flt(invoice.outstanding_amount) < flt(invoice.grand_total):
-		frappe.throw(
-			f"Sales Order {doc.name} cannot be cancelled because plot invoice {invoice.name} has payments."
-		)
+		# Invoice has payments — leave open as audit trail, credit note will zero the outstanding
+		return
 
 	invoice.cancel()
 
@@ -793,6 +858,8 @@ def _delete_draft_plot_contract(doc):
 	for name in candidates:
 		if frappe.db.get_value("Plot Contract", name, "docstatus") == 0:
 			frappe.delete_doc("Plot Contract", name, ignore_permissions=True, force=True)
+			if doc.get("plot_contract") == name:
+				doc.db_set("plot_contract", "", update_modified=False)
 
 
 def _find_draft_plot_contract(doc):
@@ -831,12 +898,14 @@ def _post_draft_contract_forfeiture_je(doc):
 	settings = frappe.get_single("LandMS Settings")
 	forfeiture_pct = flt(settings.forfeiture_percentage or 100)
 	forfeited_amount = total_paid * forfeiture_pct / 100.0
+	refund_amount = total_paid - forfeited_amount
 
 	je = frappe.get_doc({
 		"doctype": "Journal Entry",
 		"posting_date": today(),
 		"company": settings.company,
 		"voucher_type": "Journal Entry",
+		"lms_refund_amount": refund_amount,
 		"user_remark": (
 			f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
 			f"{forfeiture_pct:.0f}% of paid amount forfeited. "
@@ -846,18 +915,85 @@ def _post_draft_contract_forfeiture_je(doc):
 			{
 				"account": settings.customer_advance_account,
 				"debit_in_account_currency": forfeited_amount,
-				"party_type": "Customer",
-				"party": doc.customer,
+				"cost_center": settings.cost_center,
+				"land_acquisition": doc.get("land_acquisition") or "",
 			},
 			{
 				"account": settings.forfeited_deposits_account,
 				"credit_in_account_currency": forfeited_amount,
+				"cost_center": settings.cost_center,
+				"land_acquisition": doc.get("land_acquisition") or "",
 			},
 		],
 	})
 	je.insert(ignore_permissions=True)
 	je.submit()
 	doc.db_set("forfeiture_entry", je.name)
+
+
+def _post_credit_note_for_outstanding(si_name):
+	"""Create a return Sales Invoice (credit note) for the unpaid outstanding balance.
+
+	Called after SO close or contract termination when a partial payment existed and
+	the original SI was deliberately left open as an audit trail. The credit note
+	reverses only the outstanding portion — it does not touch allocated payments.
+
+	Accounting: Dr Customer Advances / Cr AR (mirrors the original SI income account).
+	"""
+	if not si_name or not frappe.db.exists("Sales Invoice", si_name):
+		return None
+
+	si_doc = frappe.get_doc("Sales Invoice", si_name)
+	outstanding = flt(si_doc.outstanding_amount)
+	if outstanding <= 0:
+		return None
+
+	if not si_doc.get("items"):
+		return None
+
+	settings = frappe.get_single("LandMS Settings")
+	original_item = si_doc.items[0]
+
+	credit_note = frappe.get_doc({
+		"doctype": "Sales Invoice",
+		"is_return": 1,
+		"return_against": si_name,
+		"customer": si_doc.customer,
+		"company": si_doc.company,
+		"posting_date": today(),
+		"due_date": today(),
+		"plot": si_doc.get("plot"),
+		"land_acquisition": si_doc.get("land_acquisition"),
+		"plot_contract": si_doc.get("plot_contract"),
+		"is_plot_sale_invoice": 1,
+		"update_stock": 0,
+		"is_not_vfd_invoice": 1,
+		"allocate_advances_automatically": 0,
+		"update_outstanding_for_self": 0,
+		"remarks": f"Credit note — sale cancelled, reversing outstanding balance on {si_name}",
+		"items": [{
+			"item_code": original_item.item_code,
+			"item_name": original_item.item_name,
+			"qty": -1,
+			"uom": original_item.uom,
+			"stock_uom": original_item.stock_uom or original_item.uom,
+			"conversion_factor": 1,
+			"rate": outstanding,
+			"income_account": settings.customer_advance_account,
+			"cost_center": settings.cost_center,
+			"land_acquisition": si_doc.get("land_acquisition") or "",
+		}],
+	})
+
+	original_user = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+		credit_note.insert(ignore_permissions=True)
+		credit_note.submit()
+	finally:
+		frappe.set_user(original_user)
+
+	return credit_note.name
 
 
 def _cancel_plot_application(doc):
@@ -875,6 +1011,7 @@ def _cancel_plot_application(doc):
 		return
 	app = frappe.get_doc("Plot Application", app_name)
 	app.flags.from_sales_order_cancel = True
+	app.flags.ignore_links = True
 	app.cancel()
 
 
