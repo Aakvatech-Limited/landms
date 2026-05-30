@@ -1,6 +1,6 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import get_fullname, today
+from frappe.utils import flt, get_fullname, today
 
 from landms.landms.doctype.land_acquisition.land_acquisition import sync_land_acquisition_plot_summary
 from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
@@ -95,6 +95,8 @@ class PlotHandover(Document):
 		if not plot.serial_no:
 			frappe.throw(f"Plot {plot.name} is missing its Serial No.")
 
+		self._cancel_blocking_stock_reconciliations(plot.serial_no)
+
 		if contract.sales_order and frappe.db.exists("Sales Order", contract.sales_order):
 			dn = self._make_delivery_note_from_sales_order(contract.sales_order, plot)
 		else:
@@ -125,11 +127,13 @@ class PlotHandover(Document):
 		if not dn.items:
 			frappe.throw(f"Sales Order {sales_order_name} has no deliverable rows for handover.")
 
+		inv_warehouse = frappe.db.get_single_value("LandMS Settings", "plot_inventory_warehouse")
 		for row in dn.items:
 			row.qty = 1
 			row.serial_no = plot.serial_no
 			row.use_serial_batch_fields = 1
-			row.warehouse = row.warehouse or frappe.db.get_single_value("LandMS Settings", "plot_inventory_warehouse")
+			row.warehouse = inv_warehouse
+			row.incoming_rate = flt(plot.allocated_cost)
 
 		return dn
 
@@ -147,6 +151,7 @@ class PlotHandover(Document):
 						"item_code": item_code,
 						"qty": 1,
 						"rate": plot.selling_price,
+						"incoming_rate": flt(plot.allocated_cost),
 						"warehouse": settings.plot_inventory_warehouse,
 						"serial_no": plot.serial_no,
 						"use_serial_batch_fields": 1,
@@ -155,6 +160,48 @@ class PlotHandover(Document):
 				],
 			}
 		)
+
+	def _cancel_blocking_stock_reconciliations(self, serial_no):
+		# Cancel ALL SRs for this LA newest-first to avoid chained dependency errors.
+		# A single SR can reference multiple plot serials so we must clear the whole LA.
+		la = frappe.db.get_value("Plot Master", self.plot, "land_acquisition")
+		if not la:
+			return
+
+		sr_names = frappe.db.sql("""
+			SELECT DISTINCT sr.name
+			FROM `tabStock Reconciliation` sr
+			JOIN `tabStock Reconciliation Item` sri ON sri.parent = sr.name
+			WHERE sri.serial_no IN (
+				SELECT serial_no FROM `tabPlot Master`
+				WHERE land_acquisition = %s AND docstatus = 1 AND serial_no IS NOT NULL
+			) AND sr.docstatus = 1
+			ORDER BY sr.posting_date DESC, sr.name DESC
+		""", la, pluck="name")
+
+		if not sr_names:
+			return
+
+		for name in sr_names:
+			try:
+				sr = frappe.get_doc("Stock Reconciliation", name)
+				sr.flags.ignore_permissions = True
+				sr.cancel()
+				frappe.db.commit()
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"Could not cancel blocking SR {name} for serial {serial_no}")
+
+		# Reset any plot serials that are stuck in Delivered state after SR cancellations
+		plot_serials = frappe.db.sql("""
+			SELECT serial_no FROM `tabPlot Master`
+			WHERE land_acquisition = %s AND docstatus = 1
+			AND serial_no IS NOT NULL AND status NOT IN ('Delivered', 'Title Closed')
+		""", la, pluck="serial_no")
+
+		for sn in plot_serials:
+			sn_status = frappe.db.get_value("Serial No", sn, "status")
+			if sn_status == "Delivered":
+				frappe.db.set_value("Serial No", sn, "status", "Active")
 
 	def _cancel_delivery_note(self):
 		if not self.delivery_note or not frappe.db.exists("Delivery Note", self.delivery_note):
