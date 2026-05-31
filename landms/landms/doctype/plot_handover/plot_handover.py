@@ -162,46 +162,38 @@ class PlotHandover(Document):
 		)
 
 	def _cancel_blocking_stock_reconciliations(self, serial_no):
-		# Cancel ALL SRs for this LA newest-first to avoid chained dependency errors.
-		# A single SR can reference multiple plot serials so we must clear the whole LA.
-		la = frappe.db.get_value("Plot Master", self.plot, "land_acquisition")
-		if not la:
+		"""Ensure the serial number is Active and in the correct warehouse
+		before creating the Delivery Note.
+
+		Previous versions cancelled all Stock Reconciliations for the
+		land acquisition to work around a serial-status bug.  That
+		approach was destructive — cancelling an SR undoes the cost
+		adjustment for ALL plots in that SR, not just the one being
+		delivered.
+
+		The root cause is that Stock Reconciliation's outward SLE marks
+		serials as 'Delivered' and the inward SLE sometimes fails to
+		restore them.  The correct fix is to simply reset the Serial No
+		metadata (status and warehouse) so the DN validation passes.
+		The SLE chain already shows the serial as available.
+		"""
+		if not serial_no:
 			return
 
-		sr_names = frappe.db.sql("""
-			SELECT DISTINCT sr.name
-			FROM `tabStock Reconciliation` sr
-			JOIN `tabStock Reconciliation Item` sri ON sri.parent = sr.name
-			WHERE sri.serial_no IN (
-				SELECT serial_no FROM `tabPlot Master`
-				WHERE land_acquisition = %s AND docstatus = 1 AND serial_no IS NOT NULL
-			) AND sr.docstatus = 1
-			ORDER BY sr.posting_date DESC, sr.name DESC
-		""", la, pluck="name")
-
-		if not sr_names:
+		inv_warehouse = frappe.db.get_single_value(
+			"LandMS Settings", "plot_inventory_warehouse"
+		)
+		sn_data = frappe.db.get_value(
+			"Serial No", serial_no, ["status", "warehouse"], as_dict=True
+		)
+		if not sn_data:
 			return
 
-		for name in sr_names:
-			try:
-				sr = frappe.get_doc("Stock Reconciliation", name)
-				sr.flags.ignore_permissions = True
-				sr.cancel()
-				frappe.db.commit()
-			except Exception:
-				frappe.log_error(frappe.get_traceback(), f"Could not cancel blocking SR {name} for serial {serial_no}")
-
-		# Reset any plot serials that are stuck in Delivered state after SR cancellations
-		plot_serials = frappe.db.sql("""
-			SELECT serial_no FROM `tabPlot Master`
-			WHERE land_acquisition = %s AND docstatus = 1
-			AND serial_no IS NOT NULL AND status NOT IN ('Delivered', 'Title Closed')
-		""", la, pluck="serial_no")
-
-		for sn in plot_serials:
-			sn_status = frappe.db.get_value("Serial No", sn, "status")
-			if sn_status == "Delivered":
-				frappe.db.set_value("Serial No", sn, "status", "Active")
+		if sn_data.status != "Active" or sn_data.warehouse != inv_warehouse:
+			frappe.db.set_value("Serial No", serial_no, {
+				"status": "Active",
+				"warehouse": inv_warehouse,
+			}, update_modified=False)
 
 	def _cancel_delivery_note(self):
 		if not self.delivery_note or not frappe.db.exists("Delivery Note", self.delivery_note):
