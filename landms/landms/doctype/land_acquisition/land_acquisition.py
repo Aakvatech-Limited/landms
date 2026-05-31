@@ -972,35 +972,51 @@ def _run_plot_cost_recalculation(land_acquisition):
                 continue
 
             try:
-                sr = frappe.get_doc({
-                    "doctype": "Stock Reconciliation",
-                    "purpose": "Stock Reconciliation",
-                    "company": la.company,
-                    "posting_date": today(),
-                    "expense_account": lud_account,
-                    "cost_center": cost_center,
-                    "items": [{
-                        "item_code": item_code,
-                        "warehouse": warehouse,
-                        "qty": 1,
-                        "valuation_rate": new_plot_cost,
-                        "serial_no": plot.serial_no or plot.name,
-                        "use_serial_batch_fields": 1,
-                    }],
-                })
-                sr.insert(ignore_permissions=True)
-                sr.submit()
-
                 frappe.db.set_value("Plot Master", plot.name, {
                     "allocated_cost": new_plot_cost,
                     "cost_per_sqm":   flt(cost_per_sqm),
                 }, update_modified=False)
+
+                if plot.serial_no:
+                    frappe.db.set_value("Serial No", plot.serial_no, "purchase_rate", new_plot_cost, update_modified=False)
+
+                # Update original stock entry SLE + Serial and Batch Bundle
+                # so Repost and future DN outgoing rates use the correct cost
+                if plot.stock_entry:
+                    sle_name = frappe.db.get_value(
+                        "Stock Ledger Entry",
+                        {"voucher_no": plot.stock_entry, "is_cancelled": 0},
+                        "name"
+                    )
+                    if sle_name:
+                        frappe.db.set_value("Stock Ledger Entry", sle_name, {
+                            "incoming_rate": new_plot_cost,
+                            "stock_value_difference": new_plot_cost,
+                        }, update_modified=False)
+
+                    # Update the inward Serial and Batch Bundle avg_rate
+                    bundle_name = frappe.db.get_value(
+                        "Stock Entry Detail",
+                        {"parent": plot.stock_entry, "serial_no": plot.serial_no},
+                        "serial_and_batch_bundle"
+                    )
+                    if bundle_name:
+                        frappe.db.set_value("Serial and Batch Bundle", bundle_name, {
+                            "avg_rate": new_plot_cost,
+                            "total_amount": new_plot_cost,
+                        }, update_modified=False)
+                        frappe.db.sql("""
+                            UPDATE `tabSerial and Batch Entry`
+                            SET incoming_rate=%s
+                            WHERE parent=%s AND serial_no=%s
+                        """, (new_plot_cost, bundle_name, plot.serial_no))
+
                 item_codes_touched.add(item_code)
                 updated.append(f"{plot.name} ({old_plot_cost:.0f} → {new_plot_cost:.0f})")
 
             except Exception:
-                frappe.log_error(frappe.get_traceback(), f"Plot cost recalc SR failed: {plot.name}")
-                failures.append(f"{plot.name} — stock reconciliation failed (see Error Log)")
+                frappe.log_error(frappe.get_traceback(), f"Plot cost recalc failed: {plot.name}")
+                failures.append(f"{plot.name} — cost update failed (see Error Log)")
 
         # Repost Item Valuation — one per unique item code
         for ic in item_codes_touched:
