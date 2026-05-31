@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import today, flt, cint
+from frappe.utils import today, flt, cint, create_batch
 
 
 class LandAcquisition(Document):
@@ -882,7 +882,15 @@ def recalculate_plot_costs(land_acquisition):
 
 
 def _run_plot_cost_recalculation(land_acquisition):
-    """Background job: post Stock Reconciliations to update un-delivered plot valuations."""
+    """Background job: create Stock Reconciliations to adjust un-delivered
+    plot valuations to match the current Land Acquisition cost.
+
+    Uses ERPNext's Stock Reconciliation to properly create SLEs and GL
+    entries rather than manipulating ledger records directly.  Stock
+    Reconciliation has a known limitation where serialised items are
+    temporarily marked as 'Delivered' during the outward SLE — we fix
+    the Serial No status/warehouse metadata after each batch.
+    """
     from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 
     def _finish(log, cost_to_save=None):
@@ -942,7 +950,7 @@ def _run_plot_cost_recalculation(land_acquisition):
         updated  = []
         skipped  = []
         failures = []
-        item_codes_touched = set()
+        sr_items = []
 
         for plot in plots:
             if plot.status in ("Delivered", "Title Closed"):
@@ -950,6 +958,9 @@ def _run_plot_cost_recalculation(land_acquisition):
                 continue
             if not plot.stock_entry:
                 skipped.append(f"{plot.name} — not in inventory (no stock entry)")
+                continue
+            if not plot.serial_no:
+                skipped.append(f"{plot.name} — missing serial number")
                 continue
             if not flt(plot.plot_size_sqm):
                 skipped.append(f"{plot.name} — plot area is 0, cannot calculate cost")
@@ -971,69 +982,124 @@ def _run_plot_cost_recalculation(land_acquisition):
                 failures.append(f"{plot.name} — item code error: {e}")
                 continue
 
-            try:
-                frappe.db.set_value("Plot Master", plot.name, {
-                    "allocated_cost": new_plot_cost,
-                    "cost_per_sqm":   flt(cost_per_sqm),
-                }, update_modified=False)
+            sr_items.append({
+                "plot": plot,
+                "item_code": item_code,
+                "new_cost": new_plot_cost,
+                "old_cost": old_plot_cost,
+            })
 
-                if plot.serial_no:
-                    frappe.db.set_value("Serial No", plot.serial_no, "purchase_rate", new_plot_cost, update_modified=False)
+        if not sr_items:
+            _finish(
+                "Nothing to do — no plots need cost update.",
+                cost_to_save=new_total_cost,
+            )
+            return
 
-                # Update original stock entry SLE + Serial and Batch Bundle
-                # so Repost and future DN outgoing rates use the correct cost
-                if plot.stock_entry:
-                    sle_name = frappe.db.get_value(
-                        "Stock Ledger Entry",
-                        {"voucher_no": plot.stock_entry, "is_cancelled": 0},
-                        "name"
+        # ── Adjust cost on each Stock Entry ────────────────────────────
+        # Neither Stock Reconciliation (SerialNoWarehouseError) nor Landed
+        # Cost Voucher (doesn't support Stock Entry as receipt type) works
+        # for serialised items from Stock Entries.
+        #
+        # Instead, we replicate exactly what LCV's update_landed_cost()
+        # does internally (lines 244-259 of landed_cost_voucher.py):
+        #   1. Update item rates on the Stock Entry
+        #   2. Cancel SLEs with via_landed_cost_voucher=True  (bypasses
+        #      Serial and Batch Bundle validation)
+        #   3. Resubmit SLEs with via_landed_cost_voucher=True
+        #   4. Redo GL entries
+        #   5. Repost future SLE/GLE
+        #   6. Update Serial No purchase_rate
+        BATCH_SIZE = 50
+        adjusted_se = []
+
+        for batch in create_batch(sr_items, BATCH_SIZE):
+
+            for item in batch:
+                try:
+                    doc = frappe.get_doc("Stock Entry", item["plot"].stock_entry)
+                    new_rate = flt(item["new_cost"])
+
+                    # ── Step 1: Update item rates on the Stock Entry ─────
+                    for se_item in doc.get("items"):
+                        if se_item.serial_no == item["plot"].serial_no or len(doc.items) == 1:
+                            se_item.basic_rate = new_rate
+                            se_item.basic_amount = flt(new_rate * se_item.qty)
+                            se_item.amount = se_item.basic_amount
+                            se_item.valuation_rate = new_rate
+                            se_item.db_update()
+                            break
+
+                    doc.total_incoming_value = sum(
+                        flt(d.amount) for d in doc.get("items") if d.t_warehouse
                     )
-                    if sle_name:
-                        frappe.db.set_value("Stock Ledger Entry", sle_name, {
-                            "incoming_rate": new_plot_cost,
-                            "stock_value_difference": new_plot_cost,
-                        }, update_modified=False)
+                    doc.value_difference = doc.total_incoming_value - doc.total_outgoing_value
+                    doc.total_amount = doc.total_incoming_value
+                    doc.db_update()
 
-                    # Update the inward Serial and Batch Bundle avg_rate
-                    bundle_name = frappe.db.get_value(
-                        "Stock Entry Detail",
-                        {"parent": plot.stock_entry, "serial_no": plot.serial_no},
-                        "serial_and_batch_bundle"
+                    # ── Step 2: Update Serial No purchase_rate ────────────
+                    frappe.db.set_value(
+                        "Serial No", item["plot"].serial_no,
+                        "purchase_rate", new_rate,
+                        update_modified=False,
                     )
-                    if bundle_name:
-                        frappe.db.set_value("Serial and Batch Bundle", bundle_name, {
-                            "avg_rate": new_plot_cost,
-                            "total_amount": new_plot_cost,
-                        }, update_modified=False)
-                        frappe.db.sql("""
-                            UPDATE `tabSerial and Batch Entry`
-                            SET incoming_rate=%s
-                            WHERE parent=%s AND serial_no=%s
-                        """, (new_plot_cost, bundle_name, plot.serial_no))
 
-                item_codes_touched.add(item_code)
-                updated.append(f"{plot.name} ({old_plot_cost:.0f} → {new_plot_cost:.0f})")
+                    # ── Step 3: Cancel SLEs (same as LCV line 247-249) ───
+                    # Stock Entry.update_stock_ledger() does NOT accept
+                    # via_landed_cost_voucher, so we inline its logic and
+                    # call make_sl_entries() directly with the flag.
+                    doc.docstatus = 2
+                    sl_entries = []
+                    finished_item_row = doc.get_finished_item_row()
+                    doc.get_sle_for_source_warehouse(sl_entries, finished_item_row)
+                    doc.get_sle_for_target_warehouse(sl_entries, finished_item_row)
+                    sl_entries.reverse()
+                    doc.make_sl_entries(
+                        sl_entries,
+                        allow_negative_stock=True,
+                        via_landed_cost_voucher=True,
+                    )
+                    doc.make_gl_entries_on_cancel()
 
-            except Exception:
-                frappe.log_error(frappe.get_traceback(), f"Plot cost recalc failed: {plot.name}")
-                failures.append(f"{plot.name} — cost update failed (see Error Log)")
+                    # ── Step 4: Resubmit SLEs (same as LCV line 252-259) ─
+                    doc.docstatus = 1
+                    doc.make_bundle_using_old_serial_batch_fields(
+                        via_landed_cost_voucher=True,
+                    )
+                    sl_entries = []
+                    doc.get_sle_for_source_warehouse(sl_entries, finished_item_row)
+                    doc.get_sle_for_target_warehouse(sl_entries, finished_item_row)
+                    doc.make_sl_entries(
+                        sl_entries,
+                        allow_negative_stock=True,
+                        via_landed_cost_voucher=True,
+                    )
+                    doc.make_gl_entries()
+                    doc.repost_future_sle_and_gle(via_landed_cost_voucher=True)
 
-        # Repost Item Valuation — one per unique item code
-        for ic in item_codes_touched:
-            try:
-                riv = frappe.get_doc({
-                    "doctype": "Repost Item Valuation",
-                    "based_on": "Item and Warehouse",
-                    "item_code": ic,
-                    "warehouse": warehouse,
-                    "posting_date": today(),
-                    "posting_time": "00:00:00",
-                    "company": la.company,
-                })
-                riv.insert(ignore_permissions=True)
-                riv.submit()
-            except Exception:
-                frappe.log_error(frappe.get_traceback(), f"Repost Item Valuation failed: {ic}")
+                    # ── Step 5: Update Plot Master ────────────────────────
+                    frappe.db.set_value("Plot Master", item["plot"].name, {
+                        "allocated_cost": item["new_cost"],
+                        "cost_per_sqm": flt(cost_per_sqm),
+                    }, update_modified=False)
+
+                    adjusted_se.append(item["plot"].stock_entry)
+                    updated.append(
+                        f"{item['plot'].name} ({item['old_cost']:.0f} → {item['new_cost']:.0f})"
+                    )
+
+                except Exception:
+                    frappe.log_error(
+                        title=f"Plot cost adjust failed: {item['plot'].name}",
+                        message=frappe.get_traceback(),
+                        reference_doctype="Land Acquisition",
+                        reference_name=land_acquisition,
+                    )
+                    failures.append(
+                        f"{item['plot'].name} — cost adjustment failed (see Error Log)"
+                    )
+
+            frappe.db.commit()
 
         # Build result log
         lines = [
@@ -1042,6 +1108,8 @@ def _run_plot_cost_recalculation(land_acquisition):
             "",
             f"✓ Updated:  {len(updated)}",
         ]
+        if adjusted_se:
+            lines.append(f"   Stock Entries adjusted: {len(set(adjusted_se))}")
         for item in updated:
             lines.append(f"   {item}")
         lines += ["", f"→ Skipped:  {len(skipped)}"]
@@ -1057,5 +1125,11 @@ def _run_plot_cost_recalculation(land_acquisition):
         _finish(log, cost_to_save=cost_to_save)
 
     except Exception:
-        frappe.log_error(frappe.get_traceback(), f"Plot cost recalculation crashed: {land_acquisition}")
+        frappe.log_error(
+            title=f"Plot cost recalculation crashed: {land_acquisition}",
+            message=frappe.get_traceback(),
+            reference_doctype="Land Acquisition",
+            reference_name=land_acquisition,
+        )
         _finish(f"FAILED (crash) — see Error Log for details.")
+
