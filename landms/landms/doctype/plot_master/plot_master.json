@@ -184,6 +184,79 @@
    "options": "Plot Master",
    "read_only": 1,
    "print_hide": 1
+  },
+  {
+   "fieldname": "govt_fees_section",
+   "fieldtype": "Section Break",
+   "label": "Government Fees (Informational)"
+  },
+  {
+   "fieldname": "land_rent_rate",
+   "fieldtype": "Float",
+   "label": "Land Rent Rate (TZS/sqm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "land_rent",
+   "fieldtype": "Currency",
+   "label": "Land Rent (L/RENT)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "registration_prep_fee",
+   "fieldtype": "Currency",
+   "label": "Registration Prep Fee (CT)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_govt_fees",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "govt_application_fee",
+   "fieldtype": "Currency",
+   "label": "Govt Application Fee (APPL)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "premium",
+   "fieldtype": "Currency",
+   "label": "Premium",
+   "read_only": 1
+  },
+  {
+   "fieldname": "govt_registration_fee",
+   "fieldtype": "Currency",
+   "label": "Govt Registration Fee (REGISTR)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stamp_duty",
+   "fieldtype": "Currency",
+   "label": "Stamp Duty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "govt_totals_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_govt_fees",
+   "fieldtype": "Currency",
+   "label": "Total Government Fees",
+   "read_only": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_plot_amount",
+   "fieldtype": "Currency",
+   "label": "Total Amount (CAPS + Govt Fees)",
+   "read_only": 1,
+   "bold": 1
   }
  ],
  "permissions": [

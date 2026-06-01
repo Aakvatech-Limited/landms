@@ -19,6 +19,15 @@
    "label": "Selling Price per Sqm",
    "reqd": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "land_rent_rate",
+   "fieldtype": "Float",
+   "label": "Land Rent Rate (TZS/sqm)",
+   "fetch_from": "plot_type.land_rent_rate",
+   "fetch_if_empty": 0,
+   "read_only": 1,
+   "in_list_view": 1
   }
  ]
 }

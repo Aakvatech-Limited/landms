@@ -195,6 +195,37 @@
    "description": "Days the paid application reserves the plot before the Sales Order must be created"
   },
   {
+   "fieldname": "govt_fees_section",
+   "fieldtype": "Section Break",
+   "label": "Government Fees (Informational)"
+  },
+  {
+   "fieldname": "govt_appl_fee_amount",
+   "fieldtype": "Float",
+   "label": "Govt Application Fee (TZS)",
+   "default": "5000",
+   "description": "Fixed government application fee (APPL). Not your revenue — shown on plot documents for buyer reference."
+  },
+  {
+   "fieldname": "govt_registration_fee_amount",
+   "fieldtype": "Float",
+   "label": "Govt Registration Fee (TZS)",
+   "default": "25000",
+   "description": "Fixed government registration fee (REGISTR). Not your revenue — shown on plot documents for buyer reference."
+  },
+  {
+   "fieldname": "col_break_govt_fees",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "govt_premium_rate",
+   "fieldtype": "Float",
+   "label": "Govt Premium Rate",
+   "precision": "4",
+   "default": "0.0025",
+   "description": "Premium rate applied to selling price (e.g. 0.0025 = 0.25%). Not your revenue."
+  },
+  {
    "fieldname": "app_fee_accounts_section",
    "fieldtype": "Section Break",
    "label": "Fee Accounts"
