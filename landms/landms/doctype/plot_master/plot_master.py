@@ -108,6 +108,32 @@ class PlotMaster(Document):
 		else:
 			self.selling_price = 0
 
+		self._fill_govt_fees(plot_sqm)
+
+	def _fill_govt_fees(self, plot_sqm):
+		land_rent_rate = flt(frappe.db.get_value("Plot Type", self.plot_type, "land_rent_rate"))
+		settings = frappe.get_single("LandMS Settings")
+		appl      = flt(settings.govt_appl_fee_amount) or 5000
+		reg_fee   = flt(settings.govt_registration_fee_amount) or 25000
+		prem_rate = flt(settings.govt_premium_rate) or 0.0025
+
+		self.land_rent_rate      = land_rent_rate
+		self.land_rent           = flt(land_rent_rate * plot_sqm)
+		self.govt_application_fee = appl
+		self.premium             = flt(prem_rate * flt(self.selling_price))
+		self.registration_prep_fee = flt(0.2 * self.land_rent)
+		self.govt_registration_fee = reg_fee
+		self.stamp_duty          = flt(((self.land_rent - 2000) / 20) + 500) if self.land_rent > 0 else 0
+		self.total_govt_fees     = flt(
+			self.govt_application_fee +
+			self.premium +
+			self.land_rent +
+			self.registration_prep_fee +
+			self.govt_registration_fee +
+			self.stamp_duty
+		)
+		self.total_plot_amount   = flt(self.selling_price) + self.total_govt_fees
+
 	def validate_coordinate_pair(self):
 		"""Either both lat/lon are set, or both are blank."""
 		has_lat = self.latitude not in (None, "", 0)
