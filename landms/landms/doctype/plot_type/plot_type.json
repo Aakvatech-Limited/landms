@@ -21,6 +21,13 @@
    "reqd": 1,
    "in_list_view": 1,
    "description": "ERPNext item used when this plot type enters inventory on Plot Master submit"
+  },
+  {
+   "fieldname": "land_rent_rate",
+   "fieldtype": "Float",
+   "label": "Land Rent Rate (TZS/sqm)",
+   "in_list_view": 1,
+   "description": "Government land rent rate per square metre for this plot type. Used to calculate land rent and related fees on the plot."
   }
  ],
  "permissions": [
