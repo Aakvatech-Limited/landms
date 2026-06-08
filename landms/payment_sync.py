@@ -696,12 +696,18 @@ def _post_government_share_je(pe_doc):
 
 	Dr Customer Advances Account  (reducing deferred revenue)
 	Cr Government Payable Account (recording govt share payable)
-	Amount = government_share_percent × paid_amount
+	Amount = government_share_percent × allocated_amount
+
+	allocated_amount (not the PE's total paid_amount) is used because a single
+	payment can bundle in extra cash beyond the plot price — e.g. customers
+	often pay government fees alongside the plot price in the same transaction.
+	Only the portion actually allocated to the plot sale is land-sale revenue
+	subject to the government's share.
 	"""
 	if pe_doc.docstatus != 1:
 		return
 
-	so_name, govt_pct, land_acquisition = _get_govt_share_fields_from_pe(pe_doc)
+	so_name, govt_pct, land_acquisition, allocated_amount = _get_govt_share_fields_from_pe(pe_doc)
 	if not so_name or flt(govt_pct) <= 0:
 		return
 
@@ -709,7 +715,7 @@ def _post_government_share_je(pe_doc):
 	if not settings.government_payable_account or not settings.customer_advance_account:
 		return
 
-	govt_amount = flt(pe_doc.paid_amount) * flt(govt_pct) / 100.0
+	govt_amount = flt(allocated_amount) * flt(govt_pct) / 100.0
 	if govt_amount <= 0:
 		return
 
@@ -756,8 +762,24 @@ def _cancel_government_share_je(pe_doc):
 
 
 def _get_govt_share_fields_from_pe(pe_doc):
-	"""Return (sales_order_name, government_share_percent, land_acquisition) from PE references."""
+	"""Return (sales_order_name, government_share_percent, land_acquisition, allocated_amount)
+	from PE references.
+
+	allocated_amount is the SUM of allocated amounts across every reference row that
+	resolves to the plot sale — its Sales Order directly, or a Sales Invoice flagged
+	as the plot sale invoice for that Sales Order. Frappe can split one payment's
+	allocation to the same invoice/order across multiple reference rows, so a single
+	matching row is not enough. This is not the Payment Entry's total paid_amount,
+	which can include extra cash the customer bundled into the same transaction (e.g.
+	for government fees) that was never allocated to the plot sale invoice/order."""
+	so_name = None
+	govt_pct = 0
+	land_acquisition = ""
+	allocated_amount = 0.0
+
 	for row in pe_doc.get("references") or []:
+		row_so_name = None
+
 		if row.reference_doctype == "Sales Invoice":
 			si = frappe.db.get_value(
 				"Sales Invoice", row.reference_name,
@@ -766,24 +788,28 @@ def _get_govt_share_fields_from_pe(pe_doc):
 			)
 			if not si or not si.is_plot_sale_invoice:
 				continue
-			so_name = frappe.db.get_value(
+			row_so_name = frappe.db.get_value(
 				"Sales Invoice Item",
 				{"parent": row.reference_name},
 				"sales_order",
 			)
-			if not so_name:
-				continue
+		elif row.reference_doctype == "Sales Order":
+			row_so_name = row.reference_name
+
+		if not row_so_name:
+			continue
+
+		if so_name is None:
+			so_name = row_so_name
 			govt_pct, land_acquisition = frappe.db.get_value(
 				"Sales Order", so_name,
 				["government_share_percent", "land_acquisition"],
 			) or (0, "")
-			return so_name, flt(govt_pct), land_acquisition
 
-		if row.reference_doctype == "Sales Order":
-			govt_pct, land_acquisition = frappe.db.get_value(
-				"Sales Order", row.reference_name,
-				["government_share_percent", "land_acquisition"],
-			) or (0, "")
-			return row.reference_name, flt(govt_pct), land_acquisition
+		if row_so_name == so_name:
+			allocated_amount += flt(row.allocated_amount)
 
-	return None, 0, ""
+	if not so_name:
+		return None, 0, "", 0
+
+	return so_name, flt(govt_pct), land_acquisition, allocated_amount

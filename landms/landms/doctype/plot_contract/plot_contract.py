@@ -606,27 +606,20 @@ class PlotContract(Document):
 		if selling_price <= 0:
 			return None
 
-		accounts = [{
-			"account": settings.customer_advance_account,
-			"debit_in_account_currency": selling_price,
-			"cost_center": settings.cost_center,
-			"land_acquisition": self.land_acquisition,
-		}]
-
-		if govt_fee > 0:
-			accounts.append({
-				"account": settings.government_payable_account,
-				"credit_in_account_currency": govt_fee,
+		accounts = [
+			{
+				"account": settings.customer_advance_account,
+				"debit_in_account_currency": net_revenue,
 				"cost_center": settings.cost_center,
 				"land_acquisition": self.land_acquisition,
-			})
-
-		accounts.append({
-			"account": settings.revenue_account,
-			"credit_in_account_currency": net_revenue,
-			"cost_center": settings.cost_center,
-			"land_acquisition": self.land_acquisition,
-		})
+			},
+			{
+				"account": settings.revenue_account,
+				"credit_in_account_currency": net_revenue,
+				"cost_center": settings.cost_center,
+				"land_acquisition": self.land_acquisition,
+			},
+		]
 
 		je = frappe.get_doc({
 			"doctype": "Journal Entry",

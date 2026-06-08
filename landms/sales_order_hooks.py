@@ -181,6 +181,8 @@ def cancel_sales_order(doc, method=None):
 @frappe.whitelist()
 def close_sales_order(sales_order_name):
 	"""Close a plot Sales Order with no payments — releases plot, declines TCB CN, cancels application."""
+	frappe.only_for("LandMS Sales Manager")
+
 	doc = frappe.get_doc("Sales Order", sales_order_name)
 	if not _is_landms_sales_order(doc):
 		frappe.throw("This Sales Order is not a LandMS plot sale.")
