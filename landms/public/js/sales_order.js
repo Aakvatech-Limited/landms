@@ -76,6 +76,8 @@ function _render_so_close_button(frm) {
         frm.remove_custom_button(__('Hold'), __('Status'));
     }, 10);
 
+    if (!frappe.user.has_role('LandMS Sales Manager')) return;
+
     frm.add_custom_button(__('Close Sales Order'), () => {
         frappe.confirm(
             __('Close this Sales Order? The plot will be released and the TCB reference declined. This cannot be undone.'),
