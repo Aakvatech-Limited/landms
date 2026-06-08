@@ -5,6 +5,15 @@ frappe.ui.form.on('Plot Master', {
         frm.set_query('land_acquisition', () => ({
             filters: { status: ['in', ['Approved', 'Subdivided']] }
         }));
+
+        // Only show plot types that have a selling rate on the current LA
+        frm.set_query('plot_type', () => {
+            if (!frm.doc.land_acquisition) return {};
+            return {
+                query: 'landms.landms.doctype.plot_master.plot_master.get_plot_types_for_la',
+                filters: { land_acquisition: frm.doc.land_acquisition }
+            };
+        });
     },
 
     refresh(frm) {

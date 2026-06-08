@@ -30,51 +30,65 @@ def get_data(filters):
 	if grouping == "Weekly":
 		period_expr = "CONCAT('Week ', LPAD(WEEK(pe.posting_date, 1), 2, '0'), ' — ', YEAR(pe.posting_date))"
 		sort_expr   = "YEARWEEK(pe.posting_date, 1)"
+		je_sort     = "YEARWEEK(je.posting_date, 1)"
 	else:
 		period_expr = "DATE_FORMAT(pe.posting_date, '%%M %%Y')"
 		sort_expr   = "DATE_FORMAT(pe.posting_date, '%%Y%%m')"
+		je_sort     = "DATE_FORMAT(je.posting_date, '%%Y%%m')"
 
-	rows = frappe.db.sql(f"""
+	params = {"from_date": from_date, "to_date": to_date}
+
+	pay_rows = frappe.db.sql(f"""
 		SELECT
-			{period_expr}                                                AS period,
-			{sort_expr}                                                  AS sort_key,
-			COUNT(DISTINCT pe.name)                                      AS payment_count,
-			COUNT(DISTINCT COALESCE(pc.name, so.plot_contract))          AS contract_count,
-			SUM(per.allocated_amount)                                    AS total_collected,
-			SUM(
-				CASE
-					WHEN pc.contract_status = 'Completed'
-					THEN per.allocated_amount * pc.government_share_percent / 100
-					ELSE 0
-				END
-			)                                                            AS govt_fee
+			{period_expr}                                       AS period,
+			{sort_expr}                                         AS sort_key,
+			COUNT(DISTINCT pe.name)                             AS payment_count,
+			COUNT(DISTINCT COALESCE(pc.name, so.plot_contract)) AS contract_count,
+			SUM(per.allocated_amount)                           AS total_collected
 		FROM `tabPayment Entry` pe
 		INNER JOIN `tabPayment Entry Reference` per
-			ON  per.parent             = pe.name
-			AND per.reference_doctype  = 'Sales Invoice'
+			ON  per.parent            = pe.name
+			AND per.reference_doctype = 'Sales Invoice'
 		INNER JOIN `tabSales Invoice` si
 			ON  si.name                 = per.reference_name
 			AND si.docstatus            = 1
 			AND si.is_plot_sale_invoice = 1
 		LEFT JOIN `tabSales Order` so
-			ON  so.plot_sales_invoice   = si.name
-			AND so.docstatus            = 1
+			ON  so.plot_sales_invoice = si.name
+			AND so.docstatus          = 1
 		LEFT JOIN `tabPlot Contract` pc
-			ON  pc.name                 = COALESCE(NULLIF(si.plot_contract, ''), so.plot_contract)
-			AND pc.docstatus           != 2
+			ON  pc.name      = COALESCE(NULLIF(si.plot_contract, ''), so.plot_contract)
+			AND pc.docstatus != 2
 		WHERE pe.party_type   = 'Customer'
 		  AND pe.docstatus    = 1
 		  AND pe.posting_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY sort_key, period
 		ORDER BY sort_key
-	""", {"from_date": from_date, "to_date": to_date}, as_dict=True)
+	""", params, as_dict=True)
+
+	je_rows = frappe.db.sql(f"""
+		SELECT
+			{je_sort}                             AS sort_key,
+			SUM(jea.credit_in_account_currency)   AS govt_fee
+		FROM `tabJournal Entry` je
+		INNER JOIN `tabJournal Entry Account` jea
+			ON  jea.parent                     = je.name
+			AND jea.credit_in_account_currency > 0
+		WHERE je.docstatus          = 1
+		  AND je.lms_payment_entry IS NOT NULL
+		  AND je.lms_payment_entry != ''
+		  AND je.posting_date BETWEEN %(from_date)s AND %(to_date)s
+		GROUP BY sort_key
+	""", params, as_dict=True)
+
+	je_by_key = {str(r.sort_key): flt(r.govt_fee) for r in je_rows}
 
 	data = []
 	grand_collected = grand_govt = grand_payments = grand_contracts = 0.0
 
-	for row in rows:
+	for row in pay_rows:
 		collected = flt(row.total_collected)
-		govt      = flt(row.govt_fee)
+		govt      = je_by_key.get(str(row.sort_key), 0.0)
 		net       = collected - govt
 		grand_collected  += collected
 		grand_govt       += govt
