@@ -100,12 +100,12 @@ def _enqueue_plot_payment_sync(doc, event):
 	related = _get_related_landms_documents_from_payment_entry(doc)
 	for so_name in sorted(related["sales_orders"]):
 		try:
-			_run_plot_payment_sync(so_name, pe_name=doc.name)
+			_run_plot_payment_sync(so_name, doc)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"plot_pay sync failed for {so_name}")
 
 
-def _run_plot_payment_sync(so_name, pe_name=None):
+def _run_plot_payment_sync(so_name, pe_doc):
 	"""Sync SO + SI + Contract for one plot Sales Order.
 	Only runs for is_plot_sale_invoice SOs — safe to ignore all others.
 	"""
@@ -118,12 +118,12 @@ def _run_plot_payment_sync(so_name, pe_name=None):
 	if not frappe.db.get_value("Sales Invoice", inv_name, "is_plot_sale_invoice"):
 		return
 
-	_sync_sales_order_from_plot_invoice(so_name)
+	_sync_sales_order_from_plot_invoice(so_name, pe_doc)
 	_sync_si_schedule_for_so(so_name, inv_name)
 
 	contract_name = frappe.db.get_value("Sales Order", so_name, "plot_contract")
 	if contract_name and frappe.db.exists("Plot Contract", contract_name):
-		_sync_contract_after_payment(contract_name, pe_name=pe_name)
+		_sync_contract_after_payment(contract_name, pe_name=pe_doc.name)
 
 
 def _sync_si_schedule_for_so(so_name, inv_name):
@@ -442,7 +442,7 @@ def _reference_row_to_dict(row):
 	}
 
 
-def _sync_sales_order_from_plot_invoice(sales_order_name: str):
+def _sync_sales_order_from_plot_invoice(sales_order_name: str, pe_doc):
 	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
 		return
 
@@ -454,6 +454,16 @@ def _sync_sales_order_from_plot_invoice(sales_order_name: str):
 	invoice = frappe.get_doc("Sales Invoice", invoice_name)
 	if not getattr(invoice, "is_plot_sale_invoice", 0):
 		return
+
+	plot_number = frappe.get_cached_value("Plot Master", so.plot, "plot_number")
+	pe_doc.plot_outstanding_amount = invoice.outstanding_amount
+	pe_doc.plot = so.plot
+	pe_doc.plot_number = plot_number
+	frappe.db.set_value("Payment Entry", pe_doc.name, {
+		"plot": so.plot,
+		"plot_number": plot_number,
+		"plot_outstanding_amount": invoice.outstanding_amount,
+	})
 
 	total_paid = max(0.0, flt(invoice.grand_total) - flt(invoice.outstanding_amount))
 	_sync_sales_order_billing_from_plot_invoice(so, invoice)
