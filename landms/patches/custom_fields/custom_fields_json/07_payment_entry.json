@@ -1,0 +1,39 @@
+[
+    {
+        "name": "Payment Entry-plot",
+        "idx": 97,
+        "dt": "Payment Entry",
+        "label": "Plot",
+        "fieldname": "plot",
+        "insert_after": "in_words",
+        "fieldtype": "Link",
+        "options": "Plot Master",
+        "read_only": 1,
+        "allow_on_submit": 1,
+        "doctype": "Custom Field"
+    },
+    {
+        "name": "Payment Entry-plot_number",
+        "idx": 97,
+        "dt": "Payment Entry",
+        "label": "Plot Number",
+        "fieldname": "plot_number",
+        "insert_after": "plot",
+        "fieldtype": "Data",
+        "read_only": 1,
+        "allow_on_submit": 1,
+        "doctype": "Custom Field"
+    },
+    {
+        "name": "Payment Entry-plot_outstanding_amount",
+        "idx": 97,
+        "dt": "Payment Entry",
+        "label": "Plot Outstanding Amount",
+        "fieldname": "plot_outstanding_amount",
+        "insert_after": "plot_number",
+        "fieldtype": "Float",
+        "read_only": 1,
+        "allow_on_submit": 1,
+        "doctype": "Custom Field"
+    }
+]
