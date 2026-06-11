@@ -456,14 +456,10 @@ def _sync_sales_order_from_plot_invoice(sales_order_name: str, pe_doc):
 		return
 
 	plot_number = frappe.get_cached_value("Plot Master", so.plot, "plot_number")
-	pe_doc.plot_outstanding_amount = invoice.outstanding_amount
-	pe_doc.plot = so.plot
-	pe_doc.plot_number = plot_number
-	frappe.db.set_value("Payment Entry", pe_doc.name, {
-		"plot": so.plot,
-		"plot_number": plot_number,
-		"plot_outstanding_amount": invoice.outstanding_amount,
-	})
+	pe_doc.db_set("plot", so.plot)
+	pe_doc.db_set("plot_number", plot_number)
+	pe_doc.db_set("plot_outstanding_amount", invoice.outstanding_amount)
+	pe_doc.run_notifications("on_change")
 
 	total_paid = max(0.0, flt(invoice.grand_total) - flt(invoice.outstanding_amount))
 	_sync_sales_order_billing_from_plot_invoice(so, invoice)
