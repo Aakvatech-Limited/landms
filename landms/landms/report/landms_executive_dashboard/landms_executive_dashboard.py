@@ -45,7 +45,7 @@ def get_metrics():
 			SUM(CASE WHEN contract_status = 'Ongoing' THEN 1 ELSE 0 END) AS ongoing_contracts,
 			SUM(CASE WHEN contract_status = 'Completed' THEN 1 ELSE 0 END) AS completed_contracts,
 			SUM(CASE WHEN contract_status = 'Terminated' THEN 1 ELSE 0 END) AS terminated_contracts,
-			SUM(total_paid) AS cash_collected,
+			SUM(CASE WHEN contract_status IN ('Ongoing','Completed') THEN total_paid ELSE 0 END) AS cash_active,
 			SUM(CASE WHEN contract_status = 'Ongoing' THEN total_paid ELSE 0 END) AS deferred_revenue,
 			SUM(CASE WHEN contract_status = 'Completed' THEN selling_price ELSE 0 END) AS recognized_gross,
 			SUM(CASE WHEN contract_status = 'Completed' THEN government_fee_withheld ELSE 0 END) AS govt_fees,
@@ -62,12 +62,39 @@ def get_metrics():
 		WHERE pc.docstatus = 1 AND pc.contract_status = 'Completed'
 	""", as_dict=True)[0]
 
-	cash_collected = flt(fin.cash_collected)
-	deferred = flt(fin.deferred_revenue)
+	# ── Draft contracts (docstatus = 0) — invisible to the docstatus=1 query above.
+	#    These are reserved plots awaiting the first advance; some carry partial advances. ──
+	draft = frappe.db.sql("""
+		SELECT COUNT(name)                  AS cnt,
+		       COALESCE(SUM(total_paid), 0)    AS paid,
+		       COALESCE(SUM(selling_price), 0) AS value
+		FROM `tabPlot Contract`
+		WHERE docstatus = 0
+	""", as_dict=True)[0]
+
+	# ── True government liability: 28.5% (etc.) share is posted as a JE on EVERY payment,
+	#    not just on completed contracts. Summed directly (no payment join) to avoid fan-out. ──
+	govt_liab = frappe.db.sql("""
+		SELECT COALESCE(SUM(jea.credit_in_account_currency), 0) AS total
+		FROM `tabJournal Entry` je
+		INNER JOIN `tabJournal Entry Account` jea
+			ON  jea.parent                     = je.name
+			AND jea.credit_in_account_currency > 0
+		WHERE je.docstatus          = 1
+		  AND je.lms_payment_entry IS NOT NULL
+		  AND je.lms_payment_entry != ''
+	""", as_dict=True)[0]
+
+	draft_paid = flt(draft.paid)
+	# Cash Collected = all cash received (active contracts + advances on draft contracts).
+	cash_collected = flt(fin.cash_active) + draft_paid
+	# Deferred Revenue = all received cash not yet recognized (ongoing + draft advances).
+	deferred = flt(fin.deferred_revenue) + draft_paid
 	active_pipeline = flt(fin.active_pipeline)
 	recognized_gross = flt(fin.recognized_gross)
-	govt_fees = flt(fin.govt_fees)
-	revenue_recog = recognized_gross - govt_fees
+	govt_on_completed = flt(fin.govt_fees)   # govt share on completed contracts → nets recognized revenue
+	govt_payable = flt(govt_liab.total)      # true accrued govt liability across all payments
+	revenue_recog = recognized_gross - govt_on_completed
 	cogs = flt(cogs_row.total_cogs)
 	gross_margin = revenue_recog - cogs
 	margin_pct = (gross_margin / revenue_recog * 100) if revenue_recog else 0
@@ -82,15 +109,17 @@ def get_metrics():
 		"ready_for_handover": ready_for_handover,
 		"delivered": delivered,
 		"contracts_total": int(fin.contracts_total or 0),
-		"draft_contracts": int(fin.draft_contracts or 0),
+		"draft_contracts": int(draft.cnt or 0),
 		"ongoing_contracts": int(fin.ongoing_contracts or 0),
 		"completed_contracts": int(fin.completed_contracts or 0),
 		"terminated_contracts": int(fin.terminated_contracts or 0),
+		"draft_value": flt(draft.value),
+		"draft_paid": draft_paid,
 		"cash_collected": cash_collected,
 		"deferred_revenue": deferred,
 		"active_pipeline": active_pipeline,
 		"recognized_revenue": revenue_recog,
-		"govt_fees": govt_fees,
+		"govt_fees": govt_payable,
 		"cogs": cogs,
 		"gross_margin": gross_margin,
 		"margin_pct": margin_pct,
@@ -152,7 +181,7 @@ def get_data(metrics):
 			"section": "CONTRACTS",
 			"kpi": "Draft Contracts",
 			"value": str(metrics["draft_contracts"]),
-			"notes": "Created but not active yet",
+			"notes": "Reserved plots awaiting first advance (not yet submitted)",
 		},
 		{
 			"section": "CONTRACTS",
@@ -176,13 +205,13 @@ def get_data(metrics):
 			"section": "FINANCIALS",
 			"kpi": "Cash Collected",
 			"value": tzs(metrics["cash_collected"]),
-			"notes": "All customer collections to date",
+			"notes": "All customer collections to date (incl. advances on draft contracts)",
 		},
 		{
 			"section": "FINANCIALS",
 			"kpi": "Deferred Revenue",
 			"value": tzs(metrics["deferred_revenue"]),
-			"notes": "Cash received on ongoing contracts",
+			"notes": "Cash received but not yet recognized (ongoing + draft advances)",
 		},
 		{
 			"section": "FINANCIALS",
@@ -194,7 +223,7 @@ def get_data(metrics):
 			"section": "FINANCIALS",
 			"kpi": "Government Fees Payable",
 			"value": tzs(metrics["govt_fees"]),
-			"notes": "Liability on completed contracts",
+			"notes": "Government share accrued on all payments (actual posted JEs)",
 		},
 		{
 			"section": "FINANCIALS",

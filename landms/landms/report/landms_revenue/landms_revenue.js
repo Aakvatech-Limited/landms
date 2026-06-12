@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Revenue Report"] = {
+frappe.query_reports["LandMS Revenue"] = {
 	filters: [
 		{
 			fieldname: "grouping",
@@ -12,7 +12,7 @@ frappe.query_reports["LMS Revenue Report"] = {
 			fieldname: "from_date",
 			label: "From Date",
 			fieldtype: "Date",
-			default: frappe.datetime.add_months(frappe.datetime.get_today(), -6),
+			default: frappe.datetime.add_months(frappe.datetime.get_today(), -12),
 			reqd: 1
 		},
 		{
@@ -34,16 +34,12 @@ frappe.query_reports["LMS Revenue Report"] = {
 			formatted = `<span style="font-weight:700;color:#1f2937;">${formatted}</span>`;
 		}
 
-		if (column.fieldname === "govt_fee") {
-			return `<span style="font-weight:700;color:#f08c00;">${formatted}</span>`;
-		}
-
-		if (column.fieldname === "net_revenue") {
-			return `<span style="font-weight:700;color:#2f9e44;">${formatted}</span>`;
-		}
-
-		if (column.fieldname === "total_collected") {
+		if (column.fieldname === "revenue") {
 			return `<span style="font-weight:700;color:#1c7ed6;">${formatted}</span>`;
+		}
+
+		if (column.fieldname === "gross_margin") {
+			return `<span style="font-weight:700;color:#2f9e44;">${formatted}</span>`;
 		}
 
 		return formatted;
