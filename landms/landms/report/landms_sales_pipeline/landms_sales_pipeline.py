@@ -6,7 +6,7 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 	data    = get_data(filters)
-	summary = get_summary(data)
+	summary = get_summary(data, filters)
 	chart   = get_chart(data)
 	return columns, data, None, chart, summary
 
@@ -92,22 +92,45 @@ def get_data(filters):
 	return data
 
 
-def get_summary(data):
+def get_summary(data, filters=None):
 	if not data:
 		return []
+	filters = filters or {}
 	total_value       = sum(flt(r["selling_price"])     for r in data)
 	total_paid        = sum(flt(r["total_paid"])        for r in data)
 	total_outstanding = sum(flt(r["total_outstanding"]) for r in data)
 	ongoing_contracts = sum(1 for r in data if r["contract_status"] == "Ongoing")
 	completed_contracts = sum(1 for r in data if r["contract_status"] == "Completed")
 	progress_pct = (total_paid / total_value * 100) if total_value else 0
+
+	# Draft contracts = the pre-advance pipeline (reserved plots awaiting first advance).
+	# Excluded from the table above (which is active Ongoing/Completed), but surfaced here
+	# so the pipeline is visible and reconciles. Honours the same customer/date filters.
+	draft_conditions = ["docstatus = 0", "contract_status = 'Draft'"]
+	if filters.get("customer"):
+		draft_conditions.append("customer = %(customer)s")
+	if filters.get("from_date"):
+		draft_conditions.append("contract_date >= %(from_date)s")
+	if filters.get("to_date"):
+		draft_conditions.append("contract_date <= %(to_date)s")
+	draft = frappe.db.sql(f"""
+		SELECT COUNT(*)                        AS cnt,
+		       COALESCE(SUM(selling_price), 0) AS value,
+		       COALESCE(SUM(total_paid), 0)    AS paid
+		FROM `tabPlot Contract`
+		WHERE {" AND ".join(draft_conditions)}
+	""", filters, as_dict=True)[0]
+
 	return [
-		{"label": "Total Contract Value", "value": total_value,       "datatype": "Currency", "indicator": "Blue"},
-		{"label": "Total Paid",           "value": total_paid,        "datatype": "Currency", "indicator": "Green"},
-		{"label": "Total Outstanding",    "value": total_outstanding, "datatype": "Currency", "indicator": "Red"},
-		{"label": "Ongoing Contracts",    "value": ongoing_contracts, "datatype": "Int", "indicator": "Orange"},
-		{"label": "Completed Contracts",  "value": completed_contracts, "datatype": "Int", "indicator": "Green"},
-		{"label": "Collection Progress %", "value": progress_pct, "datatype": "Percent", "indicator": "Green" if progress_pct >= 70 else "Orange"},
+		{"label": "Total Contract Value",        "value": total_value,         "datatype": "Currency", "indicator": "Blue"},
+		{"label": "Total Paid",                  "value": total_paid,          "datatype": "Currency", "indicator": "Green"},
+		{"label": "Total Outstanding",           "value": total_outstanding,   "datatype": "Currency", "indicator": "Red"},
+		{"label": "Ongoing Contracts",           "value": ongoing_contracts,   "datatype": "Int",      "indicator": "Orange"},
+		{"label": "Completed Contracts",         "value": completed_contracts, "datatype": "Int",      "indicator": "Green"},
+		{"label": "Collection Progress %",       "value": progress_pct,        "datatype": "Percent",  "indicator": "Green" if progress_pct >= 70 else "Orange"},
+		{"label": "Pipeline (Draft) Contracts",  "value": int(draft.cnt or 0), "datatype": "Int",      "indicator": "Grey"},
+		{"label": "Pipeline Value (Draft)",      "value": flt(draft.value),    "datatype": "Currency", "indicator": "Grey"},
+		{"label": "Pipeline Advances Collected", "value": flt(draft.paid),     "datatype": "Currency", "indicator": "Yellow"},
 	]
 
 

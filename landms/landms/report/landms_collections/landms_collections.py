@@ -6,7 +6,7 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 	data    = get_data(filters)
-	summary = get_summary(data)
+	summary = get_summary(data, filters)
 	chart   = get_chart(data)
 	return columns, data, None, chart, summary
 
@@ -65,18 +65,41 @@ def get_data(filters):
 	return data
 
 
-def get_summary(data):
+def get_summary(data, filters=None):
 	if not data:
 		return []
+	filters = filters or {}
 	total_invoiced    = sum(flt(r["total_invoiced"])    for r in data)
 	total_paid        = sum(flt(r["total_paid"])        for r in data)
 	total_outstanding = sum(flt(r["total_outstanding"]) for r in data)
 	overall_rate      = (total_paid / total_invoiced * 100) if total_invoiced else 0
+
+	# Advances received on draft (not-yet-submitted) contracts. These are excluded
+	# from the per-customer table above (which is finalized Ongoing/Completed only),
+	# but surfaced here so total cash reconciles with the Business Trend and
+	# Executive Dashboard reports. Honours the same customer/date filters.
+	draft_conditions = ["pc.docstatus = 0"]
+	if filters.get("customer"):
+		draft_conditions.append("pc.customer = %(customer)s")
+	if filters.get("from_date"):
+		draft_conditions.append("pc.contract_date >= %(from_date)s")
+	if filters.get("to_date"):
+		draft_conditions.append("pc.contract_date <= %(to_date)s")
+	draft_advances = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(pc.total_paid), 0)
+		FROM `tabPlot Contract` pc
+		WHERE {" AND ".join(draft_conditions)}
+	""", filters)[0][0])
+
+	total_cash = total_paid + draft_advances
+
 	return [
-		{"label": "Total Invoiced",          "value": total_invoiced,            "datatype": "Float", "indicator": "Blue"},
-		{"label": "Total Collected",         "value": total_paid,                "datatype": "Float", "indicator": "Green"},
-		{"label": "Total Outstanding",       "value": total_outstanding,         "datatype": "Float", "indicator": "Red"},
-		{"label": "Overall Collection Rate", "value": round(overall_rate, 1),    "datatype": "Float", "indicator": "Blue"},
+		{"label": "Total Invoiced",              "value": total_invoiced,            "datatype": "Float", "indicator": "Blue"},
+		{"label": "Total Collected",             "value": total_paid,                "datatype": "Float", "indicator": "Green"},
+		{"label": "Total Outstanding",           "value": total_outstanding,         "datatype": "Float", "indicator": "Red"},
+		{"label": "Overall Collection Rate",     "value": round(overall_rate, 1),    "datatype": "Float", "indicator": "Blue"},
+		{"label": "Advances on Draft Contracts", "value": draft_advances,            "datatype": "Float", "indicator": "Orange"},
+		{"label": "Total Cash Received",         "value": total_cash,                "datatype": "Float", "indicator": "Green"},
 	]
 
 
