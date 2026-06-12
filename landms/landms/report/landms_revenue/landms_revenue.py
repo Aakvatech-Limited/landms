@@ -5,112 +5,95 @@ from frappe.utils import flt, add_months, today
 def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
-	data = get_data(filters)
-	chart = get_chart(data)
+	data    = get_data(filters)
+	chart   = get_chart(data)
 	summary = get_summary(data)
 	return columns, data, None, chart, summary
 
 
 def get_columns():
 	return [
-		{"label": "Period",                "fieldname": "period",          "fieldtype": "Data",    "width": 160},
-		{"label": "No. of Payments",       "fieldname": "payment_count",   "fieldtype": "Int",     "width": 140},
-		{"label": "Contracts With Payments","fieldname": "contract_count",  "fieldtype": "Int",     "width": 180},
-		{"label": "Total Collected (TZS)", "fieldname": "total_collected", "fieldtype": "Float",   "width": 200},
-		{"label": "Govt Fee Portion (TZS)","fieldname": "govt_fee",        "fieldtype": "Float",   "width": 190},
-		{"label": "Net Revenue (TZS)",     "fieldname": "net_revenue",     "fieldtype": "Float",   "width": 180},
+		{"label": "Period",                   "fieldname": "period",       "fieldtype": "Data",    "width": 160},
+		{"label": "Contracts Completed",      "fieldname": "completed",    "fieldtype": "Int",     "width": 170},
+		{"label": "Revenue Recognized (TZS)", "fieldname": "revenue",      "fieldtype": "Float",   "width": 210},
+		{"label": "COGS (TZS)",               "fieldname": "cogs",         "fieldtype": "Float",   "width": 170},
+		{"label": "Gross Margin (TZS)",       "fieldname": "gross_margin", "fieldtype": "Float",   "width": 190},
+		{"label": "Margin %",                 "fieldname": "margin_pct",   "fieldtype": "Percent", "width": 110},
 	]
 
 
 def get_data(filters):
+	"""Accrual revenue: revenue is recognised when a Plot Contract is fully paid
+	(status Completed), NOT when cash is collected. Cash collection lives in the
+	LandMS Collections report. Revenue = selling_price - government share; COGS is
+	the plot's allocated land cost. Grouped by the period the revenue was recognised."""
 	grouping  = filters.get("grouping")  or "Monthly"
-	from_date = filters.get("from_date") or add_months(today(), -6)
+	from_date = filters.get("from_date") or add_months(today(), -12)
 	to_date   = filters.get("to_date")   or today()
 
 	if grouping == "Weekly":
-		period_expr = "CONCAT('Week ', LPAD(WEEK(pe.posting_date, 1), 2, '0'), ' — ', YEAR(pe.posting_date))"
-		sort_expr   = "YEARWEEK(pe.posting_date, 1)"
-		je_sort     = "YEARWEEK(je.posting_date, 1)"
+		period_expr = "CONCAT('Week ', LPAD(WEEK(recog.recognition_date, 1), 2, '0'), ' — ', YEAR(recog.recognition_date))"
+		sort_expr   = "YEARWEEK(recog.recognition_date, 1)"
 	else:
-		period_expr = "DATE_FORMAT(pe.posting_date, '%%M %%Y')"
-		sort_expr   = "DATE_FORMAT(pe.posting_date, '%%Y%%m')"
-		je_sort     = "DATE_FORMAT(je.posting_date, '%%Y%%m')"
+		period_expr = "DATE_FORMAT(recog.recognition_date, '%%M %%Y')"
+		sort_expr   = "DATE_FORMAT(recog.recognition_date, '%%Y%%m')"
 
-	params = {"from_date": from_date, "to_date": to_date}
-
-	pay_rows = frappe.db.sql(f"""
+	# Recognition date = posting date of the contract's recognition Journal Entry
+	# (linked via government_fee_entry), falling back to contract_date if absent.
+	rows = frappe.db.sql(f"""
 		SELECT
-			{period_expr}                                       AS period,
-			{sort_expr}                                         AS sort_key,
-			COUNT(DISTINCT pe.name)                             AS payment_count,
-			COUNT(DISTINCT COALESCE(pc.name, so.plot_contract)) AS contract_count,
-			SUM(per.allocated_amount)                           AS total_collected
-		FROM `tabPayment Entry` pe
-		INNER JOIN `tabPayment Entry Reference` per
-			ON  per.parent            = pe.name
-			AND per.reference_doctype = 'Sales Invoice'
-		INNER JOIN `tabSales Invoice` si
-			ON  si.name                 = per.reference_name
-			AND si.docstatus            = 1
-			AND si.is_plot_sale_invoice = 1
-		LEFT JOIN `tabSales Order` so
-			ON  so.plot_sales_invoice = si.name
-			AND so.docstatus          = 1
-		LEFT JOIN `tabPlot Contract` pc
-			ON  pc.name      = COALESCE(NULLIF(si.plot_contract, ''), so.plot_contract)
-			AND pc.docstatus != 2
-		WHERE pe.party_type   = 'Customer'
-		  AND pe.docstatus    = 1
-		  AND pe.posting_date BETWEEN %(from_date)s AND %(to_date)s
+			{period_expr}      AS period,
+			{sort_expr}        AS sort_key,
+			COUNT(recog.name)  AS completed,
+			SUM(recog.revenue) AS revenue,
+			SUM(recog.cogs)    AS cogs
+		FROM (
+			SELECT
+				pc.name AS name,
+				COALESCE(je.posting_date, pc.contract_date)    AS recognition_date,
+				(pc.selling_price - pc.government_fee_withheld) AS revenue,
+				pm.allocated_cost                              AS cogs
+			FROM `tabPlot Contract` pc
+			INNER JOIN `tabPlot Master` pm ON pm.name = pc.plot
+			LEFT JOIN `tabJournal Entry` je ON je.name = pc.government_fee_entry
+			WHERE pc.docstatus = 1
+			  AND pc.contract_status = 'Completed'
+		) recog
+		WHERE recog.recognition_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY sort_key, period
 		ORDER BY sort_key
-	""", params, as_dict=True)
-
-	je_rows = frappe.db.sql(f"""
-		SELECT
-			{je_sort}                             AS sort_key,
-			SUM(jea.credit_in_account_currency)   AS govt_fee
-		FROM `tabJournal Entry` je
-		INNER JOIN `tabJournal Entry Account` jea
-			ON  jea.parent                     = je.name
-			AND jea.credit_in_account_currency > 0
-		WHERE je.docstatus          = 1
-		  AND je.lms_payment_entry IS NOT NULL
-		  AND je.lms_payment_entry != ''
-		  AND je.posting_date BETWEEN %(from_date)s AND %(to_date)s
-		GROUP BY sort_key
-	""", params, as_dict=True)
-
-	je_by_key = {str(r.sort_key): flt(r.govt_fee) for r in je_rows}
+	""", {"from_date": from_date, "to_date": to_date}, as_dict=True)
 
 	data = []
-	grand_collected = grand_govt = grand_payments = grand_contracts = 0.0
-
-	for row in pay_rows:
-		collected = flt(row.total_collected)
-		govt      = je_by_key.get(str(row.sort_key), 0.0)
-		net       = collected - govt
-		grand_collected  += collected
-		grand_govt       += govt
-		grand_payments   += row.payment_count
-		grand_contracts  += row.contract_count
+	grand_completed = 0
+	grand_revenue = 0.0
+	grand_cogs = 0.0
+	for row in rows:
+		revenue = flt(row.revenue)
+		cogs    = flt(row.cogs)
+		margin  = revenue - cogs
+		margin_pct = (margin / revenue * 100) if revenue else 0
+		grand_completed += int(row.completed or 0)
+		grand_revenue   += revenue
+		grand_cogs      += cogs
 		data.append({
-			"period":          row.period,
-			"payment_count":   row.payment_count,
-			"contract_count":  row.contract_count,
-			"total_collected": collected,
-			"govt_fee":        govt,
-			"net_revenue":     net,
+			"period":       row.period,
+			"completed":    int(row.completed or 0),
+			"revenue":      revenue,
+			"cogs":         cogs,
+			"gross_margin": margin,
+			"margin_pct":   margin_pct,
 		})
 
 	if data:
+		grand_margin = grand_revenue - grand_cogs
 		data.append({
-			"period":          "TOTAL",
-			"payment_count":   int(grand_payments),
-			"contract_count":  int(grand_contracts),
-			"total_collected": grand_collected,
-			"govt_fee":        grand_govt,
-			"net_revenue":     grand_collected - grand_govt,
+			"period":       "TOTAL",
+			"completed":    grand_completed,
+			"revenue":      grand_revenue,
+			"cogs":         grand_cogs,
+			"gross_margin": grand_margin,
+			"margin_pct":   (grand_margin / grand_revenue * 100) if grand_revenue else 0,
 		})
 
 	return data
@@ -124,33 +107,28 @@ def get_chart(data):
 		"data": {
 			"labels": [r["period"] for r in rows],
 			"datasets": [
-				{"name": "Total Collected",  "values": [r["total_collected"] for r in rows]},
-				{"name": "Net Revenue",      "values": [r["net_revenue"]     for r in rows]},
-				{"name": "Govt Fee Portion", "values": [r["govt_fee"]        for r in rows]},
+				{"name": "Revenue Recognized", "values": [r["revenue"]      for r in rows]},
+				{"name": "Gross Margin",       "values": [r["gross_margin"] for r in rows]},
 			],
 		},
 		"type":   "bar",
-		"colors": ["#2c5f2e", "#4a9e4d", "#f0a500"],
+		"colors": ["#1c7ed6", "#2f9e44"],
 	}
 
 
 def get_summary(data):
-	if not data:
+	rows = [r for r in data if r.get("period") != "TOTAL"]
+	if not rows:
 		return []
-
-	total_row = next((r for r in data if r.get("period") == "TOTAL"), None)
-	if not total_row:
-		return []
-
-	total_collected = flt(total_row.get("total_collected"))
-	total_govt_fee = flt(total_row.get("govt_fee"))
-	net_revenue = flt(total_row.get("net_revenue"))
-	govt_ratio = (total_govt_fee / total_collected * 100) if total_collected else 0
-
+	total_revenue   = sum(flt(r["revenue"])   for r in rows)
+	total_cogs      = sum(flt(r["cogs"])      for r in rows)
+	total_completed = sum(int(r["completed"]) for r in rows)
+	total_margin    = total_revenue - total_cogs
+	margin_pct      = (total_margin / total_revenue * 100) if total_revenue else 0
 	return [
-		{"label": "Total Payments", "value": int(total_row.get("payment_count") or 0), "datatype": "Int", "indicator": "Blue"},
-		{"label": "Total Collected", "value": total_collected, "datatype": "Currency", "indicator": "Blue"},
-		{"label": "Government Portion", "value": total_govt_fee, "datatype": "Currency", "indicator": "Orange"},
-		{"label": "Net Revenue", "value": net_revenue, "datatype": "Currency", "indicator": "Green"},
-		{"label": "Government Share %", "value": govt_ratio, "datatype": "Percent", "indicator": "Orange"},
+		{"label": "Contracts Completed", "value": total_completed, "datatype": "Int",      "indicator": "Blue"},
+		{"label": "Revenue Recognized",  "value": total_revenue,   "datatype": "Currency", "indicator": "Green"},
+		{"label": "Total COGS",          "value": total_cogs,      "datatype": "Currency", "indicator": "Red"},
+		{"label": "Gross Margin",        "value": total_margin,    "datatype": "Currency", "indicator": "Green"},
+		{"label": "Gross Margin %",      "value": margin_pct,      "datatype": "Percent",  "indicator": "Green" if margin_pct >= 0 else "Red"},
 	]
