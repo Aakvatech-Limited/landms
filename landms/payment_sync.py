@@ -27,6 +27,10 @@ def validate_payment_entry(doc, method=None):
 	if not doc.get("references"):
 		return
 
+	if doc.contact_person and not doc.mobile_no:
+		contact_info = frappe.get_cached_value("Contact", doc.contact_person, ["mobile_no", "phone"], as_dict=True)
+		doc.mobile_no = contact_info.get("mobile_no") or contact_info.get("phone")
+
 	normalized_rows = []
 	seen_invoice_rows: dict[tuple[str, str], dict] = {}
 
