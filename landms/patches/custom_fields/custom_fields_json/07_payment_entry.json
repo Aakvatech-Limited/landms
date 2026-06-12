@@ -1,7 +1,6 @@
 [
     {
         "name": "Payment Entry-plot",
-        "idx": 97,
         "dt": "Payment Entry",
         "label": "Plot",
         "fieldname": "plot",
@@ -14,7 +13,6 @@
     },
     {
         "name": "Payment Entry-plot_number",
-        "idx": 97,
         "dt": "Payment Entry",
         "label": "Plot Number",
         "fieldname": "plot_number",
@@ -26,7 +24,6 @@
     },
     {
         "name": "Payment Entry-plot_outstanding_amount",
-        "idx": 97,
         "dt": "Payment Entry",
         "label": "Plot Outstanding Amount",
         "fieldname": "plot_outstanding_amount",
@@ -34,6 +31,18 @@
         "fieldtype": "Float",
         "read_only": 1,
         "allow_on_submit": 1,
+        "doctype": "Custom Field"
+    },
+    {
+        "name": "Payment Entry-mobile_no",
+        "dt": "Payment Entry",
+        "label": "Mobile No",
+        "fieldname": "mobile_no",
+        "insert_after": "contact_email",
+        "fieldtype": "Data",
+        "options": "Phone",
+        "read_only": 1,
+        "in_preview": 1,
         "doctype": "Custom Field"
     }
 ]
