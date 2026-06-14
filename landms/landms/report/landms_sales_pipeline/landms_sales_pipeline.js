@@ -1,10 +1,10 @@
-frappe.query_reports["LMS Sales Pipeline"] = {
+frappe.query_reports["LandMS Sales Pipeline"] = {
 	filters: [
 		{
 			fieldname: "contract_status",
 			label: "Status",
 			fieldtype: "Select",
-			options: "\nOngoing\nCompleted"
+			options: "\nOngoing\nOverdue\nCompleted\nTerminated"
 		},
 		{
 			fieldname: "customer",
@@ -34,6 +34,7 @@ frappe.query_reports["LMS Sales Pipeline"] = {
 		if (column.fieldname === "contract_status") {
 			const styles = {
 				"Ongoing": "background:#fff4e6;color:#9c5c00;",
+				"Overdue": "background:#fff0e6;color:#c4500f;",
 				"Completed": "background:#e6fcf0;color:#1f7a3f;",
 				"Terminated": "background:#fff3bf;color:#8f5a00;",
 				"Cancelled": "background:#fff5f5;color:#c92a2a;",

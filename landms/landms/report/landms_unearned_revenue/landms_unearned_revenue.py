@@ -28,12 +28,13 @@ def get_columns():
 
 def get_data(filters):
 	# Unearned (deferred) revenue = cash received but not yet recognised. That includes
-	# advances on Ongoing contracts AND advances on still-Draft contracts (booking fee
-	# not yet fully met). Both are cash in hand that hasn't been earned, so both belong
-	# here — keeping this in step with the Executive Dashboard's Deferred Revenue figure.
+	# advances on Ongoing/Overdue contracts AND advances on still-Draft contracts (booking
+	# fee not yet fully met). Overdue is just a late-but-active contract — its cash is still
+	# unearned. All are cash in hand that hasn't been earned, so they belong here — keeping
+	# this in step with the Executive Dashboard's Deferred Revenue figure.
 	conditions = [
 		"total_paid > 0",
-		"((docstatus = 1 AND contract_status = 'Ongoing') OR (docstatus = 0 AND contract_status = 'Draft'))",
+		"((docstatus = 1 AND contract_status IN ('Ongoing', 'Overdue')) OR (docstatus = 0 AND contract_status = 'Draft'))",
 	]
 	if filters.get("customer"):
 		conditions.append("customer = %(customer)s")
