@@ -50,6 +50,9 @@ def validate_payment_entry(doc, method=None):
 		current_amount = flt(row.allocated_amount)
 		existing = seen_invoice_rows.get(key)
 
+		if not doc.land_acquisition and target.get("land_acquisition"):
+			doc.land_acquisition = target.get("land_acquisition")
+
 		if existing:
 			existing["allocated_amount"] = flt(existing.get("allocated_amount")) + current_amount
 			existing["outstanding_amount"] = flt(target["outstanding_amount"])
@@ -367,7 +370,7 @@ def _resolve_landms_plot_reference(
 		so = frappe.db.get_value(
 			"Sales Order",
 			reference_name,
-			["name", "plot", "plot_sales_invoice", "plot_contract"],
+			["name", "plot", "plot_sales_invoice", "plot_contract", "land_acquisition"],
 			as_dict=True,
 		)
 		if not so or not so.plot:
@@ -384,6 +387,7 @@ def _resolve_landms_plot_reference(
 				"grand_total": 0,
 				"outstanding_amount": 0,
 				"due_date": None,
+				"land_acquisition": so.land_acquisition or "",
 			}
 
 		invoice = frappe.db.get_value(
@@ -402,6 +406,7 @@ def _resolve_landms_plot_reference(
 			"grand_total": invoice.grand_total,
 			"outstanding_amount": invoice.outstanding_amount,
 			"due_date": invoice.due_date,
+			"land_acquisition": so.land_acquisition or "",
 		}
 
 	if reference_doctype == "Sales Invoice":
@@ -411,7 +416,7 @@ def _resolve_landms_plot_reference(
 		invoice = frappe.db.get_value(
 			"Sales Invoice",
 			reference_name,
-			["name", "is_plot_sale_invoice", "grand_total", "outstanding_amount", "due_date", "plot_contract"],
+			["name", "is_plot_sale_invoice", "grand_total", "outstanding_amount", "due_date", "plot_contract", "land_acquisition"],
 			as_dict=True,
 		)
 		if not invoice or not invoice.is_plot_sale_invoice:
@@ -427,6 +432,7 @@ def _resolve_landms_plot_reference(
 			"grand_total": invoice.grand_total,
 			"outstanding_amount": invoice.outstanding_amount,
 			"due_date": invoice.due_date,
+			"land_acquisition": invoice.land_acquisition or "",
 		}
 
 	return None
