@@ -214,7 +214,23 @@ def close_sales_order(sales_order_name):
 	_cancel_plot_application(doc)
 	_release_plot_if_no_active_application(doc)
 
-	doc.db_set("status", "Closed", update_modified=False)
+	# update_modified=True so the "Last edited by" footprint records WHO closed the
+	# Sales Order (the user who clicked Close), and an explicit timeline comment makes
+	# it a permanent audit trail that later edits can't overwrite.
+	doc.db_set("status", "Closed", update_modified=True)
+	doc.add_comment("Info", f"Sales Order closed by {frappe.session.user}.")
+
+	# Mirror the termination alert — tell the user what was forfeited / refunded.
+	close_msg = f"Sales Order {doc.name} closed. Plot {doc.get('plot') or ''} released."
+	if doc.get("forfeiture_entry"):
+		fje = frappe.get_doc("Journal Entry", doc.forfeiture_entry)
+		forfeited = flt(fje.total_debit)
+		refund = flt(fje.get("lms_refund_amount"))
+		close_msg += (
+			f" TZS {forfeited:,.0f} forfeited (net of government share)"
+			+ (f"; TZS {refund:,.0f} refund due to customer." if refund > 0 else ".")
+		)
+	frappe.msgprint(close_msg, indicator="orange", alert=True)
 
 
 def ensure_plot_sales_invoice_for_sales_order(
@@ -899,8 +915,18 @@ def _post_draft_contract_forfeiture_je(doc):
 
 	settings = frappe.get_single("LandMS Settings")
 	forfeiture_pct = flt(settings.forfeiture_percentage or 100)
+	govt_pct = flt(doc.get("government_share_percent") or 0)
 	forfeited_amount = total_paid * forfeiture_pct / 100.0
+	# The government share was already moved to Government Payable as each payment
+	# came in (see payment_sync._post_government_share_je), so only the company's
+	# NET take — forfeited amount minus that already-withheld govt share — is new
+	# income here. The customer's refund stays parked in Customer Advance for the
+	# accountant to pay out manually (tracked via lms_refund_amount).
+	govt_withheld = total_paid * govt_pct / 100.0
+	forfeiture_income = forfeited_amount - govt_withheld
 	refund_amount = total_paid - forfeited_amount
+	if forfeiture_income <= 0:
+		return
 
 	je = frappe.get_doc({
 		"doctype": "Journal Entry",
@@ -910,19 +936,20 @@ def _post_draft_contract_forfeiture_je(doc):
 		"lms_refund_amount": refund_amount,
 		"user_remark": (
 			f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
-			f"{forfeiture_pct:.0f}% of paid amount forfeited. "
+			f"{forfeiture_pct:.0f}% of paid amount forfeited, "
+			f"net of {govt_pct:.2f}% government share already withheld. "
 			f"Customer {doc.customer}, Plot {doc.get('plot') or ''}."
 		),
 		"accounts": [
 			{
 				"account": settings.customer_advance_account,
-				"debit_in_account_currency": forfeited_amount,
+				"debit_in_account_currency": forfeiture_income,
 				"cost_center": settings.cost_center,
 				"land_acquisition": doc.get("land_acquisition") or "",
 			},
 			{
 				"account": settings.forfeited_deposits_account,
-				"credit_in_account_currency": forfeited_amount,
+				"credit_in_account_currency": forfeiture_income,
 				"cost_center": settings.cost_center,
 				"land_acquisition": doc.get("land_acquisition") or "",
 			},
