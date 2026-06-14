@@ -25,7 +25,7 @@ def get_columns():
 def get_data(filters):
 	conditions = [
 		"pc.docstatus = 1",
-		"pc.contract_status IN ('Ongoing', 'Completed')",
+		"pc.contract_status IN ('Ongoing', 'Overdue', 'Completed')",
 	]
 	if filters.get("customer"):
 		conditions.append("pc.customer = %(customer)s")

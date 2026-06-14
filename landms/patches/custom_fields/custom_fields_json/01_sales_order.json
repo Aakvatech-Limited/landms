@@ -150,7 +150,7 @@
     "fieldtype": "Check",
     "label": "Send Expected Amount to Bank",
     "insert_after": "payment_option",
-    "default": "0",
+    "default": "1",
     "depends_on": "eval:doc.plot",
     "description": "Tick to tell the bank the total amount expected for this sale."
   },
