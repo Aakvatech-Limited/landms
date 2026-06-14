@@ -34,7 +34,7 @@ def get_data(filters):
 	if filters.get("contract_status"):
 		conditions.append("pc.contract_status = %(contract_status)s")
 	else:
-		conditions.append("pc.contract_status IN ('Ongoing', 'Completed')")
+		conditions.append("pc.contract_status IN ('Ongoing', 'Overdue', 'Completed')")
 
 	if filters.get("customer"):
 		conditions.append("pc.customer = %(customer)s")
@@ -100,6 +100,7 @@ def get_summary(data, filters=None):
 	total_paid        = sum(flt(r["total_paid"])        for r in data)
 	total_outstanding = sum(flt(r["total_outstanding"]) for r in data)
 	ongoing_contracts = sum(1 for r in data if r["contract_status"] == "Ongoing")
+	overdue_contracts = sum(1 for r in data if r["contract_status"] == "Overdue")
 	completed_contracts = sum(1 for r in data if r["contract_status"] == "Completed")
 	progress_pct = (total_paid / total_value * 100) if total_value else 0
 
@@ -126,6 +127,7 @@ def get_summary(data, filters=None):
 		{"label": "Total Paid",                  "value": total_paid,          "datatype": "Currency", "indicator": "Green"},
 		{"label": "Total Outstanding",           "value": total_outstanding,   "datatype": "Currency", "indicator": "Red"},
 		{"label": "Ongoing Contracts",           "value": ongoing_contracts,   "datatype": "Int",      "indicator": "Orange"},
+		{"label": "Overdue Contracts",           "value": overdue_contracts,   "datatype": "Int",      "indicator": "Red"},
 		{"label": "Completed Contracts",         "value": completed_contracts, "datatype": "Int",      "indicator": "Green"},
 		{"label": "Collection Progress %",       "value": progress_pct,        "datatype": "Percent",  "indicator": "Green" if progress_pct >= 70 else "Orange"},
 		{"label": "Pipeline (Draft) Contracts",  "value": int(draft.cnt or 0), "datatype": "Int",      "indicator": "Grey"},
@@ -138,7 +140,7 @@ def get_chart(data):
 	if not data:
 		return None
 
-	status_order = ["Ongoing", "Completed", "Terminated", "Cancelled", "Draft"]
+	status_order = ["Ongoing", "Overdue", "Completed", "Terminated", "Cancelled", "Draft"]
 	status_map = {status: 0 for status in status_order}
 	for row in data:
 		status = row.get("contract_status")
@@ -151,8 +153,9 @@ def get_chart(data):
 
 	color_map = {
 		"Ongoing": "#f08c00",
+		"Overdue": "#e8590c",
 		"Completed": "#2f9e44",
-		"Terminated": "#e8590c",
+		"Terminated": "#fa5252",
 		"Cancelled": "#e03131",
 		"Draft": "#868e96",
 	}

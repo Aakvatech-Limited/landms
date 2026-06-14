@@ -70,9 +70,15 @@ def auto_cancel_stale_unpaid_applications():
 def auto_expire_paid_applications_past_deadline():
 	"""Expire paid applications whose reservation window ended before first advance.
 
-	The application fee is non-refundable. Cancelling the application here
-	only releases the plot and tears down the unpaid Sales Order / draft
-	contract chain.
+	The application fee is non-refundable.
+	  - No advance received: the plot is released and the unpaid Sales Order /
+	    draft contract chain is torn down (the application is simply cancelled).
+	  - PARTIAL advance received: the reservation is closed through the same
+	    forfeiture-aware path as the Close button (close_sales_order) — the partial
+	    advance is forfeited (net of the government share), a credit note clears the
+	    invoice outstanding, the TCB control number is declined, the draft contract
+	    is removed, and the plot released. This avoids freeing the plot while a
+	    submitted SO / paid invoice / draft contract are left dangling.
 	"""
 	settings = frappe.get_single("LandMS Settings")
 	today_date = getdate(today())
@@ -83,6 +89,7 @@ def auto_expire_paid_applications_past_deadline():
 		select
 			name,
 			plot,
+			sales_order,
 			date_add(payment_date, interval %s day) as expiry_date
 		from `tabPlot Application`
 		where docstatus = 1
@@ -98,24 +105,53 @@ def auto_expire_paid_applications_past_deadline():
 	expired_count = 0
 	for app in expired_apps:
 		try:
-			doc = frappe.get_doc("Plot Application", app.name)
-			doc.flags.ignore_permissions = True
-			doc.flags._cancellation_reason = "Expired"
-			doc.cancel()
-			expired_count += 1
-			frappe.logger("landms").info(
-				f"Auto-expired Plot Application {app.name} "
-				f"(plot {app.plot}, expired {app.expiry_date}) — "
-				"first advance was not received in time"
-			)
+			if _sales_order_has_advance_payment(app.sales_order):
+				# Money is in → close via the forfeiture-aware flow (same as the
+				# Close button): forfeits net of govt, credit-notes the outstanding,
+				# declines the TCB control number, releases the plot, cancels the app.
+				from landms.sales_order_hooks import close_sales_order
+				close_sales_order(app.sales_order)
+				expired_count += 1
+				frappe.logger("landms").info(
+					f"Auto-expired Plot Application {app.name} via close_sales_order "
+					f"(plot {app.plot}, expired {app.expiry_date}) — partial advance "
+					"forfeited, Sales Order closed, plot released"
+				)
+			else:
+				doc = frappe.get_doc("Plot Application", app.name)
+				doc.flags.ignore_permissions = True
+				doc.flags._cancellation_reason = "Expired"
+				doc.cancel()
+				expired_count += 1
+				frappe.logger("landms").info(
+					f"Auto-expired Plot Application {app.name} "
+					f"(plot {app.plot}, expired {app.expiry_date}) — "
+					"first advance was not received in time"
+				)
 		except Exception:
 			frappe.log_error(
 				frappe.get_traceback(),
 				f"LandMS: Failed to expire Plot Application {app.name}",
-		)
+			)
 
 	if expired_count:
 		frappe.db.commit()
+
+
+def _sales_order_has_advance_payment(so_name):
+	"""True if the application's submitted Sales Order has received any advance on
+	its plot Sales Invoice (outstanding < grand_total). Draft/missing SO → False."""
+	if not so_name or not frappe.db.exists("Sales Order", so_name):
+		return False
+	if frappe.db.get_value("Sales Order", so_name, "docstatus") != 1:
+		return False
+	invoice = frappe.db.get_value("Sales Order", so_name, "plot_sales_invoice")
+	if not invoice or not frappe.db.exists("Sales Invoice", invoice):
+		return False
+	grand_total, outstanding = frappe.db.get_value(
+		"Sales Invoice", invoice, ["grand_total", "outstanding_amount"]
+	)
+	return flt(grand_total) - flt(outstanding) > 0
 
 
 def auto_process_overdue_plot_contracts():

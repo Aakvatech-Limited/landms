@@ -671,8 +671,18 @@ class PlotContract(Document):
 			return None
 
 		forfeiture_pct = flt(settings.forfeiture_percentage or 100)
+		govt_pct = flt(self.government_share_percent or 0)
 		forfeited_amount = total_paid * forfeiture_pct / 100.0
+		# The government share was already moved to Government Payable as each payment
+		# came in (see payment_sync._post_government_share_je), so only the company's
+		# NET take — forfeited amount minus that already-withheld govt share — is new
+		# income here. The customer's refund stays parked in Customer Advance for the
+		# accountant to pay out manually (tracked via lms_refund_amount).
+		govt_withheld = total_paid * govt_pct / 100.0
+		forfeiture_income = forfeited_amount - govt_withheld
 		refund_amount = total_paid - forfeited_amount
+		if forfeiture_income <= 0:
+			return None
 
 		je = frappe.get_doc({
 			"doctype": "Journal Entry",
@@ -681,19 +691,20 @@ class PlotContract(Document):
 			"voucher_type": "Journal Entry",
 			"lms_refund_amount": refund_amount,
 			"user_remark": (
-				f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited. "
+				f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited, "
+				f"net of {govt_pct:.2f}% government share already withheld. "
 				f"Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
 			),
 			"accounts": [
 				{
 					"account": settings.customer_advance_account,
-					"debit_in_account_currency": forfeited_amount,
+					"debit_in_account_currency": forfeiture_income,
 					"cost_center": settings.cost_center,
 					"land_acquisition": self.land_acquisition,
 				},
 				{
 					"account": settings.forfeited_deposits_account,
-					"credit_in_account_currency": forfeited_amount,
+					"credit_in_account_currency": forfeiture_income,
 					"cost_center": settings.cost_center,
 					"land_acquisition": self.land_acquisition,
 				},
@@ -798,8 +809,15 @@ class PlotContract(Document):
 		if so_doc.docstatus != 1:
 			return
 
-		# Close instead of cancel — preserves docstatus=1 and all accounting
-		frappe.db.set_value("Sales Order", so_name, "status", "Closed", update_modified=False)
+		# Close instead of cancel — preserves docstatus=1 and all accounting.
+		# update_modified=True + a timeline comment leave an audit footprint of who/what
+		# closed the Sales Order (mirrors the Close button), since this close is
+		# triggered by the contract termination.
+		frappe.db.set_value("Sales Order", so_name, "status", "Closed", update_modified=True)
+		so_doc.add_comment(
+			"Info",
+			f"Sales Order closed via termination of contract {self.name} by {frappe.session.user}.",
+		)
 
 		# Decline the TCB control number
 		control_number = cstr(so_doc.get("control_number") or "").strip()

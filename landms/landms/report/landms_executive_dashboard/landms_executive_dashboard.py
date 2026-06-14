@@ -43,13 +43,14 @@ def get_metrics():
 			COUNT(name) AS contracts_total,
 			SUM(CASE WHEN contract_status = 'Draft' THEN 1 ELSE 0 END) AS draft_contracts,
 			SUM(CASE WHEN contract_status = 'Ongoing' THEN 1 ELSE 0 END) AS ongoing_contracts,
+			SUM(CASE WHEN contract_status = 'Overdue' THEN 1 ELSE 0 END) AS overdue_contracts,
 			SUM(CASE WHEN contract_status = 'Completed' THEN 1 ELSE 0 END) AS completed_contracts,
 			SUM(CASE WHEN contract_status = 'Terminated' THEN 1 ELSE 0 END) AS terminated_contracts,
-			SUM(CASE WHEN contract_status IN ('Ongoing','Completed') THEN total_paid ELSE 0 END) AS cash_active,
-			SUM(CASE WHEN contract_status = 'Ongoing' THEN total_paid ELSE 0 END) AS deferred_revenue,
+			SUM(CASE WHEN contract_status IN ('Ongoing','Overdue','Completed') THEN total_paid ELSE 0 END) AS cash_active,
+			SUM(CASE WHEN contract_status IN ('Ongoing','Overdue') THEN total_paid ELSE 0 END) AS deferred_revenue,
 			SUM(CASE WHEN contract_status = 'Completed' THEN selling_price ELSE 0 END) AS recognized_gross,
 			SUM(CASE WHEN contract_status = 'Completed' THEN government_fee_withheld ELSE 0 END) AS govt_fees,
-			SUM(CASE WHEN contract_status IN ('Ongoing','Completed') THEN selling_price ELSE 0 END) AS active_pipeline
+			SUM(CASE WHEN contract_status IN ('Ongoing','Overdue','Completed') THEN selling_price ELSE 0 END) AS active_pipeline
 		FROM `tabPlot Contract`
 		WHERE docstatus = 1
 	""", as_dict=True)[0]
@@ -111,6 +112,7 @@ def get_metrics():
 		"contracts_total": int(fin.contracts_total or 0),
 		"draft_contracts": int(draft.cnt or 0),
 		"ongoing_contracts": int(fin.ongoing_contracts or 0),
+		"overdue_contracts": int(fin.overdue_contracts or 0),
 		"completed_contracts": int(fin.completed_contracts or 0),
 		"terminated_contracts": int(fin.terminated_contracts or 0),
 		"draft_value": flt(draft.value),
@@ -191,6 +193,12 @@ def get_data(metrics):
 		},
 		{
 			"section": "CONTRACTS",
+			"kpi": "Overdue Contracts",
+			"value": str(metrics["overdue_contracts"]),
+			"notes": "Active but past a payment deadline (still collecting)",
+		},
+		{
+			"section": "CONTRACTS",
 			"kpi": "Completed Contracts",
 			"value": str(metrics["completed_contracts"]),
 			"notes": "Eligible for revenue recognition",
@@ -264,6 +272,7 @@ def get_chart(metrics):
 					"Delivered Plots",
 				"Draft Contracts",
 				"Ongoing Contracts",
+				"Overdue Contracts",
 				"Completed Contracts",
 				"Terminated Contracts",
 			],
@@ -279,6 +288,7 @@ def get_chart(metrics):
 						metrics["delivered"],
 						metrics["draft_contracts"],
 						metrics["ongoing_contracts"],
+						metrics["overdue_contracts"],
 						metrics["completed_contracts"],
 						metrics["terminated_contracts"],
 					],
@@ -335,6 +345,12 @@ def get_report_summary(metrics):
 			"value": metrics["ongoing_contracts"],
 			"datatype": "Int",
 			"indicator": "Orange",
+		},
+		{
+			"label": "Overdue Contracts",
+			"value": metrics["overdue_contracts"],
+			"datatype": "Int",
+			"indicator": "Red",
 		},
 		{
 			"label": "Cash Collected (TZS)",

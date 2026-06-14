@@ -6,7 +6,7 @@
  "docstatus": 0,
  "doctype": "Number Card",
  "document_type": "Plot Contract",
- "filters_json": "[[\"Plot Contract\",\"docstatus\",\"=\",1,false]]",
+ "filters_json": "[[\"Plot Contract\",\"docstatus\",\"in\",[0,1],false],[\"Plot Contract\",\"contract_status\",\"in\",[\"Ongoing\",\"Completed\",\"Overdue\",\"Draft\"],false],[\"Plot Contract\",\"total_paid\",\">\",0,false]]",
  "function": "Sum",
  "idx": 0,
  "is_public": 1,
