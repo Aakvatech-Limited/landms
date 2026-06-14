@@ -1,6 +1,7 @@
 {
  "chart_name": "Monthly Revenue",
  "chart_type": "Report",
+ "currency": "TZS",
  "docstatus": 0,
  "doctype": "Dashboard Chart",
  "filters_json": "{}",
