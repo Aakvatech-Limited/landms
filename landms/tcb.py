@@ -54,25 +54,6 @@ TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
 # ---------------------------------------------------------------------- #
 
 
-def _get_pattern(related: bool = False) -> str:
-	"""Read the control number pattern from TCB Integration Settings.
-
-	Falls back to DEFAULT_PATTERN if the setting doc doesn't exist or the
-	field is empty. We never raise here — generation should be possible
-	even before the user has touched the settings.
-	"""
-	field = "related_control_number_pattern" if related else "control_number_pattern"
-	try:
-		pattern = frappe.db.get_single_value("TCB Integration Settings", field)
-	except Exception:
-		pattern = None
-	if related and not (pattern or "").strip():
-		frappe.throw(
-			"Related Control Number Pattern is not configured in TCB Integration Settings. "
-			"Set it before generating a related control number."
-		)
-	return (pattern or DEFAULT_PATTERN).strip()
-
 
 def _pattern_to_regex(pattern: str) -> re.Pattern:
 	"""Compile a control number pattern into an anchored regex.
@@ -88,12 +69,25 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
 	return re.compile("^" + "".join(parts) + "$")
 
 
-def is_valid_control_number(value: str, pattern: str | None = None, *, related: bool = False) -> bool:
+def is_valid_control_number(
+	value: str,
+	pattern: str | None = None,
+	*,
+	related: bool = False,
+	sales_order_name: str | None = None
+) -> bool:
 	"""Strict pattern check — same shape used by generation."""
 	value = cstr(value).strip()
 	if not value:
 		return False
-	pattern = (pattern or _get_pattern(related=related)).strip()
+	
+	if not pattern and sales_order_name:
+		land_acq = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition")
+		if land_acq:
+			field = "related_control_number_pattern" if related else "control_number_pattern"
+			pattern = frappe.db.get_value("Land Acquisition", land_acq, field)
+
+	pattern = cstr(pattern).strip()
 	if not pattern:
 		return False
 	return bool(_pattern_to_regex(pattern).match(value))
@@ -160,22 +154,38 @@ def _control_number_exists(candidate: str) -> bool:
 	return False
 
 
-def generate_control_number(sales_order_name: str | None = None, *, related: bool = False) -> str:
+def generate_control_number(
+	sales_order_name: str | None = None, 
+	*, 
+	related: bool = False,
+	pattern: str | None = None
+) -> str:
 	"""Generate a unique TCB control number.
 
-	The pattern is read from TCB Integration Settings (primary or related pattern
-	depending on the `related` flag). The result is checked against Sales Order
-	fields and the TCB Control Number registry to avoid collisions.
-
-	`sales_order_name` is accepted for symmetry with the legacy signature; it
-	does NOT influence the generated value (which is fully random).
+	The pattern is read from the Sales Order's associated Land Acquisition.
+	The result is checked against Sales Order fields and the TCB Control Number 
+	registry to avoid collisions.
 	"""
-	pattern = _get_pattern(related=related)
+	if not pattern and sales_order_name:
+		land_acq = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition")
+		if not land_acq:
+			frappe.throw(f"Sales Order {sales_order_name} is missing a Land Acquisition. Cannot generate TCB control number.")
+		
+		field = "related_control_number_pattern" if related else "control_number_pattern"
+		pattern = frappe.db.get_value("Land Acquisition", land_acq, field)
+		if not pattern:
+			frappe.throw(
+				f"Land Acquisition {land_acq} is missing {field}. "
+				"Please re-save the Land Acquisition to auto-generate the pattern."
+			)
+
+	if not pattern:
+		frappe.throw("Cannot generate TCB control number: pattern is missing.")
+
 	if "#" not in pattern:
 		label = "Related Control Number Pattern" if related else "Control Number Pattern"
 		frappe.throw(
-			f"{label} in TCB Integration Settings is missing '#'. "
-			"Cannot generate randomized references."
+			f"{label} is missing '#'. Cannot generate randomized references."
 		)
 
 	for _ in range(GENERATION_RETRIES):
@@ -222,8 +232,6 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"enabled": 0,
 			"outbound_mode": "Off",
 			"inbound_mode": "Off",
-			"control_number_pattern": DEFAULT_PATTERN,
-			"related_control_number_pattern": "",
 			"auto_apply_callback_payments": 0,
 			"auto_apply_reconciliation_payments": 0,
 			"reconciliation_enabled": 0,
@@ -244,8 +252,6 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"enabled": get_value("enabled"),
 		"outbound_mode": get_value("outbound_mode") or "Off",
 		"inbound_mode": get_value("inbound_mode") or "Off",
-		"control_number_pattern": get_value("control_number_pattern") or DEFAULT_PATTERN,
-		"related_control_number_pattern": (get_value("related_control_number_pattern") or "").strip(),
 		"auto_apply_callback_payments": get_value("auto_apply_callback_payments"),
 		"auto_apply_reconciliation_payments": get_value("auto_apply_reconciliation_payments"),
 		"reconciliation_enabled": get_value("reconciliation_enabled"),
