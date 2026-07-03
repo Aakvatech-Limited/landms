@@ -1510,10 +1510,6 @@ def _validate_live_reference_settings(settings: dict[str, Any], *, need: str = "
 	    reconciliation → reconciliation_url
 	"""
 	missing = []
-	if not settings.get("partner_code"):
-		missing.append("Partner Code")
-	if not settings.get("profile_id"):
-		missing.append("Profile ID / Account Number")
 
 	url_field = {
 		"reference":      "reference_create_url",
