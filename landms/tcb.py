@@ -348,45 +348,55 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 	Optional:  relatedRef, paymentOption, expireDate.
 	Sent as application/x-www-form-urlencoded POST.
 	"""
-	settings = _get_tcb_settings()
-	customer_name = ""
-	mobile = ""
-	message = f"Plot payment - {control_number}"
-	related_ref = ""
-	payment_option = ""
 	expire_date = ""
 	amount = 0.0
 
-	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
-		so = frappe.db.get_value(
-			"Sales Order", sales_order_name,
-			["customer", "customer_name", "contact_mobile", "contact_phone",
-			 "related_control_number", "payment_option", "include_amount",
-			 "payment_deadline", "include_expire_date", "grand_total"],
-			as_dict=True,
-		)
-		if so:
-			customer_name = so.customer_name or so.customer or ""
-			message = f"Plot payment for {customer_name} - {control_number}"
-			mobile = (
-				frappe.db.get_value("Customer", so.customer, "mobile_no")
-				or so.contact_mobile
-				or so.contact_phone
-				or _get_contact_mobile(so.customer)
-				or "0"
-			)
-			related_ref = cstr(so.related_control_number or "").strip()
-			payment_option = cstr(so.payment_option or "").strip()
-			if cint(so.include_expire_date) and so.payment_deadline:
-				expire_date = cstr(so.payment_deadline).strip()
-			if cint(so.include_amount):
-				amount = flt(so.grand_total)
+	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
+		frappe.throw(f"Sales Order {sales_order_name} not found.")
+
+	so = frappe.db.get_value(
+		"Sales Order", sales_order_name,
+		["customer", "customer_name", "contact_mobile", "contact_phone",
+			"related_control_number", "payment_option", "include_amount",
+			"payment_deadline", "include_expire_date", "grand_total", "land_acquisition"],
+		as_dict=True,
+	)
+	if not so.land_acquisition:
+		frappe.throw(f"Sales Order {sales_order_name} must have a land acquisition.")
+	
+	project_info = frappe.db.get_value(
+		"Land Acquisition", so.land_acquisition,
+		["partner_code", "profile_id"],
+		as_dict=True,
+	)
+	if (
+		not project_info or
+		not project_info.partner_code or
+		not project_info.profile_id
+	):
+		frappe.throw(f"Land Acquisition {so.land_acquisition} must have a partner code and profile id.")
+
+	customer_name = so.customer_name or so.customer or ""
+	message = f"Plot payment for {customer_name} - {control_number}"
+	mobile = (
+		frappe.db.get_value("Customer", so.customer, "mobile_no")
+		or so.contact_mobile
+		or so.contact_phone
+		or _get_contact_mobile(so.customer)
+		or "0"
+	)
+	related_ref = cstr(so.related_control_number or "").strip()
+	payment_option = cstr(so.payment_option or "").strip()
+	if cint(so.include_expire_date) and so.payment_deadline:
+		expire_date = cstr(so.payment_deadline).strip()
+	if cint(so.include_amount):
+		amount = flt(so.grand_total)
 
 	payload = {
-		"partnerCode": settings.get("partner_code") or "",
-		"profileID":   settings.get("profile_id") or "",
+		"partnerCode": project_info.get("partner_code") or "",
+		"profileID":   project_info.get("profile_id") or "",
 		"reference":   control_number,
-		"name":        customer_name or "Customer",
+		"name":        customer_name,
 		"mobile":      mobile,
 		"message":     message,
 	}
