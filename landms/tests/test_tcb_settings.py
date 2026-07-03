@@ -13,7 +13,6 @@ class TestTCBSettingsBackwardCompatibility(FrappeTestCase):
 			"enabled": 1,
 			"outbound_mode": "Off",
 			"inbound_mode": "Off",
-			"control_number_pattern": "99911####00##",
 			"auto_apply_callback_payments": 0,
 			"auto_apply_reconciliation_payments": 0,
 			"reconciliation_enabled": 1,
