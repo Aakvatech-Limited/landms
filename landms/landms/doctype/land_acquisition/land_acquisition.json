@@ -32,7 +32,7 @@
         "column_break_gmww",
         "profile_id",
         "column_break_carp",
-        "reconciliation_partner_code",
+        "reconciliation_profile_id",
         "tab_pricing",
         "sales_section",
         "booking_fee_percent",
@@ -510,10 +510,10 @@
             "fieldtype": "Column Break"
         },
         {
-            "description": "Partner code sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the account number here instead of the partner code.",
-            "fieldname": "reconciliation_partner_code",
+            "description": "Profile ID sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the ProfileID or account number here instead of the partner code.",
+            "fieldname": "reconciliation_id",
             "fieldtype": "Data",
-            "label": "Reconciliation Partner Code",
+            "label": "Reconciliation Profile ID",
             "reqd": 1,
             "search_index": 1
         },
