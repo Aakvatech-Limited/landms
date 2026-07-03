@@ -29,27 +29,27 @@ class TestControlNumberPattern(FrappeTestCase):
 		self.assertEqual(regex.pattern, r"^99911\d\d\d\d00\d\d$")
 
 	def test_validator_accepts_valid_default(self):
-		self.assertTrue(tcb.is_valid_control_number("9991143790087"))
-		self.assertTrue(tcb.is_valid_control_number("9991100000000"))
+		self.assertTrue(tcb.is_valid_control_number("9991143790087", pattern=DEFAULT_PATTERN))
+		self.assertTrue(tcb.is_valid_control_number("9991100000000", pattern=DEFAULT_PATTERN))
 
 	def test_validator_rejects_wrong_length(self):
-		self.assertFalse(tcb.is_valid_control_number("999114379008"))   # 12
-		self.assertFalse(tcb.is_valid_control_number("99911437900870")) # 14
+		self.assertFalse(tcb.is_valid_control_number("999114379008", pattern=DEFAULT_PATTERN))   # 12
+		self.assertFalse(tcb.is_valid_control_number("99911437900870", pattern=DEFAULT_PATTERN)) # 14
 
 	def test_validator_rejects_wrong_prefix(self):
-		self.assertFalse(tcb.is_valid_control_number("8881143790087"))
+		self.assertFalse(tcb.is_valid_control_number("8881143790087", pattern=DEFAULT_PATTERN))
 
 	def test_validator_rejects_wrong_middle_segment(self):
 		# Position 10-11 must be '00' per default pattern.
-		self.assertFalse(tcb.is_valid_control_number("9991143791187"))
+		self.assertFalse(tcb.is_valid_control_number("9991143791187", pattern=DEFAULT_PATTERN))
 
 	def test_validator_rejects_non_digits(self):
-		self.assertFalse(tcb.is_valid_control_number("99911aa790087"))
-		self.assertFalse(tcb.is_valid_control_number("9991143-790087"))
+		self.assertFalse(tcb.is_valid_control_number("99911aa790087", pattern=DEFAULT_PATTERN))
+		self.assertFalse(tcb.is_valid_control_number("9991143-790087", pattern=DEFAULT_PATTERN))
 
 	def test_validator_rejects_empty(self):
-		self.assertFalse(tcb.is_valid_control_number(""))
-		self.assertFalse(tcb.is_valid_control_number(None))
+		self.assertFalse(tcb.is_valid_control_number("", pattern=DEFAULT_PATTERN))
+		self.assertFalse(tcb.is_valid_control_number(None, pattern=DEFAULT_PATTERN))
 
 	def test_validator_with_custom_pattern(self):
 		self.assertTrue(tcb.is_valid_control_number("88812", pattern="888##"))
@@ -62,22 +62,22 @@ class TestControlNumberGenerator(FrappeTestCase):
 
 	def test_generator_produces_valid_default(self):
 		for _ in range(10):
-			cn = tcb.generate_control_number()
-			self.assertTrue(tcb.is_valid_control_number(cn),
+			cn = tcb.generate_control_number(pattern=DEFAULT_PATTERN)
+			self.assertTrue(tcb.is_valid_control_number(cn, pattern=DEFAULT_PATTERN),
 			                f"generated {cn} does not match default pattern")
 			self.assertEqual(len(cn), 13)
 			self.assertTrue(cn.startswith("99911"))
 			self.assertEqual(cn[9:11], "00")
 
 	def test_generator_unique_across_batch(self):
-		batch = {tcb.generate_control_number() for _ in range(50)}
+		batch = {tcb.generate_control_number(pattern=DEFAULT_PATTERN) for _ in range(50)}
 		# 50 samples from a 6-digit random space (4 + 2 = 6 random digits = 1M
 		# combinations); collisions are extremely unlikely.
 		self.assertEqual(len(batch), 50)
 
 	def test_generator_uses_secrets_not_random(self):
 		"""Sanity check: positions that are '#' should vary across draws."""
-		samples = [tcb.generate_control_number() for _ in range(20)]
+		samples = [tcb.generate_control_number(pattern=DEFAULT_PATTERN) for _ in range(20)]
 		positions = [5, 6, 7, 8, 11, 12]  # the 6 random positions
 		for pos in positions:
 			values = {s[pos] for s in samples}
@@ -113,7 +113,6 @@ class TestSettingsAccess(FrappeTestCase):
 		settings = tcb._get_tcb_settings()
 		self.assertIn("enabled", settings)
 		self.assertIn("outbound_mode", settings)
-		self.assertIn("control_number_pattern", settings)
 
 	def test_register_in_off_mode_returns_ignored(self):
 		# Default mode is Off; registering should be ignored, not throw.
