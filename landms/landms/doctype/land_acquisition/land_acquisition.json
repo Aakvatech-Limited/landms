@@ -1,437 +1,573 @@
 {
- "doctype": "DocType",
- "name": "Land Acquisition",
- "module": "LandMS",
- "issingle": 0,
- "is_submittable": 1,
- "track_changes": 1,
- "autoname": "naming_series:",
- "title_field": "acquisition_name",
- "search_fields": "acquisition_name,status,region,district",
- "fields": [
-  {
-   "fieldname": "tab_overview",
-   "fieldtype": "Tab Break",
-   "label": "Overview"
-  },
-  {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Naming Series",
-   "options": "LACQ-.YYYY.-.####",
-   "default": "LACQ-.YYYY.-.####"
-  },
-  {
-   "fieldname": "acquisition_name",
-   "fieldtype": "Data",
-   "label": "Acquisition Name",
-   "reqd": 1
-  },
-  {
-   "fieldname": "acquisition_date",
-   "fieldtype": "Date",
-   "label": "Acquisition Date",
-   "reqd": 1,
-   "default": "Today"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "Draft\nPending Approval\nApproved\nSubdivided",
-   "default": "Draft",
-   "read_only": 1
-  },
-  {
-   "fieldname": "col_break_header",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
-  },
-  {
-   "fieldname": "approved_by",
-   "fieldtype": "Link",
-   "label": "Approved By",
-   "options": "User",
-   "read_only": 1,
-   "depends_on": "eval:doc.approved_by"
-  },
-  {
-   "fieldname": "approval_date",
-   "fieldtype": "Date",
-   "label": "Approval Date",
-   "read_only": 1,
-   "depends_on": "eval:doc.approved_by"
-  },
-  {
-   "fieldname": "location_section",
-   "fieldtype": "Section Break",
-   "label": "Location"
-  },
-  {
-   "fieldname": "region",
-   "fieldtype": "Select",
-   "label": "Region",
-   "options": "\nArusha\nDar es Salaam\nDodoma\nGeita\nIringa\nKagera\nKaskazini Pemba\nKaskazini Unguja\nKatavi\nKigoma\nKilimanjaro\nKusini Pemba\nKusini Unguja\nLindi\nManyara\nMara\nMbeya\nMjini Magharibi\nMorogoro\nMtwara\nMwanza\nNjombe\nPwani\nRukwa\nRuvuma\nShinyanga\nSimiyu\nSingida\nSongwe\nTabora\nTanga",
-   "reqd": 1
-  },
-  {
-   "fieldname": "district",
-   "fieldtype": "Data",
-   "label": "District",
-   "reqd": 1
-  },
-  {
-   "fieldname": "ward",
-   "fieldtype": "Data",
-   "label": "Ward"
-  },
-  {
-   "fieldname": "col_break_location",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "latitude",
-   "fieldtype": "Float",
-   "label": "Latitude",
-   "precision": "6"
-  },
-  {
-   "fieldname": "longitude",
-   "fieldtype": "Float",
-   "label": "Longitude",
-   "precision": "6"
-  },
-  {
-   "fieldname": "location_description",
-   "fieldtype": "Small Text",
-   "label": "Location Description"
-  },
-  {
-   "fieldname": "land_section",
-   "fieldtype": "Section Break",
-   "label": "Land Details"
-  },
-  {
-   "fieldname": "total_area_sqm",
-   "fieldtype": "Float",
-   "label": "Total Area (sqm)",
-   "reqd": 1
-  },
-  {
-   "fieldname": "land_use_type",
-   "fieldtype": "Select",
-   "label": "Land Use Type",
-   "options": "\nResidential\nCommercial\nMixed Use",
-   "reqd": 1
-  },
-  {
-   "fieldname": "title_deed_number",
-   "fieldtype": "Data",
-   "label": "Title Deed Number"
-  },
-  {
-   "fieldname": "tab_pricing",
-   "fieldtype": "Tab Break",
-   "label": "Pricing"
-  },
-  {
-   "fieldname": "sales_section",
-   "fieldtype": "Section Break",
-   "label": "Terms"
-  },
-  {
-   "fieldname": "booking_fee_percent",
-   "fieldtype": "Percent",
-   "label": "Booking Fee %",
-   "reqd": 1,
-   "default": "10"
-  },
-  {
-   "fieldname": "government_share_percent",
-   "fieldtype": "Percent",
-   "label": "Government Share %",
-   "reqd": 1,
-   "default": "0"
-  },
-  {
-   "fieldname": "payment_period_section",
-   "fieldtype": "Section Break",
-   "label": "Payment Period",
-   "collapsible": 0
-  },
-  {
-   "fieldname": "payment_years",
-   "fieldtype": "Int",
-   "label": "Years",
-   "default": "0"
-  },
-  {
-   "fieldname": "payment_months",
-   "fieldtype": "Int",
-   "label": "Months",
-   "default": "0"
-  },
-  {
-   "fieldname": "payment_days_input",
-   "fieldtype": "Int",
-   "label": "Days",
-   "default": "30"
-  },
-  {
-   "fieldname": "payment_period_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "payment_period_summary",
-   "fieldtype": "Data",
-   "label": "Total Period",
-   "read_only": 1,
-   "description": "Calculated total in days"
-  },
-  {
-   "fieldname": "payment_completion_days",
-   "fieldtype": "Int",
-   "label": "Payment Completion (Days)",
-   "reqd": 1,
-   "default": "30",
-   "hidden": 1
-  },
-  {
-   "fieldname": "plot_type_rates_section",
-   "fieldtype": "Section Break",
-   "label": "Plot Type Rates"
-  },
-  {
-   "fieldname": "plot_type_rates",
-   "fieldtype": "Table",
-   "label": "Plot Type Rates",
-   "options": "Land Acquisition Plot Type Rate",
-   "description": "Selling price per sqm for each plot type on this land acquisition"
-  },
-  {
-   "fieldname": "tab_costs",
-   "fieldtype": "Tab Break",
-   "label": "Costs"
-  },
-  {
-   "fieldname": "cost_section",
-   "fieldtype": "Section Break",
-   "label": "Cost Summary"
-  },
-  {
-   "fieldname": "acquisition_cost_tzs",
-   "fieldtype": "Currency",
-   "label": "Total Land Cost (TZS)",
-   "read_only": 1,
-   "bold": 1,
-   "description": "Sum of submitted Purchase Invoices and Journal Entries tagged to this Land Acquisition (capitalized to land cost accounts). This is the cost basis Plot Master uses for allocation."
-  },
-  {
-   "fieldname": "cost_per_sqm_tzs",
-   "fieldtype": "Currency",
-   "label": "Cost per Sqm (TZS)",
-   "read_only": 1,
-   "description": "Total Land Cost divided by Total Area."
-  },
-  {
-   "fieldname": "cost_col_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "total_committed_tzs",
-   "fieldtype": "Currency",
-   "label": "Committed (TZS)",
-   "read_only": 1,
-   "description": "Total of all submitted Purchase Orders tagged to this Land Acquisition. Sellers + other suppliers."
-  },
-  {
-   "fieldname": "total_paid_tzs",
-   "fieldtype": "Currency",
-   "label": "Paid (TZS)",
-   "read_only": 1,
-   "description": "Cash paid via Payment Entries against the invoices for this Land Acquisition."
-  },
-  {
-   "fieldname": "cost_col_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "total_outstanding_tzs",
-   "fieldtype": "Currency",
-   "label": "Outstanding (TZS)",
-   "read_only": 1,
-   "description": "Billed minus Paid — what we still owe suppliers on already-issued invoices."
-  },
-  {
-   "fieldname": "total_unbilled_po_tzs",
-   "fieldtype": "Currency",
-   "label": "Unbilled PO (TZS)",
-   "read_only": 1,
-   "description": "Committed minus Billed — work ordered through Purchase Orders but not yet invoiced."
-  },
-  {
-   "fieldname": "je_billed_tzs",
-   "fieldtype": "Currency",
-   "label": "JE Billed (TZS)",
-   "read_only": 1,
-   "description": "Total debited to land cost accounts via Journal Entries tagged to this Land Acquisition. Included in Total Land Cost."
-  },
-  {
-   "fieldname": "recalculation_section",
-   "fieldtype": "Section Break",
-   "label": "Plot Cost Recalculation",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "last_recalculation_cost",
-   "fieldtype": "Currency",
-   "label": "Last Recalculation Cost (TZS)",
-   "read_only": 1,
-   "description": "Acquisition cost at the time the last recalculation ran successfully."
-  },
-  {
-   "fieldname": "last_recalculation_date",
-   "fieldtype": "Datetime",
-   "label": "Last Recalculation Date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "recalculation_in_progress",
-   "fieldtype": "Check",
-   "label": "Recalculation In Progress",
-   "read_only": 1,
-   "hidden": 1
-  },
-  {
-   "fieldname": "last_recalculation_log",
-   "fieldtype": "Text",
-   "label": "Recalculation Log",
-   "read_only": 1
-  },
-  {
-   "fieldname": "je_costs_section",
-   "fieldtype": "Section Break",
-   "label": "Journal Entry Costs",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "je_summary_html",
-   "fieldtype": "HTML",
-   "label": "Journal Entry Costs"
-  },
-  {
-   "fieldname": "land_seller_section",
-   "fieldtype": "Section Break",
-   "label": "Land Sellers",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "land_seller_summary_html",
-   "fieldtype": "HTML",
-   "label": "Land Sellers"
-  },
-  {
-   "fieldname": "other_supplier_section",
-   "fieldtype": "Section Break",
-   "label": "Other Suppliers",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "other_supplier_summary_html",
-   "fieldtype": "HTML",
-   "label": "Other Suppliers"
-  },
-  {
-   "fieldname": "tab_plots",
-   "fieldtype": "Tab Break",
-   "label": "Plots"
-  },
-  {
-   "fieldname": "plots_section",
-   "fieldtype": "Section Break",
-   "label": "Plot Summary"
-  },
-  {
-   "fieldname": "total_plots",
-   "fieldtype": "Int",
-   "label": "Total Plots",
-   "read_only": 1
-  },
-  {
-   "fieldname": "available_plots",
-   "fieldtype": "Int",
-   "label": "Available Plots",
-   "read_only": 1
-  },
-  {
-   "fieldname": "col_break_plots",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "reserved_plots",
-   "fieldtype": "Int",
-   "label": "Reserved Plots",
-   "read_only": 1
-  },
-  {
-   "fieldname": "delivered_plots",
-   "fieldtype": "Int",
-   "label": "Delivered Plots",
-   "read_only": 1
-  },
-  {
-   "fieldname": "tab_notes",
-   "fieldtype": "Tab Break",
-   "label": "Notes"
-  },
-  {
-   "fieldname": "notes_section",
-   "fieldtype": "Section Break",
-   "label": "Notes"
-  },
-  {
-   "fieldname": "notes",
-   "fieldtype": "Long Text",
-   "label": "Notes"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "options": "Land Acquisition",
-   "read_only": 1,
-   "print_hide": 1
-  }
- ],
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "submit": 1,
-   "cancel": 1,
-   "amend": 1,
-   "delete": 1
-  },
-  {
-   "role": "Land Acquisition Approver",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "submit": 1,
-   "cancel": 1,
-   "amend": 1
-  },
-  {
-   "role": "Finance",
-   "read": 1
-  }
- ]
+    "actions": [],
+    "autoname": "naming_series:",
+    "creation": "2026-05-29 18:17:37.918550",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "tab_overview",
+        "acquisition_name",
+        "acquisition_date",
+        "col_break_header",
+        "company",
+        "status",
+        "column_break_obho",
+        "approved_by",
+        "approval_date",
+        "location_section",
+        "region",
+        "district",
+        "ward",
+        "col_break_location",
+        "latitude",
+        "longitude",
+        "location_description",
+        "column_break_eanp",
+        "total_area_sqm",
+        "land_use_type",
+        "title_deed_number",
+        "tcb_details_section",
+        "partner_code",
+        "naming_series",
+        "column_break_gmww",
+        "profile_id",
+        "column_break_carp",
+        "reconciliation_partner_code",
+        "tab_pricing",
+        "sales_section",
+        "booking_fee_percent",
+        "column_break_vagd",
+        "government_share_percent",
+        "payment_period_section",
+        "payment_years",
+        "payment_months",
+        "payment_days_input",
+        "payment_period_col_break",
+        "payment_period_summary",
+        "payment_completion_days",
+        "plot_type_rates_section",
+        "plot_type_rates",
+        "tab_costs",
+        "cost_section",
+        "acquisition_cost_tzs",
+        "cost_per_sqm_tzs",
+        "cost_col_break_1",
+        "total_committed_tzs",
+        "total_paid_tzs",
+        "cost_col_break_2",
+        "total_outstanding_tzs",
+        "total_unbilled_po_tzs",
+        "je_billed_tzs",
+        "recalculation_section",
+        "last_recalculation_cost",
+        "last_recalculation_date",
+        "recalculation_in_progress",
+        "last_recalculation_log",
+        "je_costs_section",
+        "je_summary_html",
+        "land_seller_section",
+        "land_seller_summary_html",
+        "other_supplier_section",
+        "other_supplier_summary_html",
+        "tab_plots",
+        "plots_section",
+        "total_plots",
+        "available_plots",
+        "col_break_plots",
+        "reserved_plots",
+        "delivered_plots",
+        "tab_notes",
+        "notes_section",
+        "notes",
+        "amended_from"
+    ],
+    "fields": [
+        {
+            "fieldname": "tab_overview",
+            "fieldtype": "Tab Break",
+            "label": "Overview"
+        },
+        {
+            "default": "LACQ-.YYYY.-.####",
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Naming Series",
+            "options": "LACQ-.YYYY.-.####"
+        },
+        {
+            "fieldname": "acquisition_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Acquisition Name",
+            "reqd": 1
+        },
+        {
+            "default": "Today",
+            "fieldname": "acquisition_date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Acquisition Date",
+            "reqd": 1
+        },
+        {
+            "default": "Draft",
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Draft\nPending Approval\nApproved\nSubdivided",
+            "read_only": 1
+        },
+        {
+            "fieldname": "col_break_header",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Company",
+            "options": "Company",
+            "reqd": 1
+        },
+        {
+            "depends_on": "eval:doc.approved_by",
+            "fieldname": "approved_by",
+            "fieldtype": "Link",
+            "label": "Approved By",
+            "options": "User",
+            "read_only": 1
+        },
+        {
+            "depends_on": "eval:doc.approved_by",
+            "fieldname": "approval_date",
+            "fieldtype": "Date",
+            "label": "Approval Date",
+            "read_only": 1
+        },
+        {
+            "fieldname": "location_section",
+            "fieldtype": "Section Break",
+            "label": "Land Details and Location"
+        },
+        {
+            "fieldname": "region",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Region",
+            "options": "\nArusha\nDar es Salaam\nDodoma\nGeita\nIringa\nKagera\nKaskazini Pemba\nKaskazini Unguja\nKatavi\nKigoma\nKilimanjaro\nKusini Pemba\nKusini Unguja\nLindi\nManyara\nMara\nMbeya\nMjini Magharibi\nMorogoro\nMtwara\nMwanza\nNjombe\nPwani\nRukwa\nRuvuma\nShinyanga\nSimiyu\nSingida\nSongwe\nTabora\nTanga",
+            "reqd": 1
+        },
+        {
+            "fieldname": "district",
+            "fieldtype": "Data",
+            "label": "District",
+            "reqd": 1
+        },
+        {
+            "fieldname": "ward",
+            "fieldtype": "Data",
+            "label": "Ward"
+        },
+        {
+            "fieldname": "col_break_location",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "latitude",
+            "fieldtype": "Float",
+            "label": "Latitude",
+            "precision": "6"
+        },
+        {
+            "fieldname": "longitude",
+            "fieldtype": "Float",
+            "label": "Longitude",
+            "precision": "6"
+        },
+        {
+            "fieldname": "location_description",
+            "fieldtype": "Small Text",
+            "label": "Location Description"
+        },
+        {
+            "fieldname": "total_area_sqm",
+            "fieldtype": "Float",
+            "label": "Total Area (sqm)",
+            "reqd": 1
+        },
+        {
+            "fieldname": "land_use_type",
+            "fieldtype": "Select",
+            "label": "Land Use Type",
+            "options": "\nResidential\nCommercial\nMixed Use",
+            "reqd": 1
+        },
+        {
+            "fieldname": "title_deed_number",
+            "fieldtype": "Data",
+            "label": "Title Deed Number"
+        },
+        {
+            "fieldname": "tab_pricing",
+            "fieldtype": "Tab Break",
+            "label": "Pricing"
+        },
+        {
+            "fieldname": "sales_section",
+            "fieldtype": "Section Break",
+            "label": "Terms"
+        },
+        {
+            "default": "10",
+            "fieldname": "booking_fee_percent",
+            "fieldtype": "Percent",
+            "label": "Booking Fee %",
+            "reqd": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "government_share_percent",
+            "fieldtype": "Percent",
+            "label": "Government Share %",
+            "reqd": 1
+        },
+        {
+            "fieldname": "payment_period_section",
+            "fieldtype": "Section Break",
+            "label": "Payment Period"
+        },
+        {
+            "default": "0",
+            "fieldname": "payment_years",
+            "fieldtype": "Int",
+            "label": "Years"
+        },
+        {
+            "default": "0",
+            "fieldname": "payment_months",
+            "fieldtype": "Int",
+            "label": "Months"
+        },
+        {
+            "default": "30",
+            "fieldname": "payment_days_input",
+            "fieldtype": "Int",
+            "label": "Days"
+        },
+        {
+            "fieldname": "payment_period_col_break",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Calculated total in days",
+            "fieldname": "payment_period_summary",
+            "fieldtype": "Data",
+            "label": "Total Period",
+            "read_only": 1
+        },
+        {
+            "default": "30",
+            "fieldname": "payment_completion_days",
+            "fieldtype": "Int",
+            "hidden": 1,
+            "label": "Payment Completion (Days)",
+            "reqd": 1
+        },
+        {
+            "fieldname": "plot_type_rates_section",
+            "fieldtype": "Section Break",
+            "label": "Plot Type Rates"
+        },
+        {
+            "description": "Selling price per sqm for each plot type on this land acquisition",
+            "fieldname": "plot_type_rates",
+            "fieldtype": "Table",
+            "label": "Plot Type Rates",
+            "options": "Land Acquisition Plot Type Rate"
+        },
+        {
+            "fieldname": "tab_costs",
+            "fieldtype": "Tab Break",
+            "label": "Costs"
+        },
+        {
+            "fieldname": "cost_section",
+            "fieldtype": "Section Break",
+            "label": "Cost Summary"
+        },
+        {
+            "bold": 1,
+            "description": "Sum of submitted Purchase Invoices and Journal Entries tagged to this Land Acquisition (capitalized to land cost accounts). This is the cost basis Plot Master uses for allocation.",
+            "fieldname": "acquisition_cost_tzs",
+            "fieldtype": "Currency",
+            "label": "Total Land Cost (TZS)",
+            "read_only": 1
+        },
+        {
+            "description": "Total Land Cost divided by Total Area.",
+            "fieldname": "cost_per_sqm_tzs",
+            "fieldtype": "Currency",
+            "label": "Cost per Sqm (TZS)",
+            "read_only": 1
+        },
+        {
+            "fieldname": "cost_col_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Total of all submitted Purchase Orders tagged to this Land Acquisition. Sellers + other suppliers.",
+            "fieldname": "total_committed_tzs",
+            "fieldtype": "Currency",
+            "label": "Committed (TZS)",
+            "read_only": 1
+        },
+        {
+            "description": "Cash paid via Payment Entries against the invoices for this Land Acquisition.",
+            "fieldname": "total_paid_tzs",
+            "fieldtype": "Currency",
+            "label": "Paid (TZS)",
+            "read_only": 1
+        },
+        {
+            "fieldname": "cost_col_break_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Billed minus Paid \u2014 what we still owe suppliers on already-issued invoices.",
+            "fieldname": "total_outstanding_tzs",
+            "fieldtype": "Currency",
+            "label": "Outstanding (TZS)",
+            "read_only": 1
+        },
+        {
+            "description": "Committed minus Billed \u2014 work ordered through Purchase Orders but not yet invoiced.",
+            "fieldname": "total_unbilled_po_tzs",
+            "fieldtype": "Currency",
+            "label": "Unbilled PO (TZS)",
+            "read_only": 1
+        },
+        {
+            "description": "Total debited to land cost accounts via Journal Entries tagged to this Land Acquisition. Included in Total Land Cost.",
+            "fieldname": "je_billed_tzs",
+            "fieldtype": "Currency",
+            "label": "JE Billed (TZS)",
+            "read_only": 1
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "recalculation_section",
+            "fieldtype": "Section Break",
+            "label": "Plot Cost Recalculation"
+        },
+        {
+            "description": "Acquisition cost at the time the last recalculation ran successfully.",
+            "fieldname": "last_recalculation_cost",
+            "fieldtype": "Currency",
+            "label": "Last Recalculation Cost (TZS)",
+            "read_only": 1
+        },
+        {
+            "fieldname": "last_recalculation_date",
+            "fieldtype": "Datetime",
+            "label": "Last Recalculation Date",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "recalculation_in_progress",
+            "fieldtype": "Check",
+            "hidden": 1,
+            "label": "Recalculation In Progress",
+            "read_only": 1
+        },
+        {
+            "fieldname": "last_recalculation_log",
+            "fieldtype": "Text",
+            "label": "Recalculation Log",
+            "read_only": 1
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "je_costs_section",
+            "fieldtype": "Section Break",
+            "label": "Journal Entry Costs"
+        },
+        {
+            "fieldname": "je_summary_html",
+            "fieldtype": "HTML",
+            "label": "Journal Entry Costs"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "land_seller_section",
+            "fieldtype": "Section Break",
+            "label": "Land Sellers"
+        },
+        {
+            "fieldname": "land_seller_summary_html",
+            "fieldtype": "HTML",
+            "label": "Land Sellers"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "other_supplier_section",
+            "fieldtype": "Section Break",
+            "label": "Other Suppliers"
+        },
+        {
+            "fieldname": "other_supplier_summary_html",
+            "fieldtype": "HTML",
+            "label": "Other Suppliers"
+        },
+        {
+            "fieldname": "tab_plots",
+            "fieldtype": "Tab Break",
+            "label": "Plots"
+        },
+        {
+            "fieldname": "plots_section",
+            "fieldtype": "Section Break",
+            "label": "Plot Summary"
+        },
+        {
+            "fieldname": "total_plots",
+            "fieldtype": "Int",
+            "label": "Total Plots",
+            "read_only": 1
+        },
+        {
+            "fieldname": "available_plots",
+            "fieldtype": "Int",
+            "label": "Available Plots",
+            "read_only": 1
+        },
+        {
+            "fieldname": "col_break_plots",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "reserved_plots",
+            "fieldtype": "Int",
+            "label": "Reserved Plots",
+            "read_only": 1
+        },
+        {
+            "fieldname": "delivered_plots",
+            "fieldtype": "Int",
+            "label": "Delivered Plots",
+            "read_only": 1
+        },
+        {
+            "fieldname": "tab_notes",
+            "fieldtype": "Tab Break",
+            "label": "Notes"
+        },
+        {
+            "fieldname": "notes_section",
+            "fieldtype": "Section Break",
+            "label": "Notes"
+        },
+        {
+            "fieldname": "notes",
+            "fieldtype": "Long Text",
+            "label": "Notes"
+        },
+        {
+            "fieldname": "amended_from",
+            "fieldtype": "Link",
+            "label": "Amended From",
+            "options": "Land Acquisition",
+            "print_hide": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_obho",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "column_break_eanp",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "tcb_details_section",
+            "fieldtype": "Section Break",
+            "label": "TCB Details"
+        },
+        {
+            "description": "Issued by TCB per land acquisition. Sent as partnerCode in every outbound call.",
+            "fieldname": "partner_code",
+            "fieldtype": "Data",
+            "label": "Partner Code",
+            "reqd": 1,
+            "search_index": 1
+        },
+        {
+            "fieldname": "column_break_gmww",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "column_break_carp",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Partner code sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the account number here instead of the partner code.",
+            "fieldname": "reconciliation_partner_code",
+            "fieldtype": "Data",
+            "label": "Reconciliation Partner Code",
+            "reqd": 1,
+            "search_index": 1
+        },
+        {
+            "fieldname": "column_break_vagd",
+            "fieldtype": "Column Break"
+        },
+        {
+            "description": "Collection account per land acquisition. Sent as profileID on reference create and as acctNo on decline.",
+            "fieldname": "profile_id",
+            "fieldtype": "Data",
+            "label": "Profile ID / Account Number",
+            "reqd": 1,
+            "search_index": 1
+        }
+    ],
+    "is_submittable": 1,
+    "links": [],
+    "modified": "2026-07-02 16:19:21.964944",
+    "modified_by": "Administrator",
+    "module": "LandMS",
+    "name": "Land Acquisition",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "read": 1,
+            "role": "System Manager",
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "read": 1,
+            "role": "Land Acquisition Approver",
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Finance"
+        }
+    ],
+    "row_format": "Dynamic",
+    "search_fields": "acquisition_name,status,region,district",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "title_field": "acquisition_name",
+    "track_changes": 1
 }
