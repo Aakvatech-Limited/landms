@@ -11,6 +11,7 @@ class LandAcquisition(Document):
         self._validate_coordinates()
         self._validate_sales_defaults()
         self._validate_plot_type_rates()
+        self._validate_and_set_tcb_patterns()
 
     def before_submit(self):
         if self.status != "Approved":
@@ -186,6 +187,20 @@ class LandAcquisition(Document):
             frappe.throw(_("Government Share % must be between 0 and 100."))
         if cint(self.payment_completion_days) <= 0:
             frappe.throw(_("Payment Completion Days must be greater than zero."))
+
+    def _validate_and_set_tcb_patterns(self):
+        if not self.partner_code:
+            frappe.throw(_("Partner Code is required."))
+
+        if "-" not in self.partner_code:
+            frappe.throw(_("Partner Code must contain a hyphen (e.g., 'PART-GVA') to generate the TCB Control Number pattern."))
+
+        suffix = self.partner_code.split("-")[-1].strip()
+        if not suffix:
+            frappe.throw(_("Partner Code suffix cannot be empty."))
+        
+        self.control_number_pattern = f"99910#{suffix}####"
+        self.related_control_number_pattern = f"9992#R{suffix}####"
 
     def _validate_plot_type_rates(self):
         seen = set()
