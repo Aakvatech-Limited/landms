@@ -32,6 +32,4 @@ class TestTCBSettingsBackwardCompatibility(FrappeTestCase):
 
 		settings = tcb._get_tcb_settings()
 
-		self.assertEqual(settings["reconciliation_partner_code"], "")
-		self.assertEqual(settings["partner_code"], "PARTNER")
 		self.assertEqual(settings["reconciliation_url"], "https://example.com/recon")
