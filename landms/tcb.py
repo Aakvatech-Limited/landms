@@ -228,14 +228,11 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"auto_apply_reconciliation_payments": 0,
 			"reconciliation_enabled": 0,
 			"reconciliation_lookback_days": 1,
-			"reconciliation_partner_code": "",
 			"decline_reference_on_so_cancel": 1,
 			"decline_failure_policy": "Allow Cancel and Flag",
 			"reference_create_url": "",
 			"reference_decline_url": "",
 			"reconciliation_url": "",
-			"partner_code": "",
-			"profile_id": "",
 			"verify_ssl": 1,
 			"connect_timeout_seconds": 5,
 			"read_timeout_seconds": 15,
@@ -253,14 +250,11 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"auto_apply_reconciliation_payments": get_value("auto_apply_reconciliation_payments"),
 		"reconciliation_enabled": get_value("reconciliation_enabled"),
 		"reconciliation_lookback_days": get_value("reconciliation_lookback_days") or 1,
-		"reconciliation_partner_code": (get_value("reconciliation_partner_code") or "").strip(),
 		"decline_reference_on_so_cancel": get_value("decline_reference_on_so_cancel"),
 		"decline_failure_policy": get_value("decline_failure_policy") or "Allow Cancel and Flag",
 		"reference_create_url": (get_value("reference_create_url") or "").strip(),
 		"reference_decline_url": (get_value("reference_decline_url") or "").strip(),
 		"reconciliation_url": (get_value("reconciliation_url") or "").strip(),
-		"partner_code": get_value("partner_code"),
-		"profile_id": get_value("profile_id"),
 		"verify_ssl": get_value("verify_ssl"),
 		"connect_timeout_seconds": get_value("connect_timeout_seconds") or 5,
 		"read_timeout_seconds": get_value("read_timeout_seconds") or 15,
@@ -980,7 +974,7 @@ def run_tcb_reconciliation_job(
 		land_acquisitions = frappe.get_all(
 			"Land Acquisition",
 			# filters={"status": ["in", ["Approved", "Subdivided"]]}, TODO: this filters need to be confirmed
-			fields=["name", "reconciliation_partner_code", "partner_code"],
+			fields=["name", "reconciliation_id", "partner_code"],
 		)
 		if not land_acquisitions:
 			err_msg = "No Approved or Subdivided Land Acquisitions found. Cannot run reconciliation."
@@ -1579,13 +1573,13 @@ def _fetch_reconciliation_rows(
 	_validate_live_reference_settings(settings, need="reconciliation")
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
-	partner_code = (
-		land_acquisition.get("reconciliation_partner_code")
+	reconciliation_id = (
+		land_acquisition.get("reconciliation_id")
 		or land_acquisition.get("partner_code")
 		or ""
 	)
 	payload = {
-		"partnerCode": partner_code,
+		"partnerCode": reconciliation_id,
 		"startDate":   start_date,
 		"endDate":     end_date,
 	}
