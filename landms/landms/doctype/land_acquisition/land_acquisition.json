@@ -532,6 +532,7 @@
    "search_index": 1
   },
   {
+   "description": "Pattern used to generate TCB control numbers. '#' = random digit (filled by secrets.randbelow). All other characters are literal. Example: 99911#GVA00## generates 13-digit references like 9991143790087.",
    "fieldname": "control_number_pattern",
    "fieldtype": "Data",
    "label": "Control Number Pattern",
@@ -539,6 +540,7 @@
    "search_index": 1
   },
   {
+   "description": "Pattern for the optional related control number. Same '#' rules as the primary pattern. Must produce values that do not collide with the primary pattern. Example: 9992#RGVA####",
    "fieldname": "related_control_number_pattern",
    "fieldtype": "Data",
    "label": "Related Control Number Pattern",
@@ -548,7 +550,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-07-03 17:27:47.991697",
+ "modified": "2026-07-03 18:31:05.631461",
  "modified_by": "Administrator",
  "module": "LandMS",
  "name": "Land Acquisition",
