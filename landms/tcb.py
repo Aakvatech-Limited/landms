@@ -631,11 +631,23 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 
 	_validate_live_reference_settings(settings, need="decline")
 
+	land_acquisition = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition") if sales_order_name else None
+	if not land_acquisition:
+		frappe.throw(f"Sales Order {sales_order_name} must have a land acquisition to decline the TCB reference.")
+
+	project_info = frappe.db.get_value(
+		"Land Acquisition", land_acquisition,
+		["partner_code", "profile_id"],
+		as_dict=True,
+	)
+	if not project_info or not project_info.partner_code or not project_info.profile_id:
+		frappe.throw(f"Land Acquisition {land_acquisition} must have a partner code and profile id.")
+
 	endpoint = _masked_reference_decline_endpoint(settings)
 	url = _reference_decline_url(settings)
 	payload = {
-		"partnerCode": settings.get("partner_code") or "",
-		"acctNo":      settings.get("profile_id") or "",
+		"partnerCode": project_info.partner_code or "",
+		"acctNo":      project_info.profile_id or "",
 		"refNo":       control_number,
 	}
 	verify_ssl = bool(cint(settings.get("verify_ssl", 1)))
