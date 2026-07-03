@@ -955,18 +955,33 @@ def run_tcb_reconciliation_job(
 			                  duration=time.time() - t_start)
 			return {"ok": True, "status": "Ignored", "message": msg}
 
-		fetch_result = _fetch_reconciliation_rows(
-			settings=settings,
-			start_date=start,
-			end_date=end,
-			reconciliation_log=log_name,
+		land_acquisitions = frappe.get_all(
+			"Land Acquisition",
+			# filters={"status": ["in", ["Approved", "Subdivided"]]}, TODO: this filters need to be confirmed
+			fields=["name", "reconciliation_partner_code", "partner_code"],
 		)
-		rows = fetch_result.get("rows") or []
-		if not fetch_result.get("ok"):
-			err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
+		if not land_acquisitions:
+			err_msg = "No Approved or Subdivided Land Acquisitions found. Cannot run reconciliation."
 			_update_recon_log(log_name, status="Failed", message=err_msg,
 			                  error=err_msg, duration=time.time() - t_start)
 			return {"ok": False, "status": "Failed", "message": err_msg}
+
+		rows = []
+		for la in land_acquisitions:
+			fetch_result = _fetch_reconciliation_rows(
+				settings=settings,
+				land_acquisition=la,
+				start_date=start,
+				end_date=end,
+				reconciliation_log=log_name,
+			)
+			if not fetch_result.get("ok"):
+				err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
+				_update_recon_log(log_name, status="Failed", message=err_msg,
+				                  error=err_msg, duration=time.time() - t_start)
+				return {"ok": False, "status": "Failed", "message": err_msg}
+
+			rows.extend(fetch_result.get("rows") or [])
 
 		applied = 0
 		ignored = 0
@@ -983,6 +998,7 @@ def run_tcb_reconciliation_job(
 		)
 		if stop_result:
 			return stop_result
+
 		for row in rows:
 			stop_result = _stop_reconciliation_if_requested(
 				log_name=log_name,
@@ -1537,6 +1553,7 @@ def _mask_url_secret(url: str) -> str:
 def _fetch_reconciliation_rows(
 	*,
 	settings: dict[str, Any],
+	land_acquisition: dict[str, Any],
 	start_date: str,
 	end_date: str,
 	reconciliation_log: str | None = None,
@@ -1544,8 +1561,13 @@ def _fetch_reconciliation_rows(
 	_validate_live_reference_settings(settings, need="reconciliation")
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
+	partner_code = (
+		land_acquisition.get("reconciliation_partner_code")
+		or land_acquisition.get("partner_code")
+		or ""
+	)
 	payload = {
-		"partnerCode": settings.get("reconciliation_partner_code") or settings.get("partner_code") or "",
+		"partnerCode": partner_code,
 		"startDate":   start_date,
 		"endDate":     end_date,
 	}
