@@ -574,50 +574,59 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 	from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
 	posting_date = posting_date or today()
-	invoice = make_sales_invoice(doc.name, ignore_permissions=True)
-	invoice.posting_date = posting_date
-	invoice.due_date = doc.payment_deadline or add_days(
-		doc.transaction_date or posting_date, cint(doc.payment_completion_days or 0)
-	)
-	invoice.ignore_default_payment_terms_template = 1
-	invoice.allocate_advances_automatically = 0
-	invoice.plot = doc.plot
-	invoice.land_acquisition = doc.land_acquisition
-	invoice.plot_contract = contract_name or ""
-	invoice.is_plot_sale_invoice = 1
-	invoice.update_stock = 0
-	invoice.enabled_auto_create_delivery_notes = 0
-	invoice.is_not_vfd_invoice = 1
-	invoice.remarks = f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}"
 
-	# Deferred revenue: all customer payments sit in Customer Advances (liability)
-	# until the contract is fully paid. Revenue is recognised only at completion
-	# via the JE in plot_contract._post_completion_entries — never on the SI itself.
-	settings = frappe.get_single("LandMS Settings")
-	customer_advance_account = settings.customer_advance_account
-	cost_center = settings.cost_center
-	for item in invoice.get("items") or []:
-		item.income_account = customer_advance_account
-		item.cost_center = cost_center
-		item.enable_deferred_revenue = 0
-		item.deferred_revenue_account = ""
-		item.service_start_date = None
-		item.service_end_date = None
-
-	# Copy payment schedule from SO
-	invoice.set("payment_schedule", [])
-	for row in (doc.get("payment_schedule") or []):
-		invoice.append("payment_schedule", {
-			"payment_term": row.get("payment_term") or row.description,
-			"description": row.description,
-			"due_date": row.due_date,
-			"invoice_portion": flt(row.invoice_portion),
-			"payment_amount": flt(row.payment_amount),
-		})
-
+	# Elevate to Administrator around the ENTIRE invoice creation — build,
+	# account/item writes, and insert/submit. ERPNext 15.116+ added
+	# account_perm_check() inside get_party_account(), so building the invoice
+	# (make_sales_invoice -> set_missing_values -> get_party_account) reads the
+	# customer's receivable account and raises PermissionError for a Guest caller
+	# (the public TCB IPN runs as Guest). Previously only insert/submit were
+	# elevated, so a new order's first live payment failed at the build step.
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
+
+		invoice = make_sales_invoice(doc.name, ignore_permissions=True)
+		invoice.posting_date = posting_date
+		invoice.due_date = doc.payment_deadline or add_days(
+			doc.transaction_date or posting_date, cint(doc.payment_completion_days or 0)
+		)
+		invoice.ignore_default_payment_terms_template = 1
+		invoice.allocate_advances_automatically = 0
+		invoice.plot = doc.plot
+		invoice.land_acquisition = doc.land_acquisition
+		invoice.plot_contract = contract_name or ""
+		invoice.is_plot_sale_invoice = 1
+		invoice.update_stock = 0
+		invoice.enabled_auto_create_delivery_notes = 0
+		invoice.is_not_vfd_invoice = 1
+		invoice.remarks = f"Plot sale invoice for {doc.plot} via Sales Order {doc.name}"
+
+		# Deferred revenue: all customer payments sit in Customer Advances (liability)
+		# until the contract is fully paid. Revenue is recognised only at completion
+		# via the JE in plot_contract._post_completion_entries — never on the SI itself.
+		settings = frappe.get_single("LandMS Settings")
+		customer_advance_account = settings.customer_advance_account
+		cost_center = settings.cost_center
+		for item in invoice.get("items") or []:
+			item.income_account = customer_advance_account
+			item.cost_center = cost_center
+			item.enable_deferred_revenue = 0
+			item.deferred_revenue_account = ""
+			item.service_start_date = None
+			item.service_end_date = None
+
+		# Copy payment schedule from SO
+		invoice.set("payment_schedule", [])
+		for row in (doc.get("payment_schedule") or []):
+			invoice.append("payment_schedule", {
+				"payment_term": row.get("payment_term") or row.description,
+				"description": row.description,
+				"due_date": row.due_date,
+				"invoice_portion": flt(row.invoice_portion),
+				"payment_amount": flt(row.payment_amount),
+			})
+
 		invoice.insert(ignore_permissions=True)
 		invoice.submit()
 	finally:
