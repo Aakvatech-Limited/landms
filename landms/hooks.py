@@ -56,10 +56,11 @@ doc_events = {
 		"before_save": "landms.sales_invoice_hooks.before_save_sales_invoice",
 	},
 	"Sales Order": {
-		"validate":      "landms.sales_order_hooks.validate_sales_order",
-		"on_submit":     "landms.sales_order_hooks.submit_sales_order",
-		"before_cancel": "landms.sales_order_hooks.before_cancel_sales_order",
-		"on_cancel":     "landms.sales_order_hooks.cancel_sales_order",
+		"validate":       "landms.sales_order_hooks.validate_sales_order",
+		"before_submit":  "landms.sales_order_hooks.before_submit_sales_order",
+		"on_submit":      "landms.sales_order_hooks.submit_sales_order",
+		"before_cancel":  "landms.sales_order_hooks.before_cancel_sales_order",
+		"on_cancel":      "landms.sales_order_hooks.cancel_sales_order",
 	},
 }
 

@@ -731,6 +731,12 @@ class PlotContract(Document):
 		settings = frappe.get_single("LandMS Settings")
 		self.reload()
 
+		# DECLINE FIRST — gate the entire termination on the TCB decline. If the
+		# control number cannot be declined (e.g. TCB unreachable), throw and change
+		# NOTHING (no forfeiture JE, no SI/SO changes, no plot release). Mirrors the
+		# decline-first gate in close_sales_order / cancel_sales_order.
+		self._decline_control_number_on_termination_or_block()
+
 		# Mark terminated first so subsequent hooks see the correct contract state
 		self.db_set("contract_status", "Terminated")
 		self.db_set("termination_reason", str(reason).strip())
@@ -748,8 +754,8 @@ class PlotContract(Document):
 		if si_name and flt(frappe.db.get_value("Sales Invoice", si_name, "outstanding_amount") or 0) > 0:
 			_post_credit_note_for_outstanding(si_name)
 
-		# Cancel the linked Sales Order — the cancel_sales_order hook fires
-		# automatically and declines the TCB control number with the reference decline URL
+		# Close the linked Sales Order (status=Closed, docstatus preserved). The TCB
+		# control number was already declined by the decline-first gate above.
 		self._cancel_linked_sales_order_on_termination()
 
 		# Cancel the Plot Application so the plot is fully released
@@ -792,16 +798,41 @@ class PlotContract(Document):
 			si_doc.cancel()
 		# If any payment exists, leave the SI — forfeiture JE handles the accounting
 
-	def _cancel_linked_sales_order_on_termination(self):
-		"""Close the Sales Order on termination — keeps docstatus=1 as audit trail.
-
-		Sets status='Closed' directly (same as the Close button) rather than
-		cancelling, so accounting entries are preserved. Declines the TCB control
-		number explicitly since the on_cancel hook no longer fires.
+	def _decline_control_number_on_termination_or_block(self):
+		"""DECLINE FIRST — decline the linked Sales Order's TCB control number as the
+		gate for termination. If it cannot be declined (e.g. TCB unreachable), abort
+		the whole termination BEFORE any forfeiture JE, plot release, or SO close, so
+		nothing is left half-done and no live orphaned control number remains. An
+		already-declined number returns ok=True, so a retry passes straight through.
 		"""
 		from landms.sales_order_hooks import decline_reference_for_sales_order
 		from frappe.utils import cstr
 
+		so_name = self.sales_order
+		if not so_name or not frappe.db.exists("Sales Order", so_name):
+			return
+		control_number = cstr(
+			frappe.db.get_value("Sales Order", so_name, "control_number") or ""
+		).strip()
+		if not control_number:
+			return
+		result = decline_reference_for_sales_order(so_name, control_number)
+		if not result.get("ok"):
+			frappe.throw(
+				f"This contract could not be terminated yet because the bank could "
+				f"not be reached to release the payment number. Nothing has been "
+				f"changed on this contract. Please try terminating it again after a "
+				f"while. (Ref {control_number}: {result.get('message')})"
+			)
+
+	def _cancel_linked_sales_order_on_termination(self):
+		"""Close the Sales Order on termination — keeps docstatus=1 as audit trail.
+
+		Sets status='Closed' directly (same as the Close button) rather than
+		cancelling, so accounting entries are preserved. The TCB control number is
+		declined UP FRONT by the decline-first gate in terminate_contract, so this
+		method only flips the SO to Closed.
+		"""
 		so_name = self.sales_order
 		if not so_name or not frappe.db.exists("Sales Order", so_name):
 			return
@@ -818,11 +849,6 @@ class PlotContract(Document):
 			"Info",
 			f"Sales Order closed via termination of contract {self.name} by {frappe.session.user}.",
 		)
-
-		# Decline the TCB control number
-		control_number = cstr(so_doc.get("control_number") or "").strip()
-		if control_number:
-			decline_reference_for_sales_order(so_name, control_number)
 
 	def _cancel_plot_application_on_termination(self):
 		"""Cancel the Plot Application so the plot is fully released."""

@@ -30,6 +30,7 @@ Both endpoints honour the modes set in TCB Integration Settings:
   - inbound_mode = Apply Payment  → create Payment Entry if auto-apply is on
 """
 
+import hmac
 import json
 from typing import Any
 
@@ -152,6 +153,28 @@ def ipn_callback() -> dict[str, Any]:
 			_finalize("Ignored", message="Inbound mode is Off.", log_name=log_name or "")
 			return {"ok": True, "status": "Ignored", "message": "Inbound mode is Off."}
 
+		# 3b. Inbound auth token — the shared secret we generated and gave TCB.
+		#     Enforce  → reject a missing/wrong token, no Payment Entry created.
+		#     Log Only → log it and hold the payment as a Draft PE for review
+		#                (folded into hold_for_review below) — never dropped.
+		auth_ok, auth_mode, auth_message = _verify_ipn_auth_token()
+		auth_hold = False
+		if not auth_ok and auth_mode == "Enforce":
+			log_name = create_tcb_api_log(
+				direction="Inbound", event_type="IPN Callback", status="Failed",
+				processing_mode=mode, endpoint=IPN_ENDPOINT,
+				external_reference=reference, transaction_id=transaction_id,
+				request_payload=raw_payload,
+				response_payload={"message": f"IPN auth rejected: {auth_message}"},
+				error=auth_message,
+			)
+			_finalize("Failed", message=f"IPN auth rejected: {auth_message}",
+			          error=auth_message, log_name=log_name or "")
+			return {"ok": False, "status": "Rejected", "message": "IPN auth token rejected."}
+		if not auth_ok:
+			# Log Only — don't drop it; force manual review downstream.
+			auth_hold = True
+
 		# 4. Idempotency — duplicate IPN with same transaction_id + reference.
 		if transaction_id and has_duplicate_ipn(transaction_id, reference):
 			log_name = create_tcb_api_log(
@@ -215,11 +238,18 @@ def ipn_callback() -> dict[str, Any]:
 		#    validated downstream (registry + SO match).
 		allowed_ips = _get_allowed_tcb_ips()
 		client_ip = _get_client_ip()
-		hold_for_review = bool(allowed_ips) and client_ip not in allowed_ips
+		ip_blocked = bool(allowed_ips) and client_ip not in allowed_ips
+		# Hold as Draft PE for review if EITHER the IP is off-allowlist OR the
+		# auth token failed under Log Only mode. Never drop a real payment.
+		hold_for_review = ip_blocked or auth_hold
 		ip_message = (
 			f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
 			"PE will be created as Draft for manual review."
-		) if hold_for_review else ""
+		) if ip_blocked else ""
+		if auth_hold:
+			ip_message = (ip_message + " " if ip_message else "") + (
+				f"IPN auth (Log Only): {auth_message}; PE held as Draft for review."
+			)
 
 		result = apply_tcb_payment_to_sales_order(
 			control_number=reference,
@@ -413,6 +443,90 @@ def _release_ipn_lock(lock_name: str) -> None:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_name,))
 	except Exception:
 		frappe.logger("landms").error("IPN lock release failed", exc_info=True)
+
+
+def _verify_ipn_auth_token() -> tuple[bool, str, str]:
+	"""Verify the shared auth token TCB sends in the IPN request header.
+
+	We generate the token, hand it to TCB, and TCB echoes it back on every
+	IPN. Returns (ok, mode, message):
+	  - ok:      True if the check passed OR is not enforced (mode Off / no token).
+	  - mode:    the configured enforcement mode ("Off" / "Log Only" / "Enforce").
+	  - message: human-readable detail for logging.
+
+	Fails OPEN on any settings/read error — a broken settings read must never
+	block a real payment.
+	"""
+	try:
+		settings = frappe.get_cached_doc("TCB Integration Settings")
+	except Exception:
+		return True, "Off", "TCB settings unavailable — auth check skipped."
+
+	mode = (settings.get("ipn_auth_mode") or "Off").strip()
+	if mode == "Off":
+		return True, "Off", "IPN auth check is Off."
+
+	try:
+		expected = settings.get_password("ipn_auth_token", raise_exception=False) or ""
+	except Exception:
+		expected = ""
+	expected = (expected or "").strip()
+	if not expected:
+		# Mode is on but no token is configured yet.
+		#   Enforce  → FAIL CLOSED. "Enforce" must mean "no valid token, no payment".
+		#              Passing here would accept every forged callback the moment an admin
+		#              selects Enforce before pasting the secret — a security fail-open on a
+		#              live money endpoint. Reject; a genuine TCB payment is not lost (TCB
+		#              retries, and the operator sees the rejection in the TCB API Log).
+		#   Log Only → don't block; hold the payment as a Draft PE for review downstream.
+		if mode == "Enforce":
+			return False, mode, "IPN auth is set to Enforce but no auth token is configured — rejecting."
+		return True, mode, "No IPN auth token configured — check skipped."
+
+	# Accept the token in ANY of the configured header names — TCB may use
+	# Authorization, a custom X-Auth-Token, etc. We match against every
+	# candidate so we don't have to commit to one before TCB confirms.
+	header_names = _parse_header_names(settings.get("ipn_auth_header"))
+	any_present = False
+	for header_name in header_names:
+		presented = _get_request_header(header_name)
+		if not presented:
+			continue
+		any_present = True
+		# Tolerate 'Bearer <tok>' / 'Token <tok>' prefixes.
+		for prefix in ("Bearer ", "Token "):
+			if presented.startswith(prefix):
+				presented = presented[len(prefix):].strip()
+				break
+		# Compare on bytes, not str. hmac.compare_digest raises TypeError on a
+		# non-ASCII str (a stray latin-1 header byte would otherwise crash the whole
+		# callback and drop the payment). Encoding both to bytes compares safely.
+		if hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8")):
+			return True, mode, f"IPN auth token OK (header '{header_name}')."
+
+	names_display = ", ".join(header_names)
+	if not any_present:
+		return False, mode, f"IPN auth token missing (checked: {names_display})."
+	return False, mode, f"IPN auth token mismatch (checked: {names_display})."
+
+
+def _get_request_header(name: str) -> str:
+	try:
+		return (frappe.local.request.headers.get(name) or "").strip()
+	except Exception:
+		return ""
+
+
+def _parse_header_names(raw: str | None) -> list[str]:
+	"""Header name(s) TCB may carry the auth token in — comma/newline separated.
+
+	Lets us accept the token in more than one header (e.g. both Authorization
+	and X-Auth-Token) so we don't have to commit to one before TCB confirms.
+	Defaults to ['Authorization'].
+	"""
+	parts = [p.strip() for p in (raw or "").replace("\n", ",").split(",")]
+	names = [p for p in parts if p]
+	return names or ["Authorization"]
 
 
 def _get_allowed_tcb_ips() -> list[str]:
