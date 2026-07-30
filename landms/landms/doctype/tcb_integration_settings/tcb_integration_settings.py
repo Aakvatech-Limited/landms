@@ -29,8 +29,29 @@ class TCBIntegrationSettings(Document):
 		self._validate_inbound_consistency()
 		self._validate_reconciliation_consistency()
 		self._validate_timeouts()
+		self._validate_ipn_auth()
 		# Always clear the persisted value — it's a runtime display only.
 		self.ipn_callback_url = ""
+
+	def _validate_ipn_auth(self):
+		"""Enforce requires a token. Selecting Enforce without a configured token would make
+		the inbound check fail closed at payment time (rejecting every callback) — catch it
+		here at save time instead, with a clear message, so the operator sets the secret first.
+		"""
+		if (self.ipn_auth_mode or "Off") != "Enforce":
+			return
+		token = ""
+		try:
+			token = (self.get_password("ipn_auth_token", raise_exception=False) or "").strip()
+		except Exception:
+			token = (self.ipn_auth_token or "").strip()
+		if not token:
+			frappe.throw(
+				"IPN Auth Enforcement is set to Enforce, but no IPN Auth Token is configured. "
+				"Generate a token, paste it here, and give the same value to TCB before selecting "
+				"Enforce — otherwise every payment callback would be rejected. "
+				"Use Log Only until TCB is confirmed to be sending the token."
+			)
 
 	# ------------------------------------------------------------------ #
 	#  Credentials                                                         #

@@ -481,6 +481,14 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		return {"ok": True, "mode": "Log Only",
 		        "message": "TCB outbound mode is Log Only; no live call was made."}
 
+	# ALREADY REGISTERED — nothing to do. Return success so the register-first gate
+	# on SO submit (and re-submits after a blocked attempt) passes straight through
+	# instead of re-calling TCB on a number that is already live at the bank.
+	registry = _get_registry(control_number)
+	if registry and registry.status == "Registered":
+		return {"ok": True, "status": "Already Registered",
+		        "message": f"Control number {control_number} is already registered."}
+
 	# --- Live ---
 	_validate_live_reference_settings(settings, need="reference")
 	url = _reference_create_url(settings)
@@ -537,6 +545,14 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			if ok:
 				registry.mark_registered(log_name=log_name,
 				                         note=tcb_message or "Registered with TCB.")
+				# Durably record the successful bank call NOW, so a later rollback
+				# (e.g. a throw in the SO's on_submit steps that run after this) cannot
+				# erase it. Without this the registry would revert to 'Generated' while
+				# the number is live at the bank, and a retry would register a SECOND
+				# number. Committing on success makes the already-registered short-circuit
+				# on retry trustworthy. Only commit on success — a failure has nothing
+				# live at the bank to remember.
+				frappe.db.commit()
 			else:
 				registry.mark_failed(log_name=log_name,
 				                     event_type="Reference Create",
@@ -622,11 +638,26 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		return {"ok": True, "status": "Ignored", "message": "TCB integration disabled."}
 	if not cint(settings.get("decline_reference_on_so_cancel")):
 		return {"ok": True, "status": "Ignored", "message": "Decline-on-cancel switch is OFF."}
+
+	# ALREADY DECLINED — nothing to do. Return success so the decline-first gates
+	# (close / cancel / terminate) and nightly re-runs pass straight through
+	# instead of re-calling TCB on a number that is already dead (TCB would reject
+	# it, which would make the gate wrongly block a legitimate retry).
+	registry = _get_registry(control_number)
+	if registry and registry.status == "Declined":
+		return {"ok": True, "status": "Already Declined",
+		        "message": f"Control number {control_number} is already declined."}
+
 	if settings.get("outbound_mode") != "Live":
-		# Still mark the registry as Declined locally so reporting reflects it.
+		# Do NOT mark the registry 'Declined' here — no live call was made, so the
+		# number is NOT actually dead at the bank. Marking it Declined would make the
+		# already-declined short-circuit (above) wrongly skip a real decline if the
+		# site is later switched to Live, leaving an orphaned, still-payable number.
+		# 'Declined' must only ever mean a confirmed bank decline. Just log the skip.
 		registry = _get_registry(control_number)
-		if registry and registry.status not in ("Paid", "Declined", "Expired"):
-			registry.mark_declined(note="Outbound mode not Live — declined locally only.")
+		if registry:
+			registry.append_log(None, "Reference Decline", "Ignored",
+			                    note="Outbound mode not Live — decline call skipped; number left as-is.")
 		return {"ok": True, "status": "Ignored", "message": "Outbound mode is not Live; decline call skipped."}
 
 	_validate_live_reference_settings(settings, need="decline")
@@ -706,6 +737,13 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 						log_name=log_name,
 						note=tcb_message or "Declined at TCB.",
 					)
+				# Durably record the successful bank decline NOW, so a later rollback
+				# (a throw in the forfeiture JE / credit note / cleanup steps that run
+				# after this) cannot erase it. Without this the registry reverts to
+				# 'Registered' while the number is dead at the bank, and a retry re-declines
+				# it — TCB rejects the double-decline and the order jams permanently.
+				# Committing on success makes the already-declined short-circuit trustworthy.
+				frappe.db.commit()
 			else:
 				registry.append_log(log_name, "Reference Decline", "Failed",
 				                    note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
@@ -815,9 +853,14 @@ def apply_tcb_payment_to_sales_order(
 	standard_so_name = ""
 	try:
 		if frappe.db.has_column("Sales Order", "control_number"):
+			# Exclude Closed/Cancelled orders: a Closed plot SO keeps docstatus=1, so a
+			# docstatus-only match would let a late payment book against a forfeited/closed
+			# order (e.g. during the brief window when a reopen has re-registered the number
+			# but not yet finished, or a stray payment on a dead number). Only an active
+			# order may receive a payment.
 			standard_so_name = frappe.db.get_value(
 				"Sales Order",
-				{"control_number": control_number, "docstatus": 1},
+				{"control_number": control_number, "docstatus": 1, "status": ["not in", ["Closed", "Cancelled"]]},
 				"name",
 			)
 	except Exception:
@@ -826,7 +869,7 @@ def apply_tcb_payment_to_sales_order(
 	if not standard_so_name:
 		return {
 			"ok": False, "status": "Failed",
-			"message": f"No submitted Sales Order was found for control number {control_number}.",
+			"message": f"No active Sales Order was found for control number {control_number} (it may be closed or cancelled).",
 		}
 
 	reference_no = payment_reference or control_number
