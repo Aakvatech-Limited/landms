@@ -16,6 +16,9 @@
   "auto_apply_callback_payments",
   "inbound_col_break",
   "allowed_ip_addresses",
+  "ipn_auth_mode",
+  "ipn_auth_header",
+  "ipn_auth_token",
   "reconciliation_section",
   "reconciliation_enabled",
   "auto_apply_reconciliation_payments",
@@ -114,6 +117,29 @@
    "label": "Allowed IP Addresses"
   },
   {
+   "default": "Off",
+   "description": "Shared-secret check on the header TCB sends with each IPN. Off = no check. Log Only = mismatches are logged and the payment is held as a Draft Payment Entry for review (never dropped). Enforce = a missing/wrong token is rejected and no Payment Entry is created. Roll out as Off → Log Only (confirm TCB is sending it, visible in TCB API Log) → Enforce.",
+   "fieldname": "ipn_auth_mode",
+   "fieldtype": "Select",
+   "label": "IPN Auth Enforcement",
+   "options": "Off\nLog Only\nEnforce"
+  },
+  {
+   "default": "Authorization, X-Auth-Token",
+   "depends_on": "eval:doc.ipn_auth_mode && doc.ipn_auth_mode!=\"Off\"",
+   "description": "Header name(s) TCB may place the token in — comma or newline separated. The token is accepted if it matches in ANY of these, so you can list several (e.g. Authorization, X-Auth-Token) while you confirm which one TCB uses, then trim it. A leading 'Bearer ' or 'Token ' prefix is accepted and stripped before comparison.",
+   "fieldname": "ipn_auth_header",
+   "fieldtype": "Data",
+   "label": "IPN Auth Header Name(s)"
+  },
+  {
+   "depends_on": "eval:doc.ipn_auth_mode && doc.ipn_auth_mode!=\"Off\"",
+   "description": "Shared secret we generate and give to TCB. TCB must send this exact value in the header above on every IPN. Encrypted at rest.",
+   "fieldname": "ipn_auth_token",
+   "fieldtype": "Password",
+   "label": "IPN Auth Token"
+  },
+  {
    "fieldname": "reconciliation_section",
    "fieldtype": "Section Break",
    "label": "Reconciliation"
@@ -209,7 +235,7 @@
    "fieldname": "ipn_callback_html",
    "fieldtype": "HTML",
    "label": "IPN Callback Hint",
-   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>. Restrict access by adding TCB's source IP to the Allowed IP Addresses field above.</div>"
+   "options": "<div class=\"text-muted small\">TCB will POST JSON to this URL. The endpoint accepts the standard TCB IPN envelope <code>{status, statusDesc, param:{...}}</code>. Restrict access by adding TCB's source IP to the Allowed IP Addresses field, and/or by setting an IPN Auth Token above and giving it to TCB to send in the request header.</div>"
   }
  ],
  "issingle": 1,

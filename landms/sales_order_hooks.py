@@ -111,22 +111,43 @@ def validate_sales_order(doc, method=None):
 	_ensure_payment_schedule(doc, plot)
 
 
-def submit_sales_order(doc, method=None):
+def before_submit_sales_order(doc, method=None):
+	"""REGISTER-FIRST GATE for plot Sales Orders.
+
+	Runs in before_submit (not on_submit) so a registration failure can actually
+	BLOCK the submit: before_submit fires before Frappe writes docstatus=1, so a
+	throw here leaves the SO in Draft. A throw in on_submit could NOT reliably
+	block, because create_tcb_api_log commits the docstatus mid-transaction.
+
+	Mints the control number, records the registry row, and registers with TCB. If
+	registration fails the submit is aborted with a clear banner and the SO stays
+	Draft so the user can retry. Only once the number is live does on_submit go on
+	to link the application, create the contract, and move the plot to Pending Advance.
+	"""
 	if not _is_landms_sales_order(doc):
 		return
-
-	doc.db_set("plot_outstanding_amount", flt(doc.grand_total), update_modified=False)
-	doc.plot_outstanding_amount = flt(doc.grand_total)
 
 	control_number = _ensure_control_number(doc)
 	_create_registry_row(doc, control_number)
 	_ensure_related_control_number(doc)
+	_register_with_tcb(doc, control_number)
+
+
+def submit_sales_order(doc, method=None):
+	if not _is_landms_sales_order(doc):
+		return
+
+	# The control number was minted and registered in before_submit_sales_order
+	# (the register-first gate). If registration had failed the submit would have
+	# been blocked, so by the time we reach here the number is live at the bank.
+	doc.db_set("plot_outstanding_amount", flt(doc.grand_total), update_modified=False)
+	doc.plot_outstanding_amount = flt(doc.grand_total)
+
 	_link_application_to_sales_order(doc)
 	contract_name = _ensure_draft_plot_contract(doc)
 	if contract_name and doc.get("plot_contract") != contract_name:
 		doc.db_set("plot_contract", contract_name, update_modified=False)
 		doc.plot_contract = contract_name
-	_register_with_tcb(doc, control_number)
 	_mark_plot_pending_advance(doc)
 
 
@@ -147,6 +168,26 @@ def before_cancel_sales_order(doc, method=None):
 	"""
 	if not _is_landms_sales_order(doc):
 		return
+
+	_block_cancel_if_paid(doc)
+
+	# DECLINE FIRST — the TCB decline is the gate. It runs here in before_cancel
+	# (not in on_cancel) for two reasons: (1) the forfeiture JE below must not post
+	# unless the number is dead first, and (2) before_cancel runs BEFORE Frappe
+	# writes docstatus=2, so a throw here cleanly aborts the cancel. A throw in
+	# on_cancel could NOT, because create_tcb_api_log commits the docstatus mid-way.
+	# An already-declined number returns ok=True, so retries pass straight through.
+	control_number = cstr(doc.get("control_number") or "").strip()
+	if control_number:
+		result = decline_reference_for_sales_order(doc.name, control_number)
+		if not result.get("ok"):
+			frappe.throw(
+				f"This order could not be cancelled yet because the bank could not be "
+				f"reached to release its payment number. Nothing has been changed on "
+				f"this order. Please try cancelling it again after a while. "
+				f"(Ref {control_number}: {result.get('message')})"
+			)
+
 	_post_draft_contract_forfeiture_je(doc)
 	_clear_application_sales_order_link(doc)
 	_delete_draft_plot_contract(doc)
@@ -158,21 +199,12 @@ def cancel_sales_order(doc, method=None):
 	if not _is_landms_sales_order(doc):
 		return
 
-	_block_cancel_if_paid(doc)
+	# The paid-check and the decline-first gate now run in before_cancel_sales_order
+	# (which fires before this hook and before Frappe writes docstatus=2). By the
+	# time we reach here the number is already declined, so we only finish cleanup.
 	_clear_application_sales_order_link(doc)
 	_cancel_unpaid_plot_sales_invoice(doc)
 	_delete_draft_plot_contract(doc)
-
-	control_number = cstr(doc.get("control_number") or "").strip()
-	if control_number:
-		result = decline_reference_for_sales_order(doc.name, control_number)
-		if not result.get("ok") and result.get("block_cancel"):
-			frappe.throw(
-				f"TCB Decline call failed for control number {control_number} and "
-				f"the Decline Failure Policy is set to 'Block Cancel'. "
-				f"Cancellation aborted. Detail: {result.get('message')}"
-			)
-
 	_cancel_plot_application(doc)
 	_release_plot_if_no_active_application(doc)
 
@@ -191,6 +223,24 @@ def close_sales_order(sales_order_name):
 		frappe.throw("This Sales Order is already closed.")
 
 	_block_close_if_paid(doc)
+
+	# DECLINE FIRST — the TCB decline is the gate. If the control number cannot
+	# be declined (e.g. TCB unreachable), abort BEFORE posting the forfeiture JE
+	# or releasing the plot, so we never leave a half-closed order or a live
+	# orphaned control number that could still take a payment. Nothing below
+	# runs until the number is dead. An already-declined number returns ok=True,
+	# so a retry (or the nightly re-run) passes straight through.
+	control_number = cstr(doc.get("control_number") or "").strip()
+	if control_number:
+		result = decline_reference_for_sales_order(doc.name, control_number)
+		if not result.get("ok"):
+			frappe.throw(
+				f"This order could not be closed yet because the bank could not be "
+				f"reached to release its payment number. Nothing has been changed on "
+				f"this order. Please try closing it again after a while. "
+				f"(Ref {control_number}: {result.get('message')})"
+			)
+
 	_post_draft_contract_forfeiture_je(doc)
 	_clear_application_sales_order_link(doc)
 	_cancel_unpaid_plot_sales_invoice(doc)
@@ -199,16 +249,6 @@ def close_sales_order(sales_order_name):
 		if si_name:
 			_post_credit_note_for_outstanding(si_name)
 	_delete_draft_plot_contract(doc)
-
-	control_number = cstr(doc.get("control_number") or "").strip()
-	if control_number:
-		result = decline_reference_for_sales_order(doc.name, control_number)
-		if not result.get("ok") and result.get("block_cancel"):
-			frappe.throw(
-				f"TCB Decline call failed for control number {control_number} and "
-				f"the Decline Failure Policy is set to 'Block Cancel'. "
-				f"Close aborted. Detail: {result.get('message')}"
-			)
 
 	_cancel_plot_application(doc)
 	_release_plot_if_no_active_application(doc)
@@ -230,6 +270,307 @@ def close_sales_order(sales_order_name):
 			+ (f"; TZS {refund:,.0f} refund due to customer." if refund > 0 else ".")
 		)
 	frappe.msgprint(close_msg, indicator="orange", alert=True)
+
+
+@frappe.whitelist()
+def reopen_sales_order(sales_order_name):
+	"""Reopen a Closed / forfeited plot Sales Order (productizes operator Scripts F + G).
+
+	REVERSE-FIRST (mirrors running Script F, then Script G — the operator's proven order):
+
+	  1. Reverse the forfeiture (Script F), atomically, with NO bank call inside: cancel the
+	     credit note + forfeiture JE, KEEP the government-share JE (never reversed), restore the
+	     deleted Plot Contract, re-link SO/SI/PA, restore the application to Paid with a fresh
+	     7-day advance window, move the plot back to Pending Advance, set the order active.
+	     Any assert failure rolls the WHOLE reversal back. Then COMMIT.
+	  2. Re-register the control number at the bank (Script G) as a SEPARATE step, AFTER the
+	     reversal has committed. This never rolls the reopen back: on success the number is
+	     Registered; on a bank error it is left Failed and the operator retries via the button.
+
+	Doing the DB reversal first (no irreversible bank call inside the locked block) is what
+	kills the old bug class — no mid-reversal commit to release locks / break the snapshot, and
+	a bank outage no longer blocks the reopen, it just defers the re-registration. The order is
+	reactivated either way; a payment can only land once the number is live again.
+	"""
+	import json
+	# Reopen reverses a forfeiture — restrict to System Manager (more privileged than Close).
+	frappe.only_for("System Manager")
+
+	# Serialize concurrent reopens of the SAME order (double-click / two tabs). Lock the
+	# SO row FOR UPDATE so a second invocation waits here; by the time it proceeds the
+	# first has committed and the order is no longer Closed, so it aborts cleanly at the
+	# status guard below instead of both running the reversal and corrupting state.
+	if not frappe.db.exists("Sales Order", sales_order_name):
+		frappe.throw(f"Sales Order {sales_order_name} was not found.")
+	# Serialize concurrent reopens with a MySQL NAMED lock (GET_LOCK), NOT a row
+	# FOR UPDATE lock. The re-register step below commits mid-request (create_tcb_api_log
+	# / mark_registered), and a COMMIT releases FOR UPDATE row locks — which would let a
+	# second concurrent reopen slip through. A named lock survives commits; it is held for
+	# the whole request and auto-released when the request's DB connection closes. A second
+	# reopen blocks here, then finds the order no longer Closed and aborts at the status guard.
+	_lock = f"reopen_so:{sales_order_name}"[:64]
+	_got = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (_lock, 30))
+	if not (_got and _got[0] and _got[0][0] == 1):
+		frappe.throw(f"Another reopen of {sales_order_name} is already in progress — please try again in a moment.")
+
+	so = frappe.get_doc("Sales Order", sales_order_name)
+	if not _is_landms_sales_order(so):
+		frappe.throw("This Sales Order is not a LandMS plot sale.")
+
+	SO = so.name
+	PLOT = so.plot
+	PA = so.plot_application
+	PLOT_SI = so.plot_sales_invoice
+	JE = so.forfeiture_entry
+
+	# Row-lock the Plot Master FOR UPDATE so a concurrent re-sale of the SAME plot via a
+	# DIFFERENT Sales Order (a colleague submitting a new application / contract / order)
+	# serializes against this reopen. The named lock above only guards two reopens of the
+	# same ORDER; it does not cover a re-sale on another order. Holding the plot row means the
+	# plot-free eligibility guards below are read under the lock, closing the TOCTOU window
+	# between "checked the plot is free" and "re-reserved the plot". The lock is held until
+	# the reversal commits (line ~470).
+	if PLOT:
+		frappe.db.sql("select name from `tabPlot Master` where name=%s for update", (PLOT,))
+
+	# ---- eligibility guards (Script F) — throw a clear reason if not reopenable ----
+	# BUSINESS RULE: only a CLOSED order can be reopened — a Closed order had money (a
+	# payment that was forfeited). A CANCELLED order is never reopenable: cancellation only
+	# happens for UNPAID orders (no money), so there is nothing to reactivate. (The button
+	# is also hidden on cancelled orders — they are docstatus 2, not 1.)
+	if so.status != "Closed":
+		frappe.throw(
+			f"Sales Order {SO} cannot be reopened (current status: {so.status}). Only a "
+			f"CLOSED, forfeited order — one that had a payment — can be reopened. A cancelled "
+			f"order had no payment and cannot be reactivated."
+		)
+	if not JE:
+		frappe.throw(f"Sales Order {SO} has no forfeiture entry to reverse (no money was forfeited).")
+	plot_status = frappe.db.get_value("Plot Master", PLOT, "status")
+	active_app = frappe.db.exists("Plot Application", {"plot": PLOT, "docstatus": 1, "status": ["in", ["Submitted", "Paid", "Converted"]]})
+	active_ctr = frappe.db.exists("Plot Contract", {"plot": PLOT, "docstatus": 1})
+	if not (plot_status == "Available" and not active_app and not active_ctr):
+		frappe.throw(
+			f"Cannot reopen {SO} — the plot {PLOT} is not free (status: {plot_status}"
+			+ (", has an active application" if active_app else "")
+			+ (", has an active contract" if active_ctr else "")
+			+ "). It may have been re-sold."
+		)
+	# Also reject an IN-PROGRESS (Draft) re-sale on the plot. The plot only flips to a
+	# reserved status on submit, so a colleague's Draft application / contract / Sales
+	# Order leaves it "Available" and the docstatus-1 checks above miss it. The old
+	# application is docstatus 2 and the old contract is deleted, so ANY Draft claim on
+	# this plot (other than this SO) is a NEW re-sale we must not clobber.
+	draft_app = frappe.db.exists("Plot Application", {"plot": PLOT, "docstatus": 0})
+	draft_ctr = frappe.db.exists("Plot Contract", {"plot": PLOT, "docstatus": 0})
+	other_draft_so = frappe.db.exists("Sales Order", {"plot": PLOT, "docstatus": 0, "name": ["!=", SO]})
+	if draft_app or draft_ctr or other_draft_so:
+		frappe.throw(
+			f"Cannot reopen {SO} — the plot {PLOT} has an in-progress (Draft) re-sale "
+			f"(application/contract/order) that would be overridden. Resolve or cancel that first."
+		)
+	je_date = frappe.db.get_value("Journal Entry", JE, "posting_date")
+	froz = frappe.db.get_single_value("Accounts Settings", "acc_frozen_upto")
+	if froz and frappe.utils.getdate(froz) >= frappe.utils.getdate(je_date):
+		frappe.throw(f"Cannot reopen {SO} — the forfeiture ({je_date}) is in a frozen accounting period (up to {froz}).")
+	if not (frappe.db.get_value("Plot Application", PA, "docstatus") == 2 and frappe.db.get_value("Plot Application", PA, "status") in ("Cancelled", "Expired")):
+		frappe.throw(f"Cannot reopen {SO} — its application {PA} is not in a cancelled/expired state.")
+
+	# Partial-forfeiture safety: a partial close records a customer refund
+	# (lms_refund_amount) that stays parked in Customer Advance and the accountant may
+	# already have PAID it out. Reopen re-parks the forfeited amount as if the full advance
+	# is still on deposit, so re-crediting an already-paid refund would double-count. If ANY
+	# payout to this customer exists since the forfeiture, block and require manual accounting
+	# review. (No-op on a 100%-forfeiture config where lms_refund_amount is always 0.)
+	#
+	# A refund can be paid two ways, so we check BOTH: a Pay-type Payment Entry, OR a manual
+	# Journal Entry that touches this customer as a party (Dr Customer Advance / Cr Bank). The
+	# JE check is deliberately broad — any submitted JE since the forfeiture with this customer
+	# on a line — because we would rather block a legitimate reopen and have the accountant
+	# confirm than silently double-credit real money.
+	refund_due = flt(frappe.db.get_value("Journal Entry", JE, "lms_refund_amount") or 0)
+	if refund_due > 0:
+		payout = frappe.db.get_value(
+			"Payment Entry",
+			{"party_type": "Customer", "party": so.customer, "payment_type": "Pay", "docstatus": 1, "posting_date": [">=", je_date]},
+			"name",
+		)
+		if not payout:
+			# A JE refund: a submitted Journal Entry since the forfeiture with this customer as
+			# a party on any line (Dr Customer Advance / Cr Bank). The forfeiture and govt-share
+			# JEs post to the Customer-Advance account with NO party dimension, so they never
+			# match this party filter — only a genuine party-tagged refund JE does. The
+			# forfeiture JE is excluded explicitly as a belt-and-braces guard.
+			je_rows = frappe.db.sql(
+				"""select distinct jea.parent
+				   from `tabJournal Entry Account` jea
+				   join `tabJournal Entry` je on je.name = jea.parent
+				   where jea.party_type = 'Customer' and jea.party = %s
+				     and je.docstatus = 1 and je.posting_date >= %s
+				     and jea.parent != %s""",
+				(so.customer, je_date, JE),
+			)
+			payout = je_rows[0][0] if je_rows else None
+		if payout:
+			frappe.throw(
+				f"Cannot reopen {SO} — a customer refund of TZS {refund_due:,.0f} was recorded on the "
+				f"forfeiture, and a payout / entry to {so.customer} exists since then ({payout}). Reopening "
+				f"would double-credit the customer. Reverse the payout / handle this manually in accounting first."
+			)
+
+	# locate the deleted Plot Contract to restore
+	DC = DD = dc_data = None
+	for d in frappe.get_all("Deleted Document", filters={"deleted_doctype": "Plot Contract", "restored": 0}, fields=["name", "deleted_name", "data"]):
+		o = json.loads(d["data"])
+		if o.get("sales_order") == SO:
+			DD, DC, dc_data = d["name"], d["deleted_name"], o
+			break
+	if not DC:
+		frappe.throw(f"Cannot reopen {SO} — the original Plot Contract could not be found to restore.")
+
+	# cash / outstanding / government-share figures (Script F)
+	cash = flt(frappe.db.sql("select coalesce(sum(per.allocated_amount),0) from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1 and pe.payment_type='Receive'", (PLOT_SI,))[0][0]) if PLOT_SI else 0
+	grand = flt(frappe.db.get_value("Sales Invoice", PLOT_SI, "grand_total")) if PLOT_SI else 0
+	unpaid = grand - cash
+	pes = [r[0] for r in frappe.db.sql("select distinct per.parent from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1", (PLOT_SI,))] if PLOT_SI else []
+	# Query govt-share JEs only when there ARE payment PEs. ["in", [""]] would match every JE
+	# with a NULL/empty lms_payment_entry (Frappe wraps it in coalesce), which sweeps in the
+	# forfeiture JE itself — so guard on pes being non-empty.
+	govt = frappe.get_all("Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name") if pes else []
+	G = len(govt)
+	CN_INV = frappe.db.get_value("Sales Invoice", {"return_against": PLOT_SI, "is_return": 1, "docstatus": 1}, "name") if PLOT_SI else None
+
+	control_number = cstr(so.get("control_number") or "").strip()
+
+	# ---- REVERSE FIRST (Script F) — atomic; the SO row is LOCKED and there is NO bank call
+	# in this block, so a concurrent re-sale can't slip in and any assert failure rolls the
+	# whole reversal back. The bank re-registration is a SEPARATE step AFTER this commits
+	# (mirrors Script G after Script F) — no irreversible bank call sits inside the reversal. ----
+	if CN_INV and frappe.db.get_value("Sales Invoice", CN_INV, "docstatus") == 1:
+		frappe.get_doc("Sales Invoice", CN_INV).cancel()
+	frappe.db.set_value("Sales Order", SO, "forfeiture_entry", None, update_modified=False)
+	if frappe.db.get_value("Journal Entry", JE, "docstatus") == 1:
+		frappe.get_doc("Journal Entry", JE).cancel()
+	for gj in govt:  # government-share JE is KEPT (never reversed) — verify it is untouched
+		if frappe.db.get_value("Journal Entry", gj, "docstatus") != 1:
+			frappe.throw(f"{SO}: government-share JE {gj} changed unexpectedly — aborting reopen.")
+	if not frappe.db.exists("Plot Contract", DC):
+		nd = frappe.get_doc(dc_data)
+		nd.flags.ignore_permissions = True
+		nd.insert(set_name=DC)
+		frappe.db.set_value("Deleted Document", DD, {"restored": 1, "new_name": DC}, update_modified=False)
+		# The contract's validate() recomputes total_paid from its own payment_schedule /
+		# SI-outstanding, and the exact value it lands on depends on recompute ordering at
+		# insert time (calculate_payment_summary vs sync_payment_status). Pin total_paid back
+		# to the authoritative figure — cash actually received (sum of Receive PE allocations
+		# to the plot invoice) — with a direct write that bypasses the recompute, so the
+		# restored contract reflects reality and the total_paid == cash assert below is a true
+		# check of the restore, not of recompute timing.
+		frappe.db.set_value("Plot Contract", DC, "total_paid", cash, update_modified=False)
+	frappe.db.set_value("Sales Order", SO, "plot_contract", DC, update_modified=False)
+	if PLOT_SI:
+		frappe.db.set_value("Sales Invoice", PLOT_SI, "plot_contract", DC, update_modified=False)
+		frappe.db.set_value("Sales Order", SO, "plot_sales_invoice", PLOT_SI, update_modified=False)
+	frappe.db.set_value("Plot Application", PA, "sales_order", SO, update_modified=False)
+	frappe.db.set_value("Sales Order", SO, "status", "To Deliver and Bill", update_modified=False)
+	frappe.db.set_value("Plot Application", PA, {"docstatus": 1, "status": "Paid", "sales_order": SO}, update_modified=False)
+	if frappe.db.get_value("Plot Master", PLOT, "status") == "Available":
+		frappe.db.set_value("Plot Master", PLOT, "status", "Pending Advance", update_modified=False)
+
+	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out)
+	VALID = int(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
+	new_pd = frappe.utils.add_days(frappe.utils.today(), -(VALID - 7))
+	new_exp = frappe.utils.add_days(frappe.utils.today(), 7)
+	orig_pd = frappe.db.get_value("Plot Application", PA, "payment_date")
+	frappe.db.set_value("Plot Application", PA, {"payment_date": new_pd, "expiry_date": new_exp}, update_modified=False)
+	frappe.get_doc("Plot Application", PA).add_comment("Info", f"Reactivated from forfeiture by {frappe.session.user}; original payment_date was {orig_pd}; fresh 7-day advance window (expiry {new_exp}).")
+	so.add_comment("Info", f"Sales Order reopened from forfeiture by {frappe.session.user}.")
+
+	# ---- per-record asserts (Script F) — any failure aborts the reopen ----
+	tp = flt(frappe.db.get_value("Plot Contract", DC, "total_paid"))
+	if abs(tp - cash) >= 1:
+		frappe.throw(f"{SO}: restored contract total_paid {tp} != cash {cash} — aborted.")
+	if PLOT_SI and abs(flt(frappe.db.get_value("Sales Invoice", PLOT_SI, "outstanding_amount")) - unpaid) >= 1:
+		frappe.throw(f"{SO}: invoice outstanding does not match unpaid balance — aborted.")
+	if CN_INV and frappe.db.get_value("Sales Invoice", CN_INV, "docstatus") != 2:
+		frappe.throw(f"{SO}: credit note was not cancelled — aborted.")
+	if frappe.db.get_value("Journal Entry", JE, "docstatus") != 2:
+		frappe.throw(f"{SO}: forfeiture JE was not cancelled — aborted.")
+	current_govt = len(frappe.get_all("Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name")) if pes else 0
+	if current_govt != G:
+		frappe.throw(f"{SO}: government-share JE count changed — aborted.")
+	if frappe.db.get_value("Sales Order", SO, "status") == "Closed":
+		frappe.throw(f"{SO}: still Closed after reopen — aborted.")
+
+	# The DB reversal is complete and consistent — COMMIT it so it is durable. From here on the
+	# order is reactivated and the plot re-reserved; the bank re-registration below can NEVER
+	# roll it back (mirrors committing Script F before running Script G).
+	frappe.db.commit()
+
+	# ---- THEN RE-REGISTER with the bank (Script G, the separate second step) ----
+	registered, reg_msg = True, ""
+	if control_number:
+		reg = _reregister_after_reopen(SO, control_number)
+		registered, reg_msg = reg.get("registered", False), reg.get("message") or ""
+
+	if registered:
+		frappe.msgprint(
+			f"Sales Order {SO} reopened. Plot {PLOT} reserved again; fresh 7-day advance window "
+			f"(expiry {new_exp}). Payment number re-registered.",
+			indicator="green", alert=True,
+		)
+	else:
+		frappe.msgprint(
+			f"Sales Order {SO} reopened and the plot is reserved again (fresh 7-day window, expiry "
+			f"{new_exp}) — but the payment number could NOT be re-registered yet ({reg_msg}). Use "
+			f"Retry Registration on the control number once the bank is reachable.",
+			indicator="orange", alert=True,
+		)
+	return {"ok": True, "sales_order": SO, "plot": PLOT, "expiry": str(new_exp), "registered": registered}
+
+
+def _reregister_after_reopen(sales_order_name, control_number):
+	"""Re-register a reopened order's control number with the bank — the SEPARATE second step,
+	run AFTER the reopen's DB reversal has already COMMITTED (mirrors Script G after Script F).
+
+	This NEVER rolls the reopen back — the order is already reactivated. It marks the number
+	'Reopened', registers it, and reports the outcome:
+	  - success            -> Registered   (returns registered=True)
+	  - bank error          -> Failed       (returns registered=False — retry later via the button)
+	  - already Registered  -> nothing to do
+
+	Only re-registers a number that is genuinely DEAD at the bank (its most recent Live event
+	was a successful decline); a still-live/paid number is left untouched.
+	"""
+	from landms.tcb import register_reference_for_sales_order, _get_registry
+
+	registry = _get_registry(control_number)
+	if not registry:
+		return {"registered": False, "message": f"no registry row for {control_number}"}
+	if registry.status == "Registered":
+		return {"registered": True, "message": "already registered"}
+	if registry.status == "Paid":
+		# Require the MOST RECENT Live register/decline event to be a successful Decline, so
+		# we never re-register a number that is still live/paid at the bank.
+		last = frappe.get_all(
+			"TCB API Log",
+			filters={"external_reference": control_number, "processing_mode": "Live", "status": "Success", "event_type": ["in", ["Reference Create", "Reference Decline"]]},
+			fields=["event_type"], order_by="creation desc", limit=1,
+		)
+		if not (last and last[0].event_type == "Reference Decline"):
+			return {"registered": False, "message": f"{control_number} is Paid and may still be live at the bank — left as-is; review manually"}
+
+	# Mark the number 'Reopened' so its status reflects the reactivation.
+	if registry.status in ("Paid", "Declined", "Expired"):
+		frappe.get_doc("TCB Control Number", control_number).mark_reopened()
+
+	# Register with the bank. On success -> Registered; on a bank error -> Failed (which is
+	# retryable via the Retry Registration button). Key success off the CALL's ok flag, NOT the
+	# persisted status — in Off / Log Only mode register returns ok without setting 'Registered'.
+	result = register_reference_for_sales_order(sales_order_name, control_number)
+	if result.get("ok"):
+		return {"registered": True, "message": "re-registered"}
+	return {"registered": False, "message": result.get("message") or "bank re-registration failed"}
 
 
 def ensure_plot_sales_invoice_for_sales_order(
@@ -503,6 +844,7 @@ def _draft_contract_matches_sales_order(contract, source_doc) -> bool:
 			return False
 		if cstr(getattr(actual, "sales_invoice", "") or "") != cstr(expected["sales_invoice"] or ""):
 			return False
+
 		if cstr(getattr(actual, "status", "") or "") != cstr(expected["status"] or ""):
 			return False
 
@@ -744,10 +1086,21 @@ def _ensure_related_control_number(doc):
 def _register_with_tcb(doc, control_number: str):
 	"""Register the control number with TCB synchronously during SO submit.
 
-	Runs inline so the user gets immediate feedback (success/failure popup)
-	instead of waiting for a background worker to pick up the job.
+	REGISTER-FIRST GATE: runs inline and BLOCKS the submit if registration fails.
+	An unregistered control number is unpayable, so letting the SO through would
+	just create a dead order; instead we throw a clear banner and the user retries.
+	An already-registered number returns ok=True (see register_reference_for_sales_order),
+	so re-submitting after a blocked attempt passes straight through.
 	"""
-	register_reference_for_sales_order(doc.name, control_number)
+	result = register_reference_for_sales_order(doc.name, control_number)
+	if not result.get("ok"):
+		frappe.throw(
+			f"This order could not be submitted because its payment number could not "
+			f"be set up with the bank yet. The bank portal may be temporarily "
+			f"unavailable, and the order cannot receive payment until this succeeds. "
+			f"Please try submitting again after a while. "
+			f"(Ref {control_number}: {result.get('message')})"
+		)
 
 
 def _link_application_to_sales_order(doc):
@@ -821,10 +1174,21 @@ def _block_cancel_if_paid(doc):
 			["outstanding_amount", "grand_total"],
 		)
 		if flt(outstanding) < flt(grand_total):
+			# Point to the RIGHT remedy: a still-Draft contract (partial advance) is
+			# resolved with the Close button; only a submitted/Ongoing contract uses
+			# Terminate Contract. (Previously this always said "Terminate", which is
+			# wrong — and unavailable — for a Draft-contract partial-payment order.)
+			submitted_contract = frappe.db.get_value(
+				"Plot Contract", {"sales_order": doc.name, "docstatus": 1}, "name"
+			)
+			remedy = (
+				"Use Plot Contract → Terminate Contract instead."
+				if submitted_contract
+				else "Use the Close Sales Order button instead."
+			)
 			frappe.throw(
 				f"Sales Order {doc.name} cannot be cancelled — payment has been "
-				f"received against Sales Invoice {plot_invoice}. "
-				"Use Plot Contract → Terminate Contract instead."
+				f"received against Sales Invoice {plot_invoice}. {remedy}"
 			)
 
 
@@ -1019,6 +1383,21 @@ def _post_credit_note_for_outstanding(si_name):
 			"income_account": settings.customer_advance_account,
 			"cost_center": settings.cost_center,
 			"land_acquisition": si_doc.get("land_acquisition") or "",
+			# Point the return line back at the original invoice's item row. ERPNext's
+			# return validation (validate_returned_items) keys on (item_code,
+			# sales_invoice_item); without this pointer it msgprints a scary — but
+			# non-blocking — "Returned Item ... does not exist in Sales Invoice ..." at the
+			# operator on every close. Setting it makes the validation match cleanly and the
+			# message go away. (Purely cosmetic before; the credit note posted regardless.)
+			"sales_invoice_item": original_item.name,
+			# csf_tz validate_items_remaining_qty (hooked on ALL Sales Invoice
+			# validate, no is_return guard) throws "<item> item balance is ZERO.
+			# Cannot proceed unless Allow Over Sell" when the plot item's on-hand
+			# qty is 0 — the normal end state of a sold plot. This is a no-stock
+			# financial return (update_stock=0), so the sellable-stock guard does
+			# not apply. Set per-line (item.allow_over_sell) so the forfeiture
+			# credit note can post; NOT the global Stock Settings.allow_negative_stock.
+			"allow_over_sell": 1,
 		}],
 	})
 

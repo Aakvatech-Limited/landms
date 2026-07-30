@@ -19,10 +19,16 @@ DECLINE_CONTROL_NUMBER_ENDPOINT = (
 ALLOWED_TRANSITIONS = {
 	"Generated":  {"Registered", "Declined", "Expired", "Failed"},
 	"Registered": {"Paid", "Declined", "Expired", "Failed"},
-	"Paid":       set(),  # terminal
-	"Declined":   set(),  # terminal
-	"Expired":    set(),  # terminal
-	"Failed":     {"Generated", "Registered"},  # allow recovery on retry
+	# Paid / Declined / Expired are terminal for the normal lifecycle, but a forfeited
+	# order can be REOPENED — the only allowed way out of them is to "Reopened".
+	"Paid":       {"Reopened"},
+	"Declined":   {"Reopened"},
+	"Expired":    {"Reopened"},
+	"Failed":     {"Generated", "Registered", "Reopened"},  # recovery on retry / restore after a failed reopen re-register
+	# A reopened number is being re-registered: -> Registered on success, -> Failed on a
+	# bank error. "Paid" is also allowed so a payment that lands while it is still Reopened
+	# (a race / reconciliation / manual entry) can never get stuck on an illegal transition.
+	"Reopened":   {"Registered", "Failed", "Paid"},
 }
 
 
@@ -112,6 +118,14 @@ class TCBControlNumber(Document):
 	def mark_failed(self, note=None, log_name=None, event_type="Reference Create"):
 		self._transition("Failed", None, log_name=log_name, note=note,
 		                 event_type=event_type, event_status="Failed")
+
+	def mark_reopened(self, log_name=None, note=None):
+		"""Mark a forfeited number as reactivated and awaiting re-registration. Set when
+		a Closed order is reopened; the re-register step then moves it to Registered (or
+		leaves it Reopened, to retry, if the bank call fails)."""
+		self._transition("Reopened", None, log_name=log_name,
+		                 note=note or "Reactivated from forfeiture — awaiting re-registration with the bank.",
+		                 event_type="Reference Create", event_status="Ignored")
 
 	# ------------------------------------------------------------------ #
 	#  Manual decline (UI button)                                         #

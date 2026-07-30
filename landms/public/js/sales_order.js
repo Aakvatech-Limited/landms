@@ -2,6 +2,8 @@ frappe.ui.form.on('Sales Order', {
     refresh(frm) {
         _render_so_payment_countdown(frm);
         _render_so_close_button(frm);
+        _render_so_reopen_button(frm);
+        _render_so_registration_banner(frm);
     },
 
     setup(frm) {
@@ -97,11 +99,44 @@ function _render_so_close_button(frm) {
     }, __('Actions'));
 }
 
+function _render_so_reopen_button(frm) {
+    if (frm.is_new()) return;
+    if (!frm.doc.plot) return;
+    if (frm.doc.docstatus !== 1) return;
+    // Only a Closed, forfeited order can be reopened.
+    if (frm.doc.status !== 'Closed') return;
+    if (!frm.doc.forfeiture_entry) return;
+    // Reopen (reversing a forfeiture) is System Manager only — more restricted than Close.
+    if (!frappe.user.has_role('System Manager')) return;
+
+    frm.add_custom_button(__('Reopen Sales Order'), () => {
+        frappe.confirm(
+            __('Reopen this forfeited Sales Order? The forfeiture is reversed, the plot is reserved again, and a fresh 7-day advance window is set. The payment number is then re-registered with the bank. The government share is kept.'),
+            () => {
+                frappe.call({
+                    method: 'landms.sales_order_hooks.reopen_sales_order',
+                    args: { sales_order_name: frm.doc.name },
+                    freeze: true,
+                    freeze_message: __('Reopening Sales Order...'),
+                    callback(r) {
+                        if (r.exc) return;
+                        frm.reload_doc();
+                    }
+                });
+            }
+        );
+    }, __('Actions'));
+}
+
 function _render_so_payment_countdown(frm) {
     if (frm.is_new()) return;
     if (!frm.doc.payment_deadline) return;
     if (!frm.doc.plot) return;
-    if (frm.doc.docstatus === 2) return;
+    // Submitted orders only. The countdown and the registration banner both write to
+    // the form's single headline/message element, so they must never render on the
+    // same doc. The banner is Draft-only (docstatus 0); the countdown is submitted-only
+    // (docstatus 1). This keeps them from colliding (one wiping or stacking on the other).
+    if (frm.doc.docstatus !== 1) return;
     if (['Closed', 'Completed'].includes(frm.doc.status)) return;
 
     frm.dashboard.clear_headline();
@@ -123,4 +158,33 @@ function _render_so_payment_countdown(frm) {
     }
 
     frm.dashboard.set_headline_alert(message, indicator);
+}
+
+function _render_so_registration_banner(frm) {
+    // Persistent notice for a plot Sales Order whose payment control number is not
+    // yet live at the bank. Shows on a Draft order whose submit was blocked because
+    // registration failed (the register-first gate leaves it in Draft). Clears on
+    // its own once the number is registered. Uses set_intro so it does not collide
+    // with the payment countdown, which owns the dashboard headline.
+    if (frm.is_new()) return;
+    // Plot Sales Orders only — mirrors _is_landms_sales_order on the server.
+    if (!frm.doc.plot && !frm.doc.plot_application) return;
+    // Only a Draft: a blocked submit leaves the order in Draft. A submitted order
+    // always has a registered number (the gate would not have let it through).
+    if (frm.doc.docstatus !== 0) return;
+    // No control number yet means a fresh draft that was never submitted — nothing to warn about.
+    if (!frm.doc.control_number) return;
+
+    frappe.db.get_value('TCB Control Number', frm.doc.control_number, 'status').then(r => {
+        const status = r && r.message && r.message.status;
+        if (['Failed', 'Generated'].includes(status)) {
+            frm.set_intro(
+                '⚠ This order cannot receive payment yet. Its payment control number '
+                + 'has not been set up with the bank. Please try submitting again after a while.',
+                'orange'
+            );
+        } else {
+            frm.set_intro('');
+        }
+    });
 }

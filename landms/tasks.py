@@ -51,6 +51,7 @@ def auto_cancel_stale_unpaid_applications():
 			doc = frappe.get_doc("Plot Application", app.name)
 			doc.flags.ignore_permissions = True
 			doc.cancel()
+			frappe.db.commit()  # per-order: persist this success on its own
 			cancelled_count += 1
 			frappe.logger("landms").info(
 				f"Auto-cancelled unpaid Plot Application {app.name} "
@@ -58,6 +59,10 @@ def auto_cancel_stale_unpaid_applications():
 				f"no payment received within {expiry_days} days"
 			)
 		except Exception:
+			# Roll back this order's partial writes BEFORE logging, so a mid-operation
+			# crash cannot be flushed to the DB by a later commit (leaving a half-done
+			# state). The order stays in its original state and is retried next run.
+			frappe.db.rollback()
 			frappe.log_error(
 				frappe.get_traceback(),
 				f"LandMS: Failed to cancel Plot Application {app.name}",
@@ -111,6 +116,7 @@ def auto_expire_paid_applications_past_deadline():
 				# declines the TCB control number, releases the plot, cancels the app.
 				from landms.sales_order_hooks import close_sales_order
 				close_sales_order(app.sales_order)
+				frappe.db.commit()  # per-order: persist this success on its own
 				expired_count += 1
 				frappe.logger("landms").info(
 					f"Auto-expired Plot Application {app.name} via close_sales_order "
@@ -122,6 +128,7 @@ def auto_expire_paid_applications_past_deadline():
 				doc.flags.ignore_permissions = True
 				doc.flags._cancellation_reason = "Expired"
 				doc.cancel()
+				frappe.db.commit()  # per-order: persist this success on its own
 				expired_count += 1
 				frappe.logger("landms").info(
 					f"Auto-expired Plot Application {app.name} "
@@ -129,6 +136,10 @@ def auto_expire_paid_applications_past_deadline():
 					"first advance was not received in time"
 				)
 		except Exception:
+			# Roll back this order's partial writes BEFORE logging. If the decline
+			# already committed (it commits on bank success), the number stays Declined
+			# and the order stays retryable — the retry short-circuits and completes.
+			frappe.db.rollback()
 			frappe.log_error(
 				frappe.get_traceback(),
 				f"LandMS: Failed to expire Plot Application {app.name}",
@@ -217,6 +228,7 @@ def auto_process_overdue_plot_contracts():
 						update_modified=True,
 					)
 					overdue_count += 1
+				frappe.db.commit()  # per-order: persist the overdue mark on its own
 				frappe.logger("landms").info(
 					f"Marked Plot Contract {row.name} overdue "
 					f"(plot {row.plot}, customer {row.customer}) — "
@@ -230,6 +242,7 @@ def auto_process_overdue_plot_contracts():
 				overdue_count += 1
 
 			contract.terminate_contract("Payment deadline missed — auto-cancelled by scheduler.")
+			frappe.db.commit()  # per-order: persist this termination on its own
 			terminated_count += 1
 			frappe.logger("landms").info(
 				f"Auto-terminated overdue Plot Contract {row.name} "
@@ -237,6 +250,12 @@ def auto_process_overdue_plot_contracts():
 				f"payment deadline {row.payment_deadline} was missed"
 			)
 		except Exception:
+			# Roll back this contract's partial writes BEFORE logging, so a crash
+			# mid-termination (e.g. after the committed decline, before the forfeiture
+			# JE) cannot leave a half-Terminated contract flushed by a later commit.
+			# The contract reverts to Ongoing/Overdue and is retried next run (the
+			# retry short-circuits the already-done decline and completes).
+			frappe.db.rollback()
 			frappe.log_error(
 				frappe.get_traceback(),
 				f"LandMS: Failed to process overdue Plot Contract {row.name}",
