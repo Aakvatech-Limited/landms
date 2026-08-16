@@ -73,18 +73,27 @@ def get_metrics():
 		WHERE docstatus = 0
 	""", as_dict=True)[0]
 
-	# ── True government liability: 28.5% (etc.) share is posted as a JE on EVERY payment,
-	#    not just on completed contracts. Summed directly (no payment join) to avoid fan-out. ──
+	# ── CUMULATIVE government share collected: the government 28.5% share is posted as a
+	#    JE on EVERY plot payment. This is a running total across all payments, not a
+	#    current balance. Sum the ACCRUAL CREDIT on the Government Payable account only:
+	#    - Filter to that account so the new JE's Cr Bank line is excluded (else it doubles).
+	#    - Sum CREDIT lines only (NOT credit−debit): both JE shapes carry the same accrual
+	#      credit, but the new 4-row JE also debits the account to settle it; netting would
+	#      make every new payment show zero and the total wrongly shrink over time.
+	#    The lms_payment_entry filter keeps only real per-payment JEs and excludes the
+	#    one-time historical correction so it never inflates this figure.
+	govt_payable_account = frappe.db.get_single_value("LandMS Settings", "government_payable_account")
 	govt_liab = frappe.db.sql("""
 		SELECT COALESCE(SUM(jea.credit_in_account_currency), 0) AS total
 		FROM `tabJournal Entry` je
 		INNER JOIN `tabJournal Entry Account` jea
-			ON  jea.parent                     = je.name
-			AND jea.credit_in_account_currency > 0
+			ON  jea.parent = je.name
 		WHERE je.docstatus          = 1
 		  AND je.lms_payment_entry IS NOT NULL
 		  AND je.lms_payment_entry != ''
-	""", as_dict=True)[0]
+		  AND jea.account = %(govt_payable_account)s
+		  AND jea.credit_in_account_currency > 0
+	""", {"govt_payable_account": govt_payable_account}, as_dict=True)[0]
 
 	draft_paid = flt(draft.paid)
 	# Cash Collected = all cash received (active contracts + advances on draft contracts).
@@ -229,9 +238,9 @@ def get_data(metrics):
 		},
 		{
 			"section": "FINANCIALS",
-			"kpi": "Government Fees Payable",
+			"kpi": "Government Share Collected (Cumulative)",
 			"value": tzs(metrics["govt_fees"]),
-			"notes": "Government share accrued on all payments (actual posted JEs)",
+			"notes": "Total government 28.5% share across all plot payments (running total, not an outstanding balance)",
 		},
 		{
 			"section": "FINANCIALS",

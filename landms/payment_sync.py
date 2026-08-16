@@ -735,6 +735,54 @@ def _post_government_share_je(pe_doc):
 	if govt_amount <= 0:
 		return
 
+	# The government share leaves GVA's bank to the government at the moment of
+	# each payment — GVA does not hold it. So the JE both ACCRUES the liability
+	# (rows 1-2) and SETTLES it out of the bank (rows 3-4) in one entry:
+	#
+	#   Dr Customer Advances      (reduce deferred revenue)
+	#   Cr Government Fee Payable  (accrue the govt liability)
+	#   Dr Government Fee Payable  (settle the liability...)
+	#   Cr Bank                    (...money leaves to government)
+	#
+	# Government Fee Payable nets to zero within the JE (accrued then settled the
+	# same instant) — correct, because GVA holds no residual govt liability. The
+	# net cash effect is Dr Advances / Cr Bank for the govt share.
+	#
+	# The settlement rows require the bank account. If it is not configured we
+	# fall back to the accrual-only 2-row JE (previous behaviour) rather than
+	# throw — a misconfiguration must not block a customer payment.
+	bank_account = settings.tcb_bank_account
+	settle_govt_share = bool(bank_account)
+
+	accounts = [
+		{
+			"account": settings.customer_advance_account,
+			"debit_in_account_currency": govt_amount,
+			"cost_center": settings.cost_center,
+			"land_acquisition": land_acquisition or "",
+		},
+		{
+			"account": settings.government_payable_account,
+			"credit_in_account_currency": govt_amount,
+			"cost_center": settings.cost_center,
+			"land_acquisition": land_acquisition or "",
+		},
+	]
+
+	if settle_govt_share:
+		accounts.append({
+			"account": settings.government_payable_account,
+			"debit_in_account_currency": govt_amount,
+			"cost_center": settings.cost_center,
+			"land_acquisition": land_acquisition or "",
+		})
+		accounts.append({
+			"account": bank_account,
+			"credit_in_account_currency": govt_amount,
+			"cost_center": settings.cost_center,
+			"land_acquisition": land_acquisition or "",
+		})
+
 	je = frappe.get_doc({
 		"doctype": "Journal Entry",
 		"posting_date": pe_doc.posting_date or today(),
@@ -744,21 +792,10 @@ def _post_government_share_je(pe_doc):
 		"user_remark": (
 			f"Government share {flt(govt_pct):.2f}% on payment {pe_doc.name} "
 			f"— Sales Order {so_name}"
+			+ (" (accrued + remitted to government)" if settle_govt_share
+			   else " (accrued only — bank account not configured)")
 		),
-		"accounts": [
-			{
-				"account": settings.customer_advance_account,
-				"debit_in_account_currency": govt_amount,
-				"cost_center": settings.cost_center,
-				"land_acquisition": land_acquisition or "",
-			},
-			{
-				"account": settings.government_payable_account,
-				"credit_in_account_currency": govt_amount,
-				"cost_center": settings.cost_center,
-				"land_acquisition": land_acquisition or "",
-			},
-		],
+		"accounts": accounts,
 	})
 	je.insert(ignore_permissions=True)
 	je.submit()
