@@ -89,21 +89,34 @@ def auto_expire_paid_applications_past_deadline():
 	today_date = getdate(today())
 	validity_days = int(settings.application_fee_validity_days or 7)
 
+	# Per-plot rule: a plot flagged no_advance_deadline uses its FULL payment
+	# window (payment_completion_days, from the Land Acquisition) as the advance
+	# window instead of the global setting. Plots without the flag (all existing
+	# plots) behave exactly as before.
 	expired_apps = frappe.db.sql(
 		"""
 		select
-			name,
-			plot,
-			sales_order,
-			date_add(payment_date, interval %s day) as expiry_date
-		from `tabPlot Application`
-		where docstatus = 1
-		  and status = 'Paid'
-		  and payment_date is not null
-		  and date_add(payment_date, interval %s day) < %s
-		order by payment_date asc, name asc
+			pa.name,
+			pa.plot,
+			pa.sales_order,
+			date_add(pa.payment_date, interval (
+				case when ifnull(pm.no_advance_deadline, 0) = 1
+				     then coalesce(nullif(pm.payment_completion_days, 0), %s)
+				     else %s end
+			) day) as expiry_date
+		from `tabPlot Application` pa
+		left join `tabPlot Master` pm on pm.name = pa.plot
+		where pa.docstatus = 1
+		  and pa.status = 'Paid'
+		  and pa.payment_date is not null
+		  and date_add(pa.payment_date, interval (
+				case when ifnull(pm.no_advance_deadline, 0) = 1
+				     then coalesce(nullif(pm.payment_completion_days, 0), %s)
+				     else %s end
+			) day) < %s
+		order by pa.payment_date asc, pa.name asc
 		""",
-		(validity_days, validity_days, today_date),
+		(validity_days, validity_days, validity_days, validity_days, today_date),
 		as_dict=True,
 	)
 
