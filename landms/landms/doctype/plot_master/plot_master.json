@@ -130,6 +130,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "no_advance_deadline",
+   "fieldtype": "Check",
+   "label": "No Advance Deadline",
+   "default": "0",
+   "allow_on_submit": 1,
+   "description": "Customer gets the full payment period, with no separate advance deadline."
+  },
+  {
    "fieldname": "location_section",
    "fieldtype": "Section Break",
    "label": "Location",

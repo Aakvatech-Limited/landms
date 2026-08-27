@@ -477,8 +477,17 @@ def reopen_sales_order(sales_order_name):
 	if frappe.db.get_value("Plot Master", PLOT, "status") == "Available":
 		frappe.db.set_value("Plot Master", PLOT, "status", "Pending Advance", update_modified=False)
 
-	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out)
-	VALID = int(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
+	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out).
+	# VALID must mirror the expiry task's window for THIS plot: a no_advance_deadline
+	# plot uses its full payment_completion_days, others the global setting — so the
+	# back-set below always lands the effective expiry exactly 7 days out either way.
+	_plot_rule = frappe.db.get_value(
+		"Plot Master", PLOT, ["no_advance_deadline", "payment_completion_days"], as_dict=True
+	) or frappe._dict()
+	if cint(_plot_rule.no_advance_deadline) and cint(_plot_rule.payment_completion_days) > 0:
+		VALID = cint(_plot_rule.payment_completion_days)
+	else:
+		VALID = int(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
 	new_pd = frappe.utils.add_days(frappe.utils.today(), -(VALID - 7))
 	new_exp = frappe.utils.add_days(frappe.utils.today(), 7)
 	orig_pd = frappe.db.get_value("Plot Application", PA, "payment_date")
