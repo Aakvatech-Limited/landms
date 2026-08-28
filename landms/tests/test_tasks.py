@@ -1,12 +1,12 @@
 from unittest.mock import MagicMock, call, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import tasks
 
 
-class TestApplicationAndContractDeadlines(FrappeTestCase):
+class TestApplicationAndContractDeadlines(IntegrationTestCase):
 	@patch("landms.tasks.frappe.db.sql")
 	@patch("landms.tasks.frappe.get_single")
 	def test_paid_application_expiry_does_not_depend_on_checkbox(self, mock_get_single, mock_sql):
