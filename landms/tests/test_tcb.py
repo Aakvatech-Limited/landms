@@ -6,9 +6,10 @@ separate file (Phase 8 / integration suite).
 """
 
 import re
+from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import tcb
 from landms.landms.doctype.tcb_control_number.tcb_control_number import (
@@ -18,7 +19,7 @@ from landms.landms.doctype.tcb_control_number.tcb_control_number import (
 DEFAULT_PATTERN = "99911####00##"
 
 
-class TestControlNumberPattern(FrappeTestCase):
+class TestControlNumberPattern(IntegrationTestCase):
 	"""Pattern compilation and validator behaviour."""
 
 	def test_default_pattern_compiles_to_expected_regex(self):
@@ -56,7 +57,7 @@ class TestControlNumberPattern(FrappeTestCase):
 		self.assertFalse(tcb.is_valid_control_number("888XX", pattern="888##"))
 
 
-class TestControlNumberGenerator(FrappeTestCase):
+class TestControlNumberGenerator(IntegrationTestCase):
 	"""Generator: shape, randomness, uniqueness."""
 
 	def test_generator_produces_valid_default(self):
@@ -89,7 +90,7 @@ class TestControlNumberGenerator(FrappeTestCase):
 			)
 
 
-class TestControlNumberRegistry(FrappeTestCase):
+class TestControlNumberRegistry(IntegrationTestCase):
 	"""TCB Control Number doctype lifecycle."""
 
 	def test_allowed_transitions_table_is_consistent(self):
@@ -107,7 +108,7 @@ class TestControlNumberRegistry(FrappeTestCase):
 		self.assertEqual(meta.autoname, "field:control_number")
 
 
-class TestSettingsAccess(FrappeTestCase):
+class TestSettingsAccess(IntegrationTestCase):
 	"""TCB Integration Settings is read defensively."""
 
 	def test_safe_off_defaults_when_doc_unset(self):
@@ -129,7 +130,33 @@ class TestSettingsAccess(FrappeTestCase):
 		self.assertEqual(result["status"], "Ignored")
 
 
-class TestPatternRegexEscape(FrappeTestCase):
+class TestCommitInHookGuard(IntegrationTestCase):
+	"""v16 disables frappe.db.commit() inside document hooks (Document.hook wraps
+	handlers with frappe.db._disable_transaction_control). register_reference_for_
+	sales_order / decline_reference_for_sales_order / create_tcb_api_log call
+	_commit_if_not_in_hook() instead of frappe.db.commit() directly so this is a
+	deliberate skip, not a silent no-op via frappe core's own warning.
+	"""
+
+	def test_commits_when_transaction_control_is_enabled(self):
+		frappe.db._disable_transaction_control = 0
+		with patch("landms.tcb.frappe.db.commit") as mock_commit:
+			tcb._commit_if_not_in_hook()
+		mock_commit.assert_called_once()
+
+	def test_skips_commit_when_called_from_inside_a_document_hook(self):
+		# Simulates the state Document.hook puts frappe.db in while running
+		# before_submit_sales_order / before_cancel_sales_order handlers.
+		frappe.db._disable_transaction_control = 1
+		try:
+			with patch("landms.tcb.frappe.db.commit") as mock_commit:
+				tcb._commit_if_not_in_hook()
+			mock_commit.assert_not_called()
+		finally:
+			frappe.db._disable_transaction_control = 0
+
+
+class TestPatternRegexEscape(IntegrationTestCase):
 	"""Defense: pattern characters that look like regex meta must not blow up."""
 
 	def test_literal_dots_are_escaped(self):
