@@ -5,26 +5,55 @@ from frappe.utils import flt
 def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
-	data    = get_data(filters)
+	data = get_data(filters)
 	summary = get_summary(data)
-	chart   = get_chart(data)
+	chart = get_chart(data)
 	return columns, data, None, chart, summary
 
 
 def get_columns():
 	return [
-		{"label": "Date",                 "fieldname": "date",            "fieldtype": "Date",         "width": 105},
-		{"label": "Type",                 "fieldname": "source_type",     "fieldtype": "Data",         "width": 120},
-		{"label": "Source",               "fieldname": "source_document", "fieldtype": "Dynamic Link", "options": "source_doctype", "width": 150},
-		{"label": "source_doctype",       "fieldname": "source_doctype",  "fieldtype": "Data",         "width": 1, "hidden": 1},
-		{"label": "Customer",             "fieldname": "customer",        "fieldtype": "Link",         "options": "Customer",      "width": 170},
-		{"label": "Plot",                 "fieldname": "plot",            "fieldtype": "Link",         "options": "Plot Master",   "width": 120},
-		{"label": "Total Paid (TZS)",     "fieldname": "total_paid",      "fieldtype": "Float",        "width": 150},
-		{"label": "Govt Share (TZS)",     "fieldname": "govt_share",      "fieldtype": "Float",        "width": 150},
-		{"label": "Forfeited — Company Net (TZS)", "fieldname": "forfeited", "fieldtype": "Float", "width": 200},
-		{"label": "Refund Due (TZS)",     "fieldname": "refund_due",      "fieldtype": "Float",        "width": 150},
-		{"label": "Forfeiture JE",        "fieldname": "forfeiture_je",   "fieldtype": "Link",         "options": "Journal Entry", "width": 150},
-		{"label": "Reason",               "fieldname": "reason",          "fieldtype": "Data",         "width": 240},
+		{"label": "Date", "fieldname": "date", "fieldtype": "Date", "width": 105},
+		{"label": "Type", "fieldname": "source_type", "fieldtype": "Data", "width": 120},
+		{
+			"label": "Source",
+			"fieldname": "source_document",
+			"fieldtype": "Dynamic Link",
+			"options": "source_doctype",
+			"width": 150,
+		},
+		{
+			"label": "source_doctype",
+			"fieldname": "source_doctype",
+			"fieldtype": "Data",
+			"width": 1,
+			"hidden": 1,
+		},
+		{
+			"label": "Customer",
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"options": "Customer",
+			"width": 170,
+		},
+		{"label": "Plot", "fieldname": "plot", "fieldtype": "Link", "options": "Plot Master", "width": 120},
+		{"label": "Total Paid (TZS)", "fieldname": "total_paid", "fieldtype": "Float", "width": 150},
+		{"label": "Govt Share (TZS)", "fieldname": "govt_share", "fieldtype": "Float", "width": 150},
+		{
+			"label": "Forfeited — Company Net (TZS)",
+			"fieldname": "forfeited",
+			"fieldtype": "Float",
+			"width": 200,
+		},
+		{"label": "Refund Due (TZS)", "fieldname": "refund_due", "fieldtype": "Float", "width": 150},
+		{
+			"label": "Forfeiture JE",
+			"fieldname": "forfeiture_je",
+			"fieldtype": "Link",
+			"options": "Journal Entry",
+			"width": 150,
+		},
+		{"label": "Reason", "fieldname": "reason", "fieldtype": "Data", "width": 240},
 	]
 
 
@@ -59,7 +88,8 @@ def get_data(filters):
 	rows = []
 
 	if stype != "Sales Order":
-		rows += frappe.db.sql(f"""
+		rows += frappe.db.sql(
+			f"""
 			SELECT je.posting_date          AS date,
 			       'Termination'            AS source_type,
 			       pc.name                  AS source_document,
@@ -74,10 +104,14 @@ def get_data(filters):
 			FROM `tabPlot Contract` pc
 			INNER JOIN `tabJournal Entry` je ON je.name = pc.forfeiture_entry
 			WHERE {" AND ".join(pc_conditions)}
-		""", filters, as_dict=True)
+		""",
+			filters,
+			as_dict=True,
+		)
 
 	if stype != "Termination":
-		rows += frappe.db.sql(f"""
+		rows += frappe.db.sql(
+			f"""
 			SELECT je.posting_date          AS date,
 			       'Sales Order'            AS source_type,
 			       so.name                  AS source_document,
@@ -92,11 +126,14 @@ def get_data(filters):
 			FROM `tabSales Order` so
 			INNER JOIN `tabJournal Entry` je ON je.name = so.forfeiture_entry
 			WHERE {" AND ".join(so_conditions)}
-		""", filters, as_dict=True)
+		""",
+			filters,
+			as_dict=True,
+		)
 
 	for r in rows:
 		r["total_paid"] = flt(r.get("total_paid"))
-		r["forfeited"]  = flt(r.get("forfeited"))
+		r["forfeited"] = flt(r.get("forfeited"))
 		r["refund_due"] = flt(r.get("refund_due"))
 		# Govt share = whatever of Total Paid is left after the company's net forfeit
 		# and the customer's refund. (Pre-fix forfeitures posted gross, so this is 0.)
@@ -108,16 +145,31 @@ def get_data(filters):
 def get_summary(data):
 	if not data:
 		return []
-	total_paid      = sum(flt(r["total_paid"])  for r in data)
-	total_govt      = sum(flt(r["govt_share"])  for r in data)
-	total_forfeited = sum(flt(r["forfeited"])   for r in data)
-	total_refund    = sum(flt(r["refund_due"])  for r in data)
+	total_paid = sum(flt(r["total_paid"]) for r in data)
+	total_govt = sum(flt(r["govt_share"]) for r in data)
+	total_forfeited = sum(flt(r["forfeited"]) for r in data)
+	total_refund = sum(flt(r["refund_due"]) for r in data)
 	return [
-		{"label": "Forfeiture Events",                "value": len(data),       "datatype": "Int",      "indicator": "Blue"},
-		{"label": "Total Paid by Customers",          "value": total_paid,      "datatype": "Currency", "indicator": "Blue"},
-		{"label": "Government Share",                  "value": total_govt,      "datatype": "Currency", "indicator": "Orange"},
-		{"label": "Forfeited — Company Net",      "value": total_forfeited, "datatype": "Currency", "indicator": "Green"},
-		{"label": "Refund Due to Customers",          "value": total_refund,    "datatype": "Currency", "indicator": "Red"},
+		{"label": "Forfeiture Events", "value": len(data), "datatype": "Int", "indicator": "Blue"},
+		{
+			"label": "Total Paid by Customers",
+			"value": total_paid,
+			"datatype": "Currency",
+			"indicator": "Blue",
+		},
+		{"label": "Government Share", "value": total_govt, "datatype": "Currency", "indicator": "Orange"},
+		{
+			"label": "Forfeited — Company Net",
+			"value": total_forfeited,
+			"datatype": "Currency",
+			"indicator": "Green",
+		},
+		{
+			"label": "Refund Due to Customers",
+			"value": total_refund,
+			"datatype": "Currency",
+			"indicator": "Red",
+		},
 	]
 
 

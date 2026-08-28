@@ -2,14 +2,11 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import cint, now
 
-
 RETRY_REGISTRATION_ENDPOINT = (
-	"landms.landms.doctype.tcb_control_number.tcb_control_number."
-	"TCBControlNumber.retry_registration"
+	"landms.landms.doctype.tcb_control_number.tcb_control_number.TCBControlNumber.retry_registration"
 )
 DECLINE_CONTROL_NUMBER_ENDPOINT = (
-	"landms.landms.doctype.tcb_control_number.tcb_control_number."
-	"TCBControlNumber.decline_control_number"
+	"landms.landms.doctype.tcb_control_number.tcb_control_number.TCBControlNumber.decline_control_number"
 )
 
 
@@ -17,18 +14,22 @@ DECLINE_CONTROL_NUMBER_ENDPOINT = (
 # Generated → Registered → Paid is the happy path. Any state can move to
 # Failed (defensive), and Generated/Registered can be Declined or Expired.
 ALLOWED_TRANSITIONS = {
-	"Generated":  {"Registered", "Declined", "Expired", "Failed"},
+	"Generated": {"Registered", "Declined", "Expired", "Failed"},
 	"Registered": {"Paid", "Declined", "Expired", "Failed"},
 	# Paid / Declined / Expired are terminal for the normal lifecycle, but a forfeited
 	# order can be REOPENED — the only allowed way out of them is to "Reopened".
-	"Paid":       {"Reopened"},
-	"Declined":   {"Reopened"},
-	"Expired":    {"Reopened"},
-	"Failed":     {"Generated", "Registered", "Reopened"},  # recovery on retry / restore after a failed reopen re-register
+	"Paid": {"Reopened"},
+	"Declined": {"Reopened"},
+	"Expired": {"Reopened"},
+	"Failed": {
+		"Generated",
+		"Registered",
+		"Reopened",
+	},  # recovery on retry / restore after a failed reopen re-register
 	# A reopened number is being re-registered: -> Registered on success, -> Failed on a
 	# bank error. "Paid" is also allowed so a payment that lands while it is still Reopened
 	# (a race / reconciliation / manual entry) can never get stuck on an illegal transition.
-	"Reopened":   {"Registered", "Failed", "Paid"},
+	"Reopened": {"Registered", "Failed", "Paid"},
 }
 
 
@@ -42,7 +43,9 @@ def _endpoint_result_status(result):
 	return "Failed"
 
 
-def _log_manual_action(*, event_type, endpoint, control_number, sales_order, request_payload, result=None, error=None):
+def _log_manual_action(
+	*, event_type, endpoint, control_number, sales_order, request_payload, result=None, error=None
+):
 	from landms.tcb import create_tcb_api_log
 
 	response_payload = result if isinstance(result, dict) else {"message": result or ""}
@@ -96,36 +99,53 @@ class TCBControlNumber(Document):
 	# ------------------------------------------------------------------ #
 
 	def mark_registered(self, log_name=None, note=None):
-		self._transition("Registered", "registered_at", log_name=log_name, note=note,
-		                 event_type="Reference Create", event_status="Success")
+		self._transition(
+			"Registered",
+			"registered_at",
+			log_name=log_name,
+			note=note,
+			event_type="Reference Create",
+			event_status="Success",
+		)
 
-	def mark_paid(self, payment_entry, payment_reference, paid_amount,
-	              log_name=None, note=None):
+	def mark_paid(self, payment_entry, payment_reference, paid_amount, log_name=None, note=None):
 		self.payment_entry = payment_entry
 		self.payment_reference = payment_reference
 		self.paid_amount = paid_amount
-		self._transition("Paid", "paid_at", log_name=log_name, note=note,
-		                 event_type="IPN Callback", event_status="Success")
+		self._transition(
+			"Paid", "paid_at", log_name=log_name, note=note, event_type="IPN Callback", event_status="Success"
+		)
 
 	def mark_declined(self, log_name=None, note=None):
-		self._transition("Declined", "declined_at", log_name=log_name, note=note,
-		                 event_type="Reference Decline", event_status="Success")
+		self._transition(
+			"Declined",
+			"declined_at",
+			log_name=log_name,
+			note=note,
+			event_type="Reference Decline",
+			event_status="Success",
+		)
 
 	def mark_expired(self, note=None):
-		self._transition("Expired", "declined_at", note=note,
-		                 event_type="Expiry", event_status="Ignored")
+		self._transition("Expired", "declined_at", note=note, event_type="Expiry", event_status="Ignored")
 
 	def mark_failed(self, note=None, log_name=None, event_type="Reference Create"):
-		self._transition("Failed", None, log_name=log_name, note=note,
-		                 event_type=event_type, event_status="Failed")
+		self._transition(
+			"Failed", None, log_name=log_name, note=note, event_type=event_type, event_status="Failed"
+		)
 
 	def mark_reopened(self, log_name=None, note=None):
 		"""Mark a forfeited number as reactivated and awaiting re-registration. Set when
 		a Closed order is reopened; the re-register step then moves it to Registered (or
 		leaves it Reopened, to retry, if the bank call fails)."""
-		self._transition("Reopened", None, log_name=log_name,
-		                 note=note or "Reactivated from forfeiture — awaiting re-registration with the bank.",
-		                 event_type="Reference Create", event_status="Ignored")
+		self._transition(
+			"Reopened",
+			None,
+			log_name=log_name,
+			note=note or "Reactivated from forfeiture — awaiting re-registration with the bank.",
+			event_type="Reference Create",
+			event_status="Ignored",
+		)
 
 	# ------------------------------------------------------------------ #
 	#  Manual decline (UI button)                                         #
@@ -159,6 +179,7 @@ class TCBControlNumber(Document):
 			frappe.throw(message)
 
 		from landms.tcb import decline_reference_for_sales_order
+
 		try:
 			result = decline_reference_for_sales_order(
 				self.sales_order or "",
@@ -220,9 +241,7 @@ class TCBControlNumber(Document):
 			frappe.throw(message)
 
 		if not self.sales_order:
-			message = (
-				f"Control number {self.name} has no linked Sales Order. Cannot retry registration."
-			)
+			message = f"Control number {self.name} has no linked Sales Order. Cannot retry registration."
 			_log_manual_action(
 				event_type="Reference Create",
 				endpoint=RETRY_REGISTRATION_ENDPOINT,
@@ -234,6 +253,7 @@ class TCBControlNumber(Document):
 			frappe.throw(message)
 
 		from landms.tcb import register_reference_for_sales_order
+
 		try:
 			result = register_reference_for_sales_order(
 				self.sales_order,
@@ -261,30 +281,37 @@ class TCBControlNumber(Document):
 
 	def append_log(self, log_name, event_type, event_status, note=None):
 		"""Append a log row to the trail without changing status."""
-		self.append("tcb_api_logs", {
-			"event_at":   now(),
-			"event_type": event_type,
-			"status":     event_status,
-			"log":        log_name,
-			"note":       (note or "")[:500],
-		})
+		self.append(
+			"tcb_api_logs",
+			{
+				"event_at": now(),
+				"event_type": event_type,
+				"status": event_status,
+				"log": log_name,
+				"note": (note or "")[:500],
+			},
+		)
 		self.save(ignore_permissions=True)
 
 	# ------------------------------------------------------------------ #
 	#  Internal                                                            #
 	# ------------------------------------------------------------------ #
 
-	def _transition(self, new_status, timestamp_field, *,
-	                log_name=None, note=None, event_type=None, event_status=None):
+	def _transition(
+		self, new_status, timestamp_field, *, log_name=None, note=None, event_type=None, event_status=None
+	):
 		self.status = new_status
 		if timestamp_field:
 			self.set(timestamp_field, now())
 		self.last_event = (note or f"{event_type or new_status} → {new_status}")[:500]
-		self.append("tcb_api_logs", {
-			"event_at":   now(),
-			"event_type": event_type or new_status,
-			"status":     event_status or new_status,
-			"log":        log_name,
-			"note":       (note or "")[:500],
-		})
+		self.append(
+			"tcb_api_logs",
+			{
+				"event_at": now(),
+				"event_type": event_type or new_status,
+				"status": event_status or new_status,
+				"log": log_name,
+				"note": (note or "")[:500],
+			},
+		)
 		self.save(ignore_permissions=True)

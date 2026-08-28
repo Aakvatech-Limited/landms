@@ -4,13 +4,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import cint, flt, get_url
 
-
-
 IPN_CALLBACK_PATH = "/api/method/landms.api.tcb.ipn_callback"
 
 
 class TCBIntegrationSettings(Document):
-
 	def onload(self):
 		"""Populate the read-only IPN URL every time the form opens.
 
@@ -63,9 +60,7 @@ class TCBIntegrationSettings(Document):
 		for fieldname in ("reference_create_url", "reference_decline_url", "reconciliation_url"):
 			url = (getattr(self, fieldname, None) or "").strip()
 			if url and not _looks_like_https_url(url):
-				frappe.throw(
-					f"{self.meta.get_label(fieldname)} must be a full https:// URL."
-				)
+				frappe.throw(f"{self.meta.get_label(fieldname)} must be a full https:// URL.")
 			# Normalize whitespace.
 			setattr(self, fieldname, url)
 
@@ -100,7 +95,6 @@ class TCBIntegrationSettings(Document):
 			frappe.throw(
 				"Auto-Apply Callback Payments can only be enabled when Inbound Mode is 'Apply Payment'."
 			)
-
 
 	# ------------------------------------------------------------------ #
 	#  Reconciliation consistency                                          #

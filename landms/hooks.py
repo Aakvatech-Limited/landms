@@ -8,9 +8,9 @@ app_license = "mit"
 required_apps = ["erpnext"]
 
 doctype_js = {
-    "Sales Order":      "public/js/sales_order.js",
-    "Purchase Order":   "public/js/purchase_order.js",
-    "Purchase Invoice": "public/js/purchase_invoice.js",
+	"Sales Order": "public/js/sales_order.js",
+	"Purchase Order": "public/js/purchase_order.js",
+	"Purchase Invoice": "public/js/purchase_invoice.js",
 }
 
 after_install = "landms.install.after_install"
@@ -22,21 +22,21 @@ after_migrate = [
 
 doc_events = {
 	"Purchase Order": {
-		"validate":               "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
-		"on_submit":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
-		"on_cancel":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
+		"validate": "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
+		"on_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
+		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_order",
 	},
 	"Purchase Invoice": {
-		"validate":               "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
-		"on_submit":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
-		"on_cancel":              "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
+		"validate": "landms.landms.doctype.land_acquisition.land_acquisition.set_land_acquisition_expense_account",
+		"on_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
+		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 	},
 	"Journal Entry": {
 		"before_save": "landms.journal_entry_hooks.before_save_journal_entry",
-		"on_submit":   "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
-		"on_cancel":   "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
+		"on_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
+		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
 	},
 	"Payment Entry": {
 		"validate": [
@@ -56,11 +56,11 @@ doc_events = {
 		"before_save": "landms.sales_invoice_hooks.before_save_sales_invoice",
 	},
 	"Sales Order": {
-		"validate":       "landms.sales_order_hooks.validate_sales_order",
-		"before_submit":  "landms.sales_order_hooks.before_submit_sales_order",
-		"on_submit":      "landms.sales_order_hooks.submit_sales_order",
-		"before_cancel":  "landms.sales_order_hooks.before_cancel_sales_order",
-		"on_cancel":      "landms.sales_order_hooks.cancel_sales_order",
+		"validate": "landms.sales_order_hooks.validate_sales_order",
+		"before_submit": "landms.sales_order_hooks.before_submit_sales_order",
+		"on_submit": "landms.sales_order_hooks.submit_sales_order",
+		"before_cancel": "landms.sales_order_hooks.before_cancel_sales_order",
+		"on_cancel": "landms.sales_order_hooks.cancel_sales_order",
 	},
 }
 

@@ -7,4 +7,5 @@ class TCBAPILog(Document):
 	Insertion is best-effort — see landms.tcb.create_tcb_api_log which catches
 	exceptions so a logging failure can never break the business operation.
 	"""
+
 	pass

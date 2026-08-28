@@ -2,7 +2,6 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import cint, flt
 
-
 REQUIRED_ACCOUNTS = {
 	"land_under_development_account": "Asset",
 	"plot_inventory_account": "Asset",
@@ -23,7 +22,6 @@ BANK_CASH_ACCOUNTS = (
 
 
 class LandMSSettings(Document):
-
 	def validate(self):
 		self._validate_cost_center()
 		self._validate_accounts()
@@ -57,9 +55,7 @@ class LandMSSettings(Document):
 	def _check_root_type(self, field, account, expected):
 		root_type = frappe.db.get_value("Account", account, "root_type")
 		if root_type and root_type != expected:
-			frappe.throw(
-				f"{self.meta.get_label(field)} must be a {expected} account (got {root_type})."
-			)
+			frappe.throw(f"{self.meta.get_label(field)} must be a {expected} account (got {root_type}).")
 
 	def _validate_cost_center(self):
 		if not self.cost_center:
