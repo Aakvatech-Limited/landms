@@ -265,9 +265,8 @@ def close_sales_order(sales_order_name):
 		fje = frappe.get_doc("Journal Entry", doc.forfeiture_entry)
 		forfeited = flt(fje.total_debit)
 		refund = flt(fje.get("lms_refund_amount"))
-		close_msg += (
-			f" TZS {forfeited:,.0f} forfeited (net of government share)"
-			+ (f"; TZS {refund:,.0f} refund due to customer." if refund > 0 else ".")
+		close_msg += f" TZS {forfeited:,.0f} forfeited (net of government share)" + (
+			f"; TZS {refund:,.0f} refund due to customer." if refund > 0 else "."
 		)
 	frappe.msgprint(close_msg, indicator="orange", alert=True)
 
@@ -293,6 +292,7 @@ def reopen_sales_order(sales_order_name):
 	reactivated either way; a payment can only land once the number is live again.
 	"""
 	import json
+
 	# Reopen reverses a forfeiture — restrict to System Manager (more privileged than Close).
 	frappe.only_for("System Manager")
 
@@ -311,7 +311,9 @@ def reopen_sales_order(sales_order_name):
 	_lock = f"reopen_so:{sales_order_name}"[:64]
 	_got = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (_lock, 30))
 	if not (_got and _got[0] and _got[0][0] == 1):
-		frappe.throw(f"Another reopen of {sales_order_name} is already in progress — please try again in a moment.")
+		frappe.throw(
+			f"Another reopen of {sales_order_name} is already in progress — please try again in a moment."
+		)
 
 	so = frappe.get_doc("Sales Order", sales_order_name)
 	if not _is_landms_sales_order(so):
@@ -347,7 +349,10 @@ def reopen_sales_order(sales_order_name):
 	if not JE:
 		frappe.throw(f"Sales Order {SO} has no forfeiture entry to reverse (no money was forfeited).")
 	plot_status = frappe.db.get_value("Plot Master", PLOT, "status")
-	active_app = frappe.db.exists("Plot Application", {"plot": PLOT, "docstatus": 1, "status": ["in", ["Submitted", "Paid", "Converted"]]})
+	active_app = frappe.db.exists(
+		"Plot Application",
+		{"plot": PLOT, "docstatus": 1, "status": ["in", ["Submitted", "Paid", "Converted"]]},
+	)
 	active_ctr = frappe.db.exists("Plot Contract", {"plot": PLOT, "docstatus": 1})
 	if not (plot_status == "Available" and not active_app and not active_ctr):
 		frappe.throw(
@@ -372,8 +377,13 @@ def reopen_sales_order(sales_order_name):
 	je_date = frappe.db.get_value("Journal Entry", JE, "posting_date")
 	froz = frappe.db.get_single_value("Accounts Settings", "acc_frozen_upto")
 	if froz and frappe.utils.getdate(froz) >= frappe.utils.getdate(je_date):
-		frappe.throw(f"Cannot reopen {SO} — the forfeiture ({je_date}) is in a frozen accounting period (up to {froz}).")
-	if not (frappe.db.get_value("Plot Application", PA, "docstatus") == 2 and frappe.db.get_value("Plot Application", PA, "status") in ("Cancelled", "Expired")):
+		frappe.throw(
+			f"Cannot reopen {SO} — the forfeiture ({je_date}) is in a frozen accounting period (up to {froz})."
+		)
+	if not (
+		frappe.db.get_value("Plot Application", PA, "docstatus") == 2
+		and frappe.db.get_value("Plot Application", PA, "status") in ("Cancelled", "Expired")
+	):
 		frappe.throw(f"Cannot reopen {SO} — its application {PA} is not in a cancelled/expired state.")
 
 	# Partial-forfeiture safety: a partial close records a customer refund
@@ -392,7 +402,13 @@ def reopen_sales_order(sales_order_name):
 	if refund_due > 0:
 		payout = frappe.db.get_value(
 			"Payment Entry",
-			{"party_type": "Customer", "party": so.customer, "payment_type": "Pay", "docstatus": 1, "posting_date": [">=", je_date]},
+			{
+				"party_type": "Customer",
+				"party": so.customer,
+				"payment_type": "Pay",
+				"docstatus": 1,
+				"posting_date": [">=", je_date],
+			},
 			"name",
 		)
 		if not payout:
@@ -420,7 +436,11 @@ def reopen_sales_order(sales_order_name):
 
 	# locate the deleted Plot Contract to restore
 	DC = DD = dc_data = None
-	for d in frappe.get_all("Deleted Document", filters={"deleted_doctype": "Plot Contract", "restored": 0}, fields=["name", "deleted_name", "data"]):
+	for d in frappe.get_all(
+		"Deleted Document",
+		filters={"deleted_doctype": "Plot Contract", "restored": 0},
+		fields=["name", "deleted_name", "data"],
+	):
 		o = json.loads(d["data"])
 		if o.get("sales_order") == SO:
 			DD, DC, dc_data = d["name"], d["deleted_name"], o
@@ -429,16 +449,47 @@ def reopen_sales_order(sales_order_name):
 		frappe.throw(f"Cannot reopen {SO} — the original Plot Contract could not be found to restore.")
 
 	# cash / outstanding / government-share figures (Script F)
-	cash = flt(frappe.db.sql("select coalesce(sum(per.allocated_amount),0) from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1 and pe.payment_type='Receive'", (PLOT_SI,))[0][0]) if PLOT_SI else 0
+	cash = (
+		flt(
+			frappe.db.sql(
+				"select coalesce(sum(per.allocated_amount),0) from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1 and pe.payment_type='Receive'",
+				(PLOT_SI,),
+			)[0][0]
+		)
+		if PLOT_SI
+		else 0
+	)
 	grand = flt(frappe.db.get_value("Sales Invoice", PLOT_SI, "grand_total")) if PLOT_SI else 0
 	unpaid = grand - cash
-	pes = [r[0] for r in frappe.db.sql("select distinct per.parent from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1", (PLOT_SI,))] if PLOT_SI else []
+	pes = (
+		[
+			r[0]
+			for r in frappe.db.sql(
+				"select distinct per.parent from `tabPayment Entry Reference` per join `tabPayment Entry` pe on pe.name=per.parent where per.reference_doctype='Sales Invoice' and per.reference_name=%s and pe.docstatus=1",
+				(PLOT_SI,),
+			)
+		]
+		if PLOT_SI
+		else []
+	)
 	# Query govt-share JEs only when there ARE payment PEs. ["in", [""]] would match every JE
 	# with a NULL/empty lms_payment_entry (Frappe wraps it in coalesce), which sweeps in the
 	# forfeiture JE itself — so guard on pes being non-empty.
-	govt = frappe.get_all("Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name") if pes else []
+	govt = (
+		frappe.get_all(
+			"Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name"
+		)
+		if pes
+		else []
+	)
 	G = len(govt)
-	CN_INV = frappe.db.get_value("Sales Invoice", {"return_against": PLOT_SI, "is_return": 1, "docstatus": 1}, "name") if PLOT_SI else None
+	CN_INV = (
+		frappe.db.get_value(
+			"Sales Invoice", {"return_against": PLOT_SI, "is_return": 1, "docstatus": 1}, "name"
+		)
+		if PLOT_SI
+		else None
+	)
 
 	control_number = cstr(so.get("control_number") or "").strip()
 
@@ -473,30 +524,60 @@ def reopen_sales_order(sales_order_name):
 		frappe.db.set_value("Sales Order", SO, "plot_sales_invoice", PLOT_SI, update_modified=False)
 	frappe.db.set_value("Plot Application", PA, "sales_order", SO, update_modified=False)
 	frappe.db.set_value("Sales Order", SO, "status", "To Deliver and Bill", update_modified=False)
-	frappe.db.set_value("Plot Application", PA, {"docstatus": 1, "status": "Paid", "sales_order": SO}, update_modified=False)
+	frappe.db.set_value(
+		"Plot Application", PA, {"docstatus": 1, "status": "Paid", "sales_order": SO}, update_modified=False
+	)
 	if frappe.db.get_value("Plot Master", PLOT, "status") == "Available":
 		frappe.db.set_value("Plot Master", PLOT, "status", "Pending Advance", update_modified=False)
 
-	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out)
-	VALID = int(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
+	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out).
+	# VALID must mirror the expiry task's window for THIS plot: a no_advance_deadline
+	# plot uses its full payment_completion_days, others the global setting — so the
+	# back-set below always lands the effective expiry exactly 7 days out either way.
+	_plot_rule = (
+		frappe.db.get_value(
+			"Plot Master", PLOT, ["no_advance_deadline", "payment_completion_days"], as_dict=True
+		)
+		or frappe._dict()
+	)
+	if cint(_plot_rule.no_advance_deadline) and cint(_plot_rule.payment_completion_days) > 0:
+		VALID = cint(_plot_rule.payment_completion_days)
+	else:
+		VALID = int(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
 	new_pd = frappe.utils.add_days(frappe.utils.today(), -(VALID - 7))
 	new_exp = frappe.utils.add_days(frappe.utils.today(), 7)
 	orig_pd = frappe.db.get_value("Plot Application", PA, "payment_date")
-	frappe.db.set_value("Plot Application", PA, {"payment_date": new_pd, "expiry_date": new_exp}, update_modified=False)
-	frappe.get_doc("Plot Application", PA).add_comment("Info", f"Reactivated from forfeiture by {frappe.session.user}; original payment_date was {orig_pd}; fresh 7-day advance window (expiry {new_exp}).")
+	frappe.db.set_value(
+		"Plot Application", PA, {"payment_date": new_pd, "expiry_date": new_exp}, update_modified=False
+	)
+	frappe.get_doc("Plot Application", PA).add_comment(
+		"Info",
+		f"Reactivated from forfeiture by {frappe.session.user}; original payment_date was {orig_pd}; fresh 7-day advance window (expiry {new_exp}).",
+	)
 	so.add_comment("Info", f"Sales Order reopened from forfeiture by {frappe.session.user}.")
 
 	# ---- per-record asserts (Script F) — any failure aborts the reopen ----
 	tp = flt(frappe.db.get_value("Plot Contract", DC, "total_paid"))
 	if abs(tp - cash) >= 1:
 		frappe.throw(f"{SO}: restored contract total_paid {tp} != cash {cash} — aborted.")
-	if PLOT_SI and abs(flt(frappe.db.get_value("Sales Invoice", PLOT_SI, "outstanding_amount")) - unpaid) >= 1:
+	if (
+		PLOT_SI
+		and abs(flt(frappe.db.get_value("Sales Invoice", PLOT_SI, "outstanding_amount")) - unpaid) >= 1
+	):
 		frappe.throw(f"{SO}: invoice outstanding does not match unpaid balance — aborted.")
 	if CN_INV and frappe.db.get_value("Sales Invoice", CN_INV, "docstatus") != 2:
 		frappe.throw(f"{SO}: credit note was not cancelled — aborted.")
 	if frappe.db.get_value("Journal Entry", JE, "docstatus") != 2:
 		frappe.throw(f"{SO}: forfeiture JE was not cancelled — aborted.")
-	current_govt = len(frappe.get_all("Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name")) if pes else 0
+	current_govt = (
+		len(
+			frappe.get_all(
+				"Journal Entry", filters={"lms_payment_entry": ["in", pes], "docstatus": 1}, pluck="name"
+			)
+		)
+		if pes
+		else 0
+	)
 	if current_govt != G:
 		frappe.throw(f"{SO}: government-share JE count changed — aborted.")
 	if frappe.db.get_value("Sales Order", SO, "status") == "Closed":
@@ -517,14 +598,16 @@ def reopen_sales_order(sales_order_name):
 		frappe.msgprint(
 			f"Sales Order {SO} reopened. Plot {PLOT} reserved again; fresh 7-day advance window "
 			f"(expiry {new_exp}). Payment number re-registered.",
-			indicator="green", alert=True,
+			indicator="green",
+			alert=True,
 		)
 	else:
 		frappe.msgprint(
 			f"Sales Order {SO} reopened and the plot is reserved again (fresh 7-day window, expiry "
 			f"{new_exp}) — but the payment number could NOT be re-registered yet ({reg_msg}). Use "
 			f"Retry Registration on the control number once the bank is reachable.",
-			indicator="orange", alert=True,
+			indicator="orange",
+			alert=True,
 		)
 	return {"ok": True, "sales_order": SO, "plot": PLOT, "expiry": str(new_exp), "registered": registered}
 
@@ -542,7 +625,7 @@ def _reregister_after_reopen(sales_order_name, control_number):
 	Only re-registers a number that is genuinely DEAD at the bank (its most recent Live event
 	was a successful decline); a still-live/paid number is left untouched.
 	"""
-	from landms.tcb import register_reference_for_sales_order, _get_registry
+	from landms.tcb import _get_registry, register_reference_for_sales_order
 
 	registry = _get_registry(control_number)
 	if not registry:
@@ -554,11 +637,21 @@ def _reregister_after_reopen(sales_order_name, control_number):
 		# we never re-register a number that is still live/paid at the bank.
 		last = frappe.get_all(
 			"TCB API Log",
-			filters={"external_reference": control_number, "processing_mode": "Live", "status": "Success", "event_type": ["in", ["Reference Create", "Reference Decline"]]},
-			fields=["event_type"], order_by="creation desc", limit=1,
+			filters={
+				"external_reference": control_number,
+				"processing_mode": "Live",
+				"status": "Success",
+				"event_type": ["in", ["Reference Create", "Reference Decline"]],
+			},
+			fields=["event_type"],
+			order_by="creation desc",
+			limit=1,
 		)
 		if not (last and last[0].event_type == "Reference Decline"):
-			return {"registered": False, "message": f"{control_number} is Paid and may still be live at the bank — left as-is; review manually"}
+			return {
+				"registered": False,
+				"message": f"{control_number} is Paid and may still be live at the bank — left as-is; review manually",
+			}
 
 	# Mark the number 'Reopened' so its status reflects the reactivation.
 	if registry.status in ("Paid", "Declined", "Expired"):
@@ -635,32 +728,38 @@ def build_payment_schedule_rows(total_amount, booking_fee_percent, transaction_d
 
 	# If no booking fee or both dates are the same, single row
 	if booking_fee_percent <= 0 or str(transaction_date) == str(payment_deadline):
-		return [{
-			"payment_term": "Advance",
-			"description": "Full Plot Payment",
-			"due_date": payment_deadline,
-			"invoice_portion": 100.0,
-			"payment_amount": total_amount,
-		}]
+		return [
+			{
+				"payment_term": "Advance",
+				"description": "Full Plot Payment",
+				"due_date": payment_deadline,
+				"invoice_portion": 100.0,
+				"payment_amount": total_amount,
+			}
+		]
 
 	booking_amount = flt(total_amount * booking_fee_percent / 100)
 	balance_amount = flt(total_amount - booking_amount)
-	rows = [{
-		"payment_term": "Advance",
-		"description": "Advance",
-		"due_date": transaction_date,
-		"invoice_portion": booking_fee_percent,
-		"payment_amount": booking_amount,
-	}]
+	rows = [
+		{
+			"payment_term": "Advance",
+			"description": "Advance",
+			"due_date": transaction_date,
+			"invoice_portion": booking_fee_percent,
+			"payment_amount": booking_amount,
+		}
+	]
 
 	if balance_amount > 0:
-		rows.append({
-			"payment_term": "Balance",
-			"description": "Balance",
-			"due_date": payment_deadline,
-			"invoice_portion": flt(100 - booking_fee_percent),
-			"payment_amount": balance_amount,
-		})
+		rows.append(
+			{
+				"payment_term": "Balance",
+				"description": "Balance",
+				"due_date": payment_deadline,
+				"invoice_portion": flt(100 - booking_fee_percent),
+				"payment_amount": balance_amount,
+			}
+		)
 
 	return rows
 
@@ -698,9 +797,7 @@ def _get_plot(doc):
 
 def _validate_application_window(application):
 	if application.expiry_date and getdate(application.expiry_date) < getdate(today()):
-		frappe.throw(
-			f"Plot Application {application.name} has expired. The reservation window has ended."
-		)
+		frappe.throw(f"Plot Application {application.name} has expired. The reservation window has ended.")
 
 
 def _validate_plot_state(plot):
@@ -721,9 +818,7 @@ def _ensure_single_sales_order_for_application(doc, application):
 		"name",
 	)
 	if existing:
-		frappe.throw(
-			f"Plot Application {application.name} is already linked to Sales Order {existing}."
-		)
+		frappe.throw(f"Plot Application {application.name} is already linked to Sales Order {existing}.")
 
 
 def _ensure_items(doc, plot, settings):
@@ -766,21 +861,23 @@ def _ensure_draft_plot_contract(doc):
 	if existing:
 		return _sync_existing_draft_plot_contract(existing, doc)
 
-	contract = frappe.get_doc({
-		"doctype": "Plot Contract",
-		"customer": doc.customer,
-		"plot": doc.plot,
-		"plot_application": doc.get("plot_application") or "",
-		"contract_date": doc.transaction_date or today(),
-		"payment_completion_days": cint(doc.payment_completion_days or 0),
-		"payment_deadline": doc.payment_deadline,
-		"apply_auto_cancellation": cint(doc.get("apply_auto_cancellation", 1)),
-		"sales_order": doc.name,
-		"control_number": doc.get("control_number") or "",
-		"booking_fee_percent": flt(doc.booking_fee_percent),
-		"government_share_percent": flt(doc.government_share_percent),
-		"notes": doc.terms or "",
-	})
+	contract = frappe.get_doc(
+		{
+			"doctype": "Plot Contract",
+			"customer": doc.customer,
+			"plot": doc.plot,
+			"plot_application": doc.get("plot_application") or "",
+			"contract_date": doc.transaction_date or today(),
+			"payment_completion_days": cint(doc.payment_completion_days or 0),
+			"payment_deadline": doc.payment_deadline,
+			"apply_auto_cancellation": cint(doc.get("apply_auto_cancellation", 1)),
+			"sales_order": doc.name,
+			"control_number": doc.get("control_number") or "",
+			"booking_fee_percent": flt(doc.booking_fee_percent),
+			"government_share_percent": flt(doc.government_share_percent),
+			"notes": doc.terms or "",
+		}
+	)
 	_sync_contract_schedule(contract, doc)
 	contract.flags.from_sales_order = True
 	contract.insert(ignore_permissions=True)
@@ -827,7 +924,7 @@ def _draft_contract_matches_sales_order(contract, source_doc) -> bool:
 	if len(actual_rows) != len(expected_rows):
 		return False
 
-	for actual, expected in zip(actual_rows, expected_rows):
+	for actual, expected in zip(actual_rows, expected_rows, strict=False):
 		if cint(getattr(actual, "installment_number", 0) or 0) != cint(expected["installment_number"]):
 			return False
 		if cstr(getattr(actual, "description", "") or "") != cstr(expected["description"] or ""):
@@ -855,17 +952,19 @@ def _build_contract_schedule_rows(source_doc) -> list[dict]:
 	rows = []
 	for idx, row in enumerate(source_doc.get("payment_schedule") or [], start=1):
 		expected_amount = flt(getattr(row, "payment_amount", 0))
-		rows.append({
-			"installment_number": idx,
-			"description": getattr(row, "description", "") or f"Installment {idx}",
-			"due_date": row.due_date,
-			"expected_amount": expected_amount,
-			"paid_amount": 0,
-			"outstanding_amount": expected_amount,
-			"paid_date": None,
-			"sales_invoice": "",
-			"status": "Pending",
-		})
+		rows.append(
+			{
+				"installment_number": idx,
+				"description": getattr(row, "description", "") or f"Installment {idx}",
+				"due_date": row.due_date,
+				"expected_amount": expected_amount,
+				"paid_amount": 0,
+				"outstanding_amount": expected_amount,
+				"paid_date": None,
+				"sales_invoice": "",
+				"status": "Pending",
+			}
+		)
 	return rows
 
 
@@ -960,14 +1059,17 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 
 		# Copy payment schedule from SO
 		invoice.set("payment_schedule", [])
-		for row in (doc.get("payment_schedule") or []):
-			invoice.append("payment_schedule", {
-				"payment_term": row.get("payment_term") or row.description,
-				"description": row.description,
-				"due_date": row.due_date,
-				"invoice_portion": flt(row.invoice_portion),
-				"payment_amount": flt(row.payment_amount),
-			})
+		for row in doc.get("payment_schedule") or []:
+			invoice.append(
+				"payment_schedule",
+				{
+					"payment_term": row.get("payment_term") or row.description,
+					"description": row.description,
+					"due_date": row.due_date,
+					"invoice_portion": flt(row.invoice_portion),
+					"payment_amount": flt(row.payment_amount),
+				},
+			)
 
 		invoice.insert(ignore_permissions=True)
 		invoice.submit()
@@ -984,7 +1086,9 @@ def _link_plot_invoice_to_sales_order(doc, invoice_name):
 		return
 
 	if doc.get("plot_sales_invoice") != invoice_name:
-		frappe.db.set_value("Sales Order", doc.name, "plot_sales_invoice", invoice_name, update_modified=False)
+		frappe.db.set_value(
+			"Sales Order", doc.name, "plot_sales_invoice", invoice_name, update_modified=False
+		)
 
 	if not doc.items:
 		return
@@ -1300,33 +1404,35 @@ def _post_draft_contract_forfeiture_je(doc):
 	if forfeiture_income <= 0:
 		return
 
-	je = frappe.get_doc({
-		"doctype": "Journal Entry",
-		"posting_date": today(),
-		"company": settings.company,
-		"voucher_type": "Journal Entry",
-		"lms_refund_amount": refund_amount,
-		"user_remark": (
-			f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
-			f"{forfeiture_pct:.0f}% of paid amount forfeited, "
-			f"net of {govt_pct:.2f}% government share already withheld. "
-			f"Customer {doc.customer}, Plot {doc.get('plot') or ''}."
-		),
-		"accounts": [
-			{
-				"account": settings.customer_advance_account,
-				"debit_in_account_currency": forfeiture_income,
-				"cost_center": settings.cost_center,
-				"land_acquisition": doc.get("land_acquisition") or "",
-			},
-			{
-				"account": settings.forfeited_deposits_account,
-				"credit_in_account_currency": forfeiture_income,
-				"cost_center": settings.cost_center,
-				"land_acquisition": doc.get("land_acquisition") or "",
-			},
-		],
-	})
+	je = frappe.get_doc(
+		{
+			"doctype": "Journal Entry",
+			"posting_date": today(),
+			"company": settings.company,
+			"voucher_type": "Journal Entry",
+			"lms_refund_amount": refund_amount,
+			"user_remark": (
+				f"Sales Order {doc.name} cancelled before Plot Contract was submitted — "
+				f"{forfeiture_pct:.0f}% of paid amount forfeited, "
+				f"net of {govt_pct:.2f}% government share already withheld. "
+				f"Customer {doc.customer}, Plot {doc.get('plot') or ''}."
+			),
+			"accounts": [
+				{
+					"account": settings.customer_advance_account,
+					"debit_in_account_currency": forfeiture_income,
+					"cost_center": settings.cost_center,
+					"land_acquisition": doc.get("land_acquisition") or "",
+				},
+				{
+					"account": settings.forfeited_deposits_account,
+					"credit_in_account_currency": forfeiture_income,
+					"cost_center": settings.cost_center,
+					"land_acquisition": doc.get("land_acquisition") or "",
+				},
+			],
+		}
+	)
 	je.insert(ignore_permissions=True)
 	je.submit()
 	doc.db_set("forfeiture_entry", je.name)
@@ -1355,51 +1461,55 @@ def _post_credit_note_for_outstanding(si_name):
 	settings = frappe.get_single("LandMS Settings")
 	original_item = si_doc.items[0]
 
-	credit_note = frappe.get_doc({
-		"doctype": "Sales Invoice",
-		"is_return": 1,
-		"return_against": si_name,
-		"customer": si_doc.customer,
-		"company": si_doc.company,
-		"posting_date": today(),
-		"due_date": today(),
-		"plot": si_doc.get("plot"),
-		"land_acquisition": si_doc.get("land_acquisition"),
-		"plot_contract": si_doc.get("plot_contract"),
-		"is_plot_sale_invoice": 1,
-		"update_stock": 0,
-		"is_not_vfd_invoice": 1,
-		"allocate_advances_automatically": 0,
-		"update_outstanding_for_self": 0,
-		"remarks": f"Credit note — sale cancelled, reversing outstanding balance on {si_name}",
-		"items": [{
-			"item_code": original_item.item_code,
-			"item_name": original_item.item_name,
-			"qty": -1,
-			"uom": original_item.uom,
-			"stock_uom": original_item.stock_uom or original_item.uom,
-			"conversion_factor": 1,
-			"rate": outstanding,
-			"income_account": settings.customer_advance_account,
-			"cost_center": settings.cost_center,
-			"land_acquisition": si_doc.get("land_acquisition") or "",
-			# Point the return line back at the original invoice's item row. ERPNext's
-			# return validation (validate_returned_items) keys on (item_code,
-			# sales_invoice_item); without this pointer it msgprints a scary — but
-			# non-blocking — "Returned Item ... does not exist in Sales Invoice ..." at the
-			# operator on every close. Setting it makes the validation match cleanly and the
-			# message go away. (Purely cosmetic before; the credit note posted regardless.)
-			"sales_invoice_item": original_item.name,
-			# csf_tz validate_items_remaining_qty (hooked on ALL Sales Invoice
-			# validate, no is_return guard) throws "<item> item balance is ZERO.
-			# Cannot proceed unless Allow Over Sell" when the plot item's on-hand
-			# qty is 0 — the normal end state of a sold plot. This is a no-stock
-			# financial return (update_stock=0), so the sellable-stock guard does
-			# not apply. Set per-line (item.allow_over_sell) so the forfeiture
-			# credit note can post; NOT the global Stock Settings.allow_negative_stock.
-			"allow_over_sell": 1,
-		}],
-	})
+	credit_note = frappe.get_doc(
+		{
+			"doctype": "Sales Invoice",
+			"is_return": 1,
+			"return_against": si_name,
+			"customer": si_doc.customer,
+			"company": si_doc.company,
+			"posting_date": today(),
+			"due_date": today(),
+			"plot": si_doc.get("plot"),
+			"land_acquisition": si_doc.get("land_acquisition"),
+			"plot_contract": si_doc.get("plot_contract"),
+			"is_plot_sale_invoice": 1,
+			"update_stock": 0,
+			"is_not_vfd_invoice": 1,
+			"allocate_advances_automatically": 0,
+			"update_outstanding_for_self": 0,
+			"remarks": f"Credit note — sale cancelled, reversing outstanding balance on {si_name}",
+			"items": [
+				{
+					"item_code": original_item.item_code,
+					"item_name": original_item.item_name,
+					"qty": -1,
+					"uom": original_item.uom,
+					"stock_uom": original_item.stock_uom or original_item.uom,
+					"conversion_factor": 1,
+					"rate": outstanding,
+					"income_account": settings.customer_advance_account,
+					"cost_center": settings.cost_center,
+					"land_acquisition": si_doc.get("land_acquisition") or "",
+					# Point the return line back at the original invoice's item row. ERPNext's
+					# return validation (validate_returned_items) keys on (item_code,
+					# sales_invoice_item); without this pointer it msgprints a scary — but
+					# non-blocking — "Returned Item ... does not exist in Sales Invoice ..." at the
+					# operator on every close. Setting it makes the validation match cleanly and the
+					# message go away. (Purely cosmetic before; the credit note posted regardless.)
+					"sales_invoice_item": original_item.name,
+					# csf_tz validate_items_remaining_qty (hooked on ALL Sales Invoice
+					# validate, no is_return guard) throws "<item> item balance is ZERO.
+					# Cannot proceed unless Allow Over Sell" when the plot item's on-hand
+					# qty is 0 — the normal end state of a sold plot. This is a no-stock
+					# financial return (update_stock=0), so the sellable-stock guard does
+					# not apply. Set per-line (item.allow_over_sell) so the forfeiture
+					# credit note can post; NOT the global Stock Settings.allow_negative_stock.
+					"allow_over_sell": 1,
+				}
+			],
+		}
+	)
 
 	original_user = frappe.session.user
 	try:

@@ -5,25 +5,48 @@ from frappe.utils import flt
 def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
-	data    = get_data(filters)
+	data = get_data(filters)
 	summary = get_summary(data)
-	chart   = get_chart(data)
+	chart = get_chart(data)
 	return columns, data, None, chart, summary
 
 
 def get_columns():
 	return [
-		{"label": "Application",          "fieldname": "application",      "fieldtype": "Link",    "options": "Plot Application", "width": 140},
-		{"label": "Customer",             "fieldname": "customer",         "fieldtype": "Link",    "options": "Customer",        "width": 200},
-		{"label": "Plot",                 "fieldname": "plot",             "fieldtype": "Link",    "options": "Plot Master",     "width": 130},
-		{"label": "Plot Number",          "fieldname": "plot_number",      "fieldtype": "Data",                                  "width": 130},
-		{"label": "Acquisition",          "fieldname": "acquisition_name", "fieldtype": "Data",                                  "width": 180},
-		{"label": "Plot Type",            "fieldname": "plot_type",        "fieldtype": "Link",    "options": "Plot Type",       "width": 130},
-		{"label": "Allocated Value (TZS)","fieldname": "allocated_value",  "fieldtype": "Float",                                 "width": 180},
-		{"label": "Paid (TZS)",           "fieldname": "paid",             "fieldtype": "Float",                                 "width": 150},
-		{"label": "Outstanding (TZS)",    "fieldname": "outstanding",      "fieldtype": "Float",                                 "width": 160},
-		{"label": "Status",               "fieldname": "status",           "fieldtype": "Data",                                  "width": 110},
-		{"label": "Application Date",     "fieldname": "application_date",  "fieldtype": "Date",                                  "width": 130},
+		{
+			"label": "Application",
+			"fieldname": "application",
+			"fieldtype": "Link",
+			"options": "Plot Application",
+			"width": 140,
+		},
+		{
+			"label": "Customer",
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"options": "Customer",
+			"width": 200,
+		},
+		{"label": "Plot", "fieldname": "plot", "fieldtype": "Link", "options": "Plot Master", "width": 130},
+		{"label": "Plot Number", "fieldname": "plot_number", "fieldtype": "Data", "width": 130},
+		{"label": "Acquisition", "fieldname": "acquisition_name", "fieldtype": "Data", "width": 180},
+		{
+			"label": "Plot Type",
+			"fieldname": "plot_type",
+			"fieldtype": "Link",
+			"options": "Plot Type",
+			"width": 130,
+		},
+		{
+			"label": "Allocated Value (TZS)",
+			"fieldname": "allocated_value",
+			"fieldtype": "Float",
+			"width": 180,
+		},
+		{"label": "Paid (TZS)", "fieldname": "paid", "fieldtype": "Float", "width": 150},
+		{"label": "Outstanding (TZS)", "fieldname": "outstanding", "fieldtype": "Float", "width": 160},
+		{"label": "Status", "fieldname": "status", "fieldtype": "Data", "width": 110},
+		{"label": "Application Date", "fieldname": "application_date", "fieldtype": "Date", "width": 130},
 	]
 
 
@@ -48,7 +71,8 @@ def get_data(filters):
 
 	where = " AND ".join(conditions)
 
-	rows = frappe.db.sql(f"""
+	rows = frappe.db.sql(
+		f"""
 		SELECT
 			pa.name              AS application,
 			pa.customer,
@@ -65,25 +89,30 @@ def get_data(filters):
 		LEFT JOIN `tabPlot Contract` pc ON pc.plot_application = pa.name AND pc.docstatus != 2
 		WHERE {where}
 		ORDER BY pa.application_date DESC, pa.name DESC
-	""", filters, as_dict=True)
+	""",
+		filters,
+		as_dict=True,
+	)
 
 	data = []
 	for row in rows:
 		allocated = flt(row.allocated_value)
-		paid      = flt(row.paid)
-		data.append({
-			"application":      row.application,
-			"customer":         row.customer,
-			"plot":             row.plot,
-			"plot_number":      row.plot_number,
-			"acquisition_name": row.acquisition_name,
-			"plot_type":        row.plot_type,
-			"allocated_value":  allocated,
-			"paid":             paid,
-			"outstanding":      max(0.0, allocated - paid),
-			"status":           row.status,
-			"application_date": row.application_date,
-		})
+		paid = flt(row.paid)
+		data.append(
+			{
+				"application": row.application,
+				"customer": row.customer,
+				"plot": row.plot,
+				"plot_number": row.plot_number,
+				"acquisition_name": row.acquisition_name,
+				"plot_type": row.plot_type,
+				"allocated_value": allocated,
+				"paid": paid,
+				"outstanding": max(0.0, allocated - paid),
+				"status": row.status,
+				"application_date": row.application_date,
+			}
+		)
 	return data
 
 
@@ -92,13 +121,13 @@ def get_summary(data):
 		return []
 	total_plots = len(data)
 	total_value = sum(flt(r["allocated_value"]) for r in data)
-	total_paid  = sum(flt(r["paid"])            for r in data)
-	total_out   = sum(flt(r["outstanding"])     for r in data)
+	total_paid = sum(flt(r["paid"]) for r in data)
+	total_out = sum(flt(r["outstanding"]) for r in data)
 	return [
-		{"label": "Plots Allocated",       "value": total_plots, "datatype": "Int",      "indicator": "Blue"},
+		{"label": "Plots Allocated", "value": total_plots, "datatype": "Int", "indicator": "Blue"},
 		{"label": "Total Allocated Value", "value": total_value, "datatype": "Currency", "indicator": "Blue"},
-		{"label": "Total Paid",            "value": total_paid,  "datatype": "Currency", "indicator": "Green"},
-		{"label": "Total Outstanding",     "value": total_out,   "datatype": "Currency", "indicator": "Red"},
+		{"label": "Total Paid", "value": total_paid, "datatype": "Currency", "indicator": "Green"},
+		{"label": "Total Outstanding", "value": total_out, "datatype": "Currency", "indicator": "Red"},
 	]
 
 

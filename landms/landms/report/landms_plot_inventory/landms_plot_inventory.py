@@ -14,7 +14,13 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"label": "Plot", "fieldname": "plot", "fieldtype": "Link", "options": "Plot Master", "width": 140},
-		{"label": "Land Acquisition", "fieldname": "land_acquisition", "fieldtype": "Link", "options": "Land Acquisition", "width": 170},
+		{
+			"label": "Land Acquisition",
+			"fieldname": "land_acquisition",
+			"fieldtype": "Link",
+			"options": "Land Acquisition",
+			"width": 170,
+		},
 		{"label": "Acquisition Name", "fieldname": "acquisition_name", "fieldtype": "Data", "width": 220},
 		{"label": "Plot Number", "fieldname": "plot_number", "fieldtype": "Data", "width": 130},
 		{"label": "Plot Type", "fieldname": "plot_type", "fieldtype": "Data", "width": 120},
@@ -38,7 +44,8 @@ def get_data(filters):
 
 	where = " AND ".join(conditions)
 
-	rows = frappe.db.sql(f"""
+	rows = frappe.db.sql(
+		f"""
 		SELECT
 			pm.name AS plot,
 			pm.land_acquisition,
@@ -52,7 +59,10 @@ def get_data(filters):
 		FROM `tabPlot Master` pm
 		WHERE {where}
 		ORDER BY pm.land_acquisition, pm.status, pm.plot_number
-	""", filters, as_dict=True)
+	""",
+		filters,
+		as_dict=True,
+	)
 
 	data = []
 	for row in rows:
@@ -60,19 +70,21 @@ def get_data(filters):
 		price = flt(row.selling_price)
 		margin = price - cost
 		margin_pct = (margin / price * 100) if price else 0
-		data.append({
-			"plot": row.plot,
-			"land_acquisition": row.land_acquisition,
-			"acquisition_name": row.acquisition_name,
-			"plot_number": row.plot_number,
-			"plot_type": row.plot_type,
-			"plot_size_sqm": flt(row.plot_size_sqm),
-			"status": row.status,
-			"allocated_cost": cost,
-			"selling_price": price,
-			"margin": margin,
-			"margin_pct": margin_pct,
-		})
+		data.append(
+			{
+				"plot": row.plot,
+				"land_acquisition": row.land_acquisition,
+				"acquisition_name": row.acquisition_name,
+				"plot_number": row.plot_number,
+				"plot_type": row.plot_type,
+				"plot_size_sqm": flt(row.plot_size_sqm),
+				"status": row.status,
+				"allocated_cost": cost,
+				"selling_price": price,
+				"margin": margin,
+				"margin_pct": margin_pct,
+			}
+		)
 	return data
 
 
@@ -103,7 +115,12 @@ def get_summary(data):
 		{"label": "Inventory Cost (TZS)", "value": total_cost, "datatype": "Float", "indicator": "Grey"},
 		{"label": "Asking Value (TZS)", "value": total_price, "datatype": "Float", "indicator": "Blue"},
 		{"label": "Potential Margin (TZS)", "value": total_margin, "datatype": "Float", "indicator": "Green"},
-		{"label": "Portfolio Margin %", "value": margin_pct, "datatype": "Percent", "indicator": "Green" if margin_pct >= 0 else "Red"},
+		{
+			"label": "Portfolio Margin %",
+			"value": margin_pct,
+			"datatype": "Percent",
+			"indicator": "Green" if margin_pct >= 0 else "Red",
+		},
 	]
 
 
@@ -111,7 +128,14 @@ def get_chart(data):
 	if not data:
 		return None
 
-	status_order = ["Available", "Pending Fee", "Pending Advance", "Reserved", "Ready for Handover", "Delivered"]
+	status_order = [
+		"Available",
+		"Pending Fee",
+		"Pending Advance",
+		"Reserved",
+		"Ready for Handover",
+		"Delivered",
+	]
 	status_counts = {status: 0 for status in status_order}
 	for row in data:
 		status = "Delivered" if row["status"] == "Title Closed" else row["status"]

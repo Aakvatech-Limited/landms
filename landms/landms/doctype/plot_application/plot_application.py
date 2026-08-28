@@ -9,7 +9,6 @@ from landms.sales_order_hooks import build_payment_schedule_rows, build_sales_or
 
 
 class PlotApplication(Document):
-
 	# ------------------------------------------------------------------ #
 	#  Validate / Submit / Cancel                                          #
 	# ------------------------------------------------------------------ #
@@ -39,11 +38,8 @@ class PlotApplication(Document):
 			payment_date = today()
 			self.db_set("status", "Paid")
 			self.db_set("payment_date", payment_date)
-			self.db_set("expiry_date",
-			            add_days(payment_date, int(self.validity_days or 7)))
-			if self.plot and frappe.db.get_value(
-				"Plot Master", self.plot, "status"
-			) == "Available":
+			self.db_set("expiry_date", add_days(payment_date, int(self.validity_days or 7)))
+			if self.plot and frappe.db.get_value("Plot Master", self.plot, "status") == "Available":
 				frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
 				self._sync_land_acquisition_summary()
 			self.create_sales_order(notify=0)
@@ -108,9 +104,7 @@ class PlotApplication(Document):
 		"""Draft-time checks: plot must be submitted and Available."""
 		if not self.plot or self.docstatus != 0:
 			return
-		plot_doc = frappe.db.get_value(
-			"Plot Master", self.plot, ["docstatus", "status"], as_dict=True
-		)
+		plot_doc = frappe.db.get_value("Plot Master", self.plot, ["docstatus", "status"], as_dict=True)
 		if not plot_doc or plot_doc.docstatus != 1:
 			frappe.throw(
 				f"Plot {self.plot} has not been submitted yet. "
@@ -136,15 +130,29 @@ class PlotApplication(Document):
 		la = frappe.db.get_value("Plot Master", self.plot, "land_acquisition")
 		if la:
 			self.land_acquisition = la
-			self.acquisition_name = frappe.db.get_value(
-				"Land Acquisition", la, "acquisition_name"
-			) or ""
+			self.acquisition_name = frappe.db.get_value("Land Acquisition", la, "acquisition_name") or ""
 
 	def fill_fee_from_settings(self):
 		settings = frappe.get_single("LandMS Settings")
-		self.application_fee      = flt(settings.application_fee_amount)
+		self.application_fee = flt(settings.application_fee_amount)
 		self.unpaid_validity_days = int(settings.unpaid_application_expiry_days or 3)
-		self.validity_days        = int(settings.application_fee_validity_days or 7)
+		self.validity_days = int(settings.application_fee_validity_days or 7)
+		# Per-plot rule: a plot flagged "No Advance Deadline" grants the FULL
+		# payment window (Payment Completion Days, defined on the Land Acquisition
+		# and snapshotted onto the plot) instead of the standard advance window.
+		if self.plot:
+			plot_rule = frappe.db.get_value(
+				"Plot Master",
+				self.plot,
+				["no_advance_deadline", "payment_completion_days"],
+				as_dict=True,
+			)
+			if (
+				plot_rule
+				and cint(plot_rule.no_advance_deadline)
+				and cint(plot_rule.payment_completion_days) > 0
+			):
+				self.validity_days = cint(plot_rule.payment_completion_days)
 
 	def _lock_plot_row(self):
 		"""Serialize submit/payment operations per plot to reduce race conditions."""
@@ -158,10 +166,10 @@ class PlotApplication(Document):
 		return frappe.db.get_value(
 			"Plot Application",
 			{
-				"plot":      self.plot,
+				"plot": self.plot,
 				"docstatus": 1,
-				"status":    ["in", list(statuses)],
-				"name":      ("!=", self.name),
+				"status": ["in", list(statuses)],
+				"name": ("!=", self.name),
 			},
 			["name", "status"],
 			as_dict=True,
@@ -209,9 +217,7 @@ class PlotApplication(Document):
 		if so.docstatus == 0:
 			# Break the self-referential link first so Frappe does not block
 			# draft SO deletion while this Plot Application is being cancelled.
-			frappe.db.set_value(
-				"Plot Application", self.name, "sales_order", "", update_modified=False
-			)
+			frappe.db.set_value("Plot Application", self.name, "sales_order", "", update_modified=False)
 			self.sales_order = ""
 			frappe.delete_doc("Sales Order", so.name, ignore_permissions=True)
 			return
@@ -286,44 +292,52 @@ class PlotApplication(Document):
 		if not settings.application_fee_item:
 			frappe.throw("Application Fee Item is not configured in LandMS Settings.")
 
-		si = frappe.get_doc({
-			"doctype":      "Sales Invoice",
-			"customer":     self.customer,
-			"posting_date": payment_date,
-			"due_date":     payment_date,
-			"company":      settings.company,
-			"remarks":      f"Application fee for Plot {self.plot} — Application {self.name}",
-			"items": [{
-				"item_code":      settings.application_fee_item,
-				"qty":            1,
-				"rate":           fee_amount,
-				"income_account": settings.application_fee_income_account,
-			}],
-		})
+		si = frappe.get_doc(
+			{
+				"doctype": "Sales Invoice",
+				"customer": self.customer,
+				"posting_date": payment_date,
+				"due_date": payment_date,
+				"company": settings.company,
+				"remarks": f"Application fee for Plot {self.plot} — Application {self.name}",
+				"items": [
+					{
+						"item_code": settings.application_fee_item,
+						"qty": 1,
+						"rate": fee_amount,
+						"income_account": settings.application_fee_income_account,
+					}
+				],
+			}
+		)
 		si.insert(ignore_permissions=True)
 		si.submit()
 
 		# --- Payment Entry (settles the SI immediately) ---
-		pe = frappe.get_doc({
-			"doctype":         "Payment Entry",
-			"payment_type":    "Receive",
-			"posting_date":    payment_date,
-			"company":         settings.company,
-			"party_type":      "Customer",
-			"party":           self.customer,
-			"paid_from":       si.debit_to,
-			"paid_to":         bank_account,
-			"paid_amount":     fee_amount,
-			"received_amount": fee_amount,
-			"reference_no":    reference_no or self.name,
-			"reference_date":  payment_date,
-			"remarks":         f"Plot Application Fee Payment — {self.name} / Plot {self.plot}",
-			"references": [{
-				"reference_doctype": "Sales Invoice",
-				"reference_name":    si.name,
-				"allocated_amount":  fee_amount,
-			}],
-		})
+		pe = frappe.get_doc(
+			{
+				"doctype": "Payment Entry",
+				"payment_type": "Receive",
+				"posting_date": payment_date,
+				"company": settings.company,
+				"party_type": "Customer",
+				"party": self.customer,
+				"paid_from": si.debit_to,
+				"paid_to": bank_account,
+				"paid_amount": fee_amount,
+				"received_amount": fee_amount,
+				"reference_no": reference_no or self.name,
+				"reference_date": payment_date,
+				"remarks": f"Plot Application Fee Payment — {self.name} / Plot {self.plot}",
+				"references": [
+					{
+						"reference_doctype": "Sales Invoice",
+						"reference_name": si.name,
+						"allocated_amount": fee_amount,
+					}
+				],
+			}
+		)
 		pe.insert(ignore_permissions=True)
 		pe.submit()
 
@@ -331,10 +345,10 @@ class PlotApplication(Document):
 
 		self.db_set("sales_invoice", si.name)
 		self.db_set("payment_entry", pe.name)
-		self.db_set("payment_date",  payment_date)
-		self.db_set("reference_no",  reference_no or "")
-		self.db_set("expiry_date",   expiry)
-		self.db_set("status",        "Paid")
+		self.db_set("payment_date", payment_date)
+		self.db_set("reference_no", reference_no or "")
+		self.db_set("expiry_date", expiry)
+		self.db_set("status", "Paid")
 
 		# Lock the plot until first advance is received or the paid window expires.
 		frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
@@ -353,7 +367,8 @@ class PlotApplication(Document):
 
 	def _validate_receiving_account(self, account, company):
 		info = frappe.db.get_value(
-			"Account", account,
+			"Account",
+			account,
 			["name", "company", "account_type", "is_group"],
 			as_dict=True,
 		)
@@ -364,9 +379,7 @@ class PlotApplication(Document):
 		if info.account_type not in ("Bank", "Cash"):
 			frappe.throw(f"{account} is not a Bank/Cash account.")
 		if info.company and info.company != company:
-			frappe.throw(
-				f"Receiving account {account} belongs to company {info.company}, not {company}."
-			)
+			frappe.throw(f"Receiving account {account} belongs to company {info.company}, not {company}.")
 
 	# ------------------------------------------------------------------ #
 	#  Create ERP Sales Order                                              #
@@ -392,12 +405,10 @@ class PlotApplication(Document):
 			self.db_set("sales_order", "")
 
 		if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
-			frappe.throw(
-				"This application has expired. The plot reservation is no longer valid."
-			)
+			frappe.throw("This application has expired. The plot reservation is no longer valid.")
 
 		settings = frappe.get_single("LandMS Settings")
-		plot     = frappe.get_doc("Plot Master", self.plot)
+		plot = frappe.get_doc("Plot Master", self.plot)
 
 		payment_completion_days = cint(plot.payment_completion_days or 0)
 		if payment_completion_days <= 0:
@@ -406,9 +417,7 @@ class PlotApplication(Document):
 		transaction_date = self.payment_date or today()
 		payment_deadline = add_days(transaction_date, payment_completion_days)
 
-		item_row = build_sales_order_item_row(
-			plot, settings.plot_inventory_warehouse, payment_deadline
-		)
+		item_row = build_sales_order_item_row(plot, settings.plot_inventory_warehouse, payment_deadline)
 		payment_schedule_rows = build_payment_schedule_rows(
 			total_amount=flt(plot.selling_price),
 			booking_fee_percent=flt(plot.booking_fee_percent),
@@ -416,26 +425,28 @@ class PlotApplication(Document):
 			payment_deadline=payment_deadline,
 		)
 
-		so = frappe.get_doc({
-			"doctype":                  "Sales Order",
-			"company":                  settings.company,
-			"customer":                 self.customer,
-			"transaction_date":         transaction_date,
-			"delivery_date":            payment_deadline,
-			"set_warehouse":            settings.plot_inventory_warehouse,
-			"ignore_default_payment_terms_template": 1,
-			# Custom fields (fixtures in Phase 1):
-			"plot":                     plot.name,
-			"land_acquisition":         plot.land_acquisition,
-			"acquisition_name":         plot.acquisition_name,
-			"plot_application":         self.name,
-			"booking_fee_percent":      flt(plot.booking_fee_percent),
-			"government_share_percent": flt(plot.government_share_percent),
-			"payment_completion_days":  payment_completion_days,
-			"payment_deadline":         payment_deadline,
-			"payment_schedule":         payment_schedule_rows,
-			"items":                    [item_row],
-		})
+		so = frappe.get_doc(
+			{
+				"doctype": "Sales Order",
+				"company": settings.company,
+				"customer": self.customer,
+				"transaction_date": transaction_date,
+				"delivery_date": payment_deadline,
+				"set_warehouse": settings.plot_inventory_warehouse,
+				"ignore_default_payment_terms_template": 1,
+				# Custom fields (fixtures in Phase 1):
+				"plot": plot.name,
+				"land_acquisition": plot.land_acquisition,
+				"acquisition_name": plot.acquisition_name,
+				"plot_application": self.name,
+				"booking_fee_percent": flt(plot.booking_fee_percent),
+				"government_share_percent": flt(plot.government_share_percent),
+				"payment_completion_days": payment_completion_days,
+				"payment_deadline": payment_deadline,
+				"payment_schedule": payment_schedule_rows,
+				"items": [item_row],
+			}
+		)
 		so.insert(ignore_permissions=True)
 
 		self.db_set("sales_order", so.name)

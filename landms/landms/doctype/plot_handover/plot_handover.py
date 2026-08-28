@@ -7,7 +7,6 @@ from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 
 
 class PlotHandover(Document):
-
 	def before_validate(self):
 		self._fill_from_contract()
 		self._fill_company_representative()
@@ -180,20 +179,21 @@ class PlotHandover(Document):
 		if not serial_no:
 			return
 
-		inv_warehouse = frappe.db.get_single_value(
-			"LandMS Settings", "plot_inventory_warehouse"
-		)
-		sn_data = frappe.db.get_value(
-			"Serial No", serial_no, ["status", "warehouse"], as_dict=True
-		)
+		inv_warehouse = frappe.db.get_single_value("LandMS Settings", "plot_inventory_warehouse")
+		sn_data = frappe.db.get_value("Serial No", serial_no, ["status", "warehouse"], as_dict=True)
 		if not sn_data:
 			return
 
 		if sn_data.status != "Active" or sn_data.warehouse != inv_warehouse:
-			frappe.db.set_value("Serial No", serial_no, {
-				"status": "Active",
-				"warehouse": inv_warehouse,
-			}, update_modified=False)
+			frappe.db.set_value(
+				"Serial No",
+				serial_no,
+				{
+					"status": "Active",
+					"warehouse": inv_warehouse,
+				},
+				update_modified=False,
+			)
 
 	def _cancel_delivery_note(self):
 		if not self.delivery_note or not frappe.db.exists("Delivery Note", self.delivery_note):
@@ -222,7 +222,9 @@ def get_logged_in_representative_details():
 	)
 
 	return {
-		"handed_over_by": (employee.employee_name if employee and employee.employee_name else get_fullname(user) or "").strip(),
+		"handed_over_by": (
+			employee.employee_name if employee and employee.employee_name else get_fullname(user) or ""
+		).strip(),
 		"handed_over_by_title": (employee.designation if employee and employee.designation else "").strip(),
 	}
 

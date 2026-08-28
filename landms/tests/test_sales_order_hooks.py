@@ -13,22 +13,28 @@ from landms.tcb import is_valid_tcb_mobile
 
 
 class TestDraftPlotContractSync(FrappeTestCase):
-	def _make_source_doc(self, *, control_number="9991145330056", payment_amounts=None, apply_auto_cancellation=1):
+	def _make_source_doc(
+		self, *, control_number="9991145330056", payment_amounts=None, apply_auto_cancellation=1
+	):
 		payment_amounts = payment_amounts or [200.0, 800.0]
-		return frappe._dict({
-			"control_number": control_number,
-			"plot_application": "PAPP-0001",
-			"payment_deadline": "2026-04-30",
-			"apply_auto_cancellation": apply_auto_cancellation,
-			"payment_schedule": [
-				frappe._dict({
-					"description": "Advance" if idx == 1 else "Balance",
-					"due_date": "2026-04-14" if idx == 1 else "2026-04-30",
-					"payment_amount": amount,
-				})
-				for idx, amount in enumerate(payment_amounts, start=1)
-			],
-		})
+		return frappe._dict(
+			{
+				"control_number": control_number,
+				"plot_application": "PAPP-0001",
+				"payment_deadline": "2026-04-30",
+				"apply_auto_cancellation": apply_auto_cancellation,
+				"payment_schedule": [
+					frappe._dict(
+						{
+							"description": "Advance" if idx == 1 else "Balance",
+							"due_date": "2026-04-14" if idx == 1 else "2026-04-30",
+							"payment_amount": amount,
+						}
+					)
+					for idx, amount in enumerate(payment_amounts, start=1)
+				],
+			}
+		)
 
 	def _make_contract_doc(self, source_doc):
 		contract = frappe.new_doc("Plot Contract")
@@ -121,21 +127,27 @@ class TestLandMsPaymentScheduleTerms(FrappeTestCase):
 		self.assertEqual(rows[0]["payment_term"], "Advance")
 
 	def test_pe_references_allocate_to_invoice_terms_in_order(self):
-		si = frappe._dict({
-			"name": "ACC-SINV-TEST-0001",
-			"payment_schedule": [
-				frappe._dict({
-					"idx": 1,
-					"payment_term": "Advance",
-					"outstanding": 0.3,
-				}),
-				frappe._dict({
-					"idx": 2,
-					"payment_term": "Balance",
-					"outstanding": 2.7,
-				}),
-			],
-		})
+		si = frappe._dict(
+			{
+				"name": "ACC-SINV-TEST-0001",
+				"payment_schedule": [
+					frappe._dict(
+						{
+							"idx": 1,
+							"payment_term": "Advance",
+							"outstanding": 0.3,
+						}
+					),
+					frappe._dict(
+						{
+							"idx": 2,
+							"payment_term": "Balance",
+							"outstanding": 2.7,
+						}
+					),
+				],
+			}
+		)
 
 		refs = _build_pe_references_for_invoice(si, 1.0)
 
@@ -146,15 +158,22 @@ class TestLandMsPaymentScheduleTerms(FrappeTestCase):
 		self.assertEqual(flt(refs[1]["allocated_amount"]), 0.7)
 
 	def test_pe_references_fall_back_when_invoice_has_no_schedule(self):
-		si = frappe._dict({
-			"name": "ACC-SINV-TEST-0002",
-			"payment_schedule": [],
-		})
+		si = frappe._dict(
+			{
+				"name": "ACC-SINV-TEST-0002",
+				"payment_schedule": [],
+			}
+		)
 
 		refs = _build_pe_references_for_invoice(si, 2.5)
 
-		self.assertEqual(refs, [{
-			"reference_doctype": "Sales Invoice",
-			"reference_name": "ACC-SINV-TEST-0002",
-			"allocated_amount": 2.5,
-		}])
+		self.assertEqual(
+			refs,
+			[
+				{
+					"reference_doctype": "Sales Invoice",
+					"reference_name": "ACC-SINV-TEST-0002",
+					"allocated_amount": 2.5,
+				}
+			],
+		)
