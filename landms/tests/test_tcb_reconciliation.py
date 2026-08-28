@@ -1,13 +1,13 @@
 from unittest.mock import MagicMock, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import tcb
 from landms.landms.doctype.tcb_reconciliation_log import tcb_reconciliation_log
 
 
-class TestReconciliationStopControl(FrappeTestCase):
+class TestReconciliationStopControl(IntegrationTestCase):
 	@patch("landms.tcb.create_tcb_api_log")
 	@patch("landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.frappe.db.commit")
 	@patch("landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.frappe.get_doc")
@@ -49,3 +49,33 @@ class TestReconciliationStopControl(FrappeTestCase):
 		self.assertEqual(result["status"], "Stopped")
 		mock_update.assert_called_once()
 		mock_create_log.assert_called_once()
+
+
+class TestRunEntrypoint(IntegrationTestCase):
+	@patch("landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.frappe.get_doc")
+	def test_run_delegates_to_execute_run_on_the_doc(self, mock_get_doc):
+		doc = MagicMock()
+		doc._execute_run.return_value = {"ok": True, "status": "Queued"}
+		mock_get_doc.return_value = doc
+
+		result = tcb_reconciliation_log.run("TCB-RECON-2026-000012")
+
+		self.assertEqual(result, {"ok": True, "status": "Queued"})
+		mock_get_doc.assert_called_once_with("TCB Reconciliation Log", "TCB-RECON-2026-000012")
+
+	@patch(
+		"landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log._log_reconciliation_endpoint_failure"
+	)
+	@patch("landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.frappe.get_doc")
+	def test_run_logs_and_reraises_on_failure(self, mock_get_doc, mock_log_failure):
+		doc = MagicMock()
+		doc._execute_run.side_effect = frappe.ValidationError(
+			"Cannot run a reconciliation log that is Running."
+		)
+		mock_get_doc.return_value = doc
+
+		with self.assertRaises(frappe.ValidationError):
+			tcb_reconciliation_log.run("TCB-RECON-2026-000013")
+
+		mock_log_failure.assert_called_once()
+		self.assertEqual(mock_log_failure.call_args.kwargs["action"], "run")
