@@ -22,12 +22,15 @@ def get_columns():
 
 def get_metrics():
 	# ── Plot counts ──────────────────────────────────────────────────────
-	plot_counts = frappe.db.sql("""
+	plot_counts = frappe.db.sql(
+		"""
 		SELECT status, COUNT(name) AS cnt
 		FROM `tabPlot Master`
 		WHERE docstatus = 1
 		GROUP BY status
-	""", as_dict=True)
+	""",
+		as_dict=True,
+	)
 	plot_map = {r.status: r.cnt for r in plot_counts}
 	available = plot_map.get("Available", 0)
 	pending_fee = plot_map.get("Pending Fee", 0)
@@ -38,7 +41,8 @@ def get_metrics():
 	total_plots = sum(plot_map.values())
 
 	# ── Contract financials ───────────────────────────────────────────────
-	fin = frappe.db.sql("""
+	fin = frappe.db.sql(
+		"""
 		SELECT
 			COUNT(name) AS contracts_total,
 			SUM(CASE WHEN contract_status = 'Draft' THEN 1 ELSE 0 END) AS draft_contracts,
@@ -53,25 +57,33 @@ def get_metrics():
 			SUM(CASE WHEN contract_status IN ('Ongoing','Overdue','Completed') THEN selling_price ELSE 0 END) AS active_pipeline
 		FROM `tabPlot Contract`
 		WHERE docstatus = 1
-	""", as_dict=True)[0]
+	""",
+		as_dict=True,
+	)[0]
 
 	# ── COGS on completed plots ─────────────────────────────────────────
-	cogs_row = frappe.db.sql("""
+	cogs_row = frappe.db.sql(
+		"""
 		SELECT SUM(pm.allocated_cost) AS total_cogs
 		FROM `tabPlot Contract` pc
 		INNER JOIN `tabPlot Master` pm ON pm.name = pc.plot
 		WHERE pc.docstatus = 1 AND pc.contract_status = 'Completed'
-	""", as_dict=True)[0]
+	""",
+		as_dict=True,
+	)[0]
 
 	# ── Draft contracts (docstatus = 0) — invisible to the docstatus=1 query above.
 	#    These are reserved plots awaiting the first advance; some carry partial advances. ──
-	draft = frappe.db.sql("""
+	draft = frappe.db.sql(
+		"""
 		SELECT COUNT(name)                  AS cnt,
 		       COALESCE(SUM(total_paid), 0)    AS paid,
 		       COALESCE(SUM(selling_price), 0) AS value
 		FROM `tabPlot Contract`
 		WHERE docstatus = 0
-	""", as_dict=True)[0]
+	""",
+		as_dict=True,
+	)[0]
 
 	# ── CUMULATIVE government share collected: the government 28.5% share is posted as a
 	#    JE on EVERY plot payment. This is a running total across all payments, not a
@@ -83,7 +95,8 @@ def get_metrics():
 	#    The lms_payment_entry filter keeps only real per-payment JEs and excludes the
 	#    one-time historical correction so it never inflates this figure.
 	govt_payable_account = frappe.db.get_single_value("LandMS Settings", "government_payable_account")
-	govt_liab = frappe.db.sql("""
+	govt_liab = frappe.db.sql(
+		"""
 		SELECT COALESCE(SUM(jea.credit_in_account_currency), 0) AS total
 		FROM `tabJournal Entry` je
 		INNER JOIN `tabJournal Entry Account` jea
@@ -93,7 +106,10 @@ def get_metrics():
 		  AND je.lms_payment_entry != ''
 		  AND jea.account = %(govt_payable_account)s
 		  AND jea.credit_in_account_currency > 0
-	""", {"govt_payable_account": govt_payable_account}, as_dict=True)[0]
+	""",
+		{"govt_payable_account": govt_payable_account},
+		as_dict=True,
+	)[0]
 
 	draft_paid = flt(draft.paid)
 	# Cash Collected = all cash received (active contracts + advances on draft contracts).
@@ -102,8 +118,8 @@ def get_metrics():
 	deferred = flt(fin.deferred_revenue) + draft_paid
 	active_pipeline = flt(fin.active_pipeline)
 	recognized_gross = flt(fin.recognized_gross)
-	govt_on_completed = flt(fin.govt_fees)   # govt share on completed contracts → nets recognized revenue
-	govt_payable = flt(govt_liab.total)      # true accrued govt liability across all payments
+	govt_on_completed = flt(fin.govt_fees)  # govt share on completed contracts → nets recognized revenue
+	govt_payable = flt(govt_liab.total)  # true accrued govt liability across all payments
 	revenue_recog = recognized_gross - govt_on_completed
 	cogs = flt(cogs_row.total_cogs)
 	gross_margin = revenue_recog - cogs
@@ -272,13 +288,13 @@ def get_data(metrics):
 def get_chart(metrics):
 	return {
 		"data": {
-				"labels": [
-					"Available Plots",
-					"Pending Fee Plots",
-					"Pending Advance Plots",
-					"Reserved Plots",
-					"Ready for Handover",
-					"Delivered Plots",
+			"labels": [
+				"Available Plots",
+				"Pending Fee Plots",
+				"Pending Advance Plots",
+				"Reserved Plots",
+				"Ready for Handover",
+				"Delivered Plots",
 				"Draft Contracts",
 				"Ongoing Contracts",
 				"Overdue Contracts",

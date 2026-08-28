@@ -1,4 +1,5 @@
 import frappe
+
 from landms.landms.doctype.land_acquisition.land_acquisition import sync_land_acquisition_cost_summary
 
 

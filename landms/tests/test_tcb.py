@@ -15,7 +15,6 @@ from landms.landms.doctype.tcb_control_number.tcb_control_number import (
 	ALLOWED_TRANSITIONS,
 )
 
-
 DEFAULT_PATTERN = "99911####00##"
 
 
@@ -33,8 +32,8 @@ class TestControlNumberPattern(FrappeTestCase):
 		self.assertTrue(tcb.is_valid_control_number("9991100000000", pattern=DEFAULT_PATTERN))
 
 	def test_validator_rejects_wrong_length(self):
-		self.assertFalse(tcb.is_valid_control_number("999114379008", pattern=DEFAULT_PATTERN))   # 12
-		self.assertFalse(tcb.is_valid_control_number("99911437900870", pattern=DEFAULT_PATTERN)) # 14
+		self.assertFalse(tcb.is_valid_control_number("999114379008", pattern=DEFAULT_PATTERN))  # 12
+		self.assertFalse(tcb.is_valid_control_number("99911437900870", pattern=DEFAULT_PATTERN))  # 14
 
 	def test_validator_rejects_wrong_prefix(self):
 		self.assertFalse(tcb.is_valid_control_number("8881143790087", pattern=DEFAULT_PATTERN))
@@ -63,8 +62,10 @@ class TestControlNumberGenerator(FrappeTestCase):
 	def test_generator_produces_valid_default(self):
 		for _ in range(10):
 			cn = tcb.generate_control_number(pattern=DEFAULT_PATTERN)
-			self.assertTrue(tcb.is_valid_control_number(cn, pattern=DEFAULT_PATTERN),
-			                f"generated {cn} does not match default pattern")
+			self.assertTrue(
+				tcb.is_valid_control_number(cn, pattern=DEFAULT_PATTERN),
+				f"generated {cn} does not match default pattern",
+			)
 			self.assertEqual(len(cn), 13)
 			self.assertTrue(cn.startswith("99911"))
 			self.assertEqual(cn[9:11], "00")
@@ -82,7 +83,8 @@ class TestControlNumberGenerator(FrappeTestCase):
 		for pos in positions:
 			values = {s[pos] for s in samples}
 			self.assertGreater(
-				len(values), 1,
+				len(values),
+				1,
 				f"position {pos} produced the same digit across 20 samples — generator is not random",
 			)
 
@@ -125,7 +127,6 @@ class TestSettingsAccess(FrappeTestCase):
 		result = tcb.decline_reference_for_sales_order("DUMMY-SO", "")
 		self.assertTrue(result["ok"])
 		self.assertEqual(result["status"], "Ignored")
-
 
 
 class TestPatternRegexEscape(FrappeTestCase):
