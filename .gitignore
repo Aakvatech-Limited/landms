@@ -60,6 +60,9 @@ ehthumbs.db
 .git/refs/
 .git/logs/
 
+# Cloned by the frappe-semgrep-rules pre-commit hook
+frappe-semgrep-rules/
+
 # Secrets - Never commit these!
 *.env
 .env.*
