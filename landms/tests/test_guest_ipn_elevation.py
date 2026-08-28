@@ -18,7 +18,7 @@ green once the elevation wraps the build.
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import payment_sync, sales_order_hooks
 
@@ -28,7 +28,7 @@ class _BuildReached(Exception):
 	frappe.session.user without faking a whole Sales Invoice."""
 
 
-class TestGuestIpnElevation(FrappeTestCase):
+class TestGuestIpnElevation(IntegrationTestCase):
 	def setUp(self):
 		self._orig_user = frappe.session.user
 		self.addCleanup(lambda: frappe.set_user(self._orig_user))
