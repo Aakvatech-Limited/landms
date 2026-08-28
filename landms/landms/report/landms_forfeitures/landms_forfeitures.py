@@ -138,7 +138,7 @@ def get_data(filters):
 		# Govt share = whatever of Total Paid is left after the company's net forfeit
 		# and the customer's refund. (Pre-fix forfeitures posted gross, so this is 0.)
 		r["govt_share"] = max(0.0, r["total_paid"] - r["forfeited"] - r["refund_due"])
-	rows.sort(key=lambda r: (r.get("date") or ""), reverse=True)
+	rows.sort(key=lambda r: r.get("date") or "", reverse=True)
 	return rows
 
 
