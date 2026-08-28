@@ -220,7 +220,7 @@ function render_je_table(frm, fieldname, rows, empty_message) {
   const escape_html = (v) => frappe.utils.escape_html(String(v || ""));
   const fmt = (v) => format_currency(v || 0, "TZS");
   const link = (name) =>
-    `<a href="/app/journal-entry/${encodeURIComponent(
+    `<a href="/desk/journal-entry/${encodeURIComponent(
       name
     )}" target="_blank">${escape_html(name)}</a>`;
 
@@ -341,7 +341,7 @@ function render_supplier_table(frm, fieldname, rows, empty_message) {
 function build_drilldown_links(row) {
   const escape_html = (v) => frappe.utils.escape_html(String(v || ""));
   const link = (doctype, name) =>
-    `<a href="/app/${doctype}/${encodeURIComponent(
+    `<a href="/desk/${doctype}/${encodeURIComponent(
       name
     )}" target="_blank">${escape_html(name)}</a>`;
 
