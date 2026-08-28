@@ -48,6 +48,24 @@ GENERATION_RETRIES = 20
 TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
 
 
+def _commit_if_not_in_hook() -> None:
+	"""Commit now, unless a document hook is currently running.
+
+	Frappe wraps doc_events handlers with `frappe.db._disable_transaction_control`,
+	so `frappe.db.commit()` called from inside one (e.g. via before_submit_sales_order
+	/ before_cancel_sales_order) is a silent no-op — it can no longer make a bank
+	call durable against a later rollback in the same document lifecycle. Skip the
+	no-op call and log the gap instead of pretending it committed.
+	"""
+	if frappe.db._disable_transaction_control:
+		frappe.logger("landms").warning(
+			"Skipped frappe.db.commit() inside a document hook; the change just made "
+			"is not protected against a later rollback in this request."
+		)
+		return
+	frappe.db.commit()
+
+
 # ---------------------------------------------------------------------- #
 #  Pattern handling                                                        #
 # ---------------------------------------------------------------------- #
@@ -572,8 +590,9 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 				# the number is live at the bank, and a retry would register a SECOND
 				# number. Committing on success makes the already-registered short-circuit
 				# on retry trustworthy. Only commit on success — a failure has nothing
-				# live at the bank to remember.
-				frappe.db.commit()
+				# live at the bank to remember. See _commit_if_not_in_hook for why this
+				# is a no-op when called from before_submit_sales_order.
+				_commit_if_not_in_hook()
 			else:
 				registry.mark_failed(
 					log_name=log_name,
@@ -791,7 +810,9 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 				# 'Registered' while the number is dead at the bank, and a retry re-declines
 				# it — TCB rejects the double-decline and the order jams permanently.
 				# Committing on success makes the already-declined short-circuit trustworthy.
-				frappe.db.commit()
+				# See _commit_if_not_in_hook for why this is a no-op when called from
+				# before_cancel_sales_order.
+				_commit_if_not_in_hook()
 			else:
 				registry.append_log(
 					log_name,
@@ -1582,7 +1603,7 @@ def create_tcb_api_log(
 			}
 		)
 		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
+		_commit_if_not_in_hook()
 		return doc.name
 	except Exception:
 		frappe.logger("landms").error(
