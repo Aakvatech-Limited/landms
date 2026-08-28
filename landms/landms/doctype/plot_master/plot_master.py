@@ -7,9 +7,7 @@ from landms.landms.doctype.land_acquisition.land_acquisition import (
 )
 
 
-
 class PlotMaster(Document):
-
 	def validate(self):
 		self.validate_land_acquisition()
 		self.fill_acquisition_name()
@@ -35,9 +33,9 @@ class PlotMaster(Document):
 		if not self.land_acquisition:
 			self.acquisition_name = ""
 			return
-		self.acquisition_name = frappe.db.get_value(
-			"Land Acquisition", self.land_acquisition, "acquisition_name"
-		) or ""
+		self.acquisition_name = (
+			frappe.db.get_value("Land Acquisition", self.land_acquisition, "acquisition_name") or ""
+		)
 
 	def fill_sales_defaults(self):
 		"""Snapshot the sales-default fields from the LA so they survive
@@ -49,29 +47,35 @@ class PlotMaster(Document):
 			self.selling_price_per_sqm = 0
 			return
 
-		la = frappe.db.get_value(
-			"Land Acquisition",
-			self.land_acquisition,
-			["booking_fee_percent", "government_share_percent", "payment_completion_days"],
-			as_dict=True,
-		) or {}
+		la = (
+			frappe.db.get_value(
+				"Land Acquisition",
+				self.land_acquisition,
+				["booking_fee_percent", "government_share_percent", "payment_completion_days"],
+				as_dict=True,
+			)
+			or {}
+		)
 
-		self.booking_fee_percent      = flt(la.get("booking_fee_percent"))
+		self.booking_fee_percent = flt(la.get("booking_fee_percent"))
 		self.government_share_percent = flt(la.get("government_share_percent"))
-		self.payment_completion_days  = int(la.get("payment_completion_days") or 0)
-		self.selling_price_per_sqm    = get_plot_type_selling_rate(self.land_acquisition, self.plot_type)
+		self.payment_completion_days = int(la.get("payment_completion_days") or 0)
+		self.selling_price_per_sqm = get_plot_type_selling_rate(self.land_acquisition, self.plot_type)
 
 	def fill_location_coordinates(self):
 		"""If the plot has no coordinates, fall back to the LA's coordinates."""
 		if not self.land_acquisition:
 			return
 
-		coords = frappe.db.get_value(
-			"Land Acquisition",
-			self.land_acquisition,
-			["latitude", "longitude"],
-			as_dict=True,
-		) or {}
+		coords = (
+			frappe.db.get_value(
+				"Land Acquisition",
+				self.land_acquisition,
+				["latitude", "longitude"],
+				as_dict=True,
+			)
+			or {}
+		)
 
 		if self.latitude in (None, "", 0) and coords.get("latitude") not in (None, "", 0):
 			self.latitude = flt(coords.get("latitude"))
@@ -90,16 +94,13 @@ class PlotMaster(Document):
 
 		la = frappe.get_doc("Land Acquisition", self.land_acquisition)
 		total_sqm = flt(la.total_area_sqm)
-		plot_sqm  = flt(self.plot_size_sqm)
+		plot_sqm = flt(self.plot_size_sqm)
 
 		self.cost_per_sqm = 0
 		self.allocated_cost = 0
 
 		if flt(la.acquisition_cost_tzs) > 0 and total_sqm > 0:
-			self.cost_per_sqm = (
-				flt(la.get("cost_per_sqm_tzs"))
-				or (flt(la.acquisition_cost_tzs) / total_sqm)
-			)
+			self.cost_per_sqm = flt(la.get("cost_per_sqm_tzs")) or (flt(la.acquisition_cost_tzs) / total_sqm)
 			if plot_sqm > 0:
 				self.allocated_cost = self.cost_per_sqm * plot_sqm
 
@@ -113,26 +114,26 @@ class PlotMaster(Document):
 	def _fill_govt_fees(self, plot_sqm):
 		land_rent_rate = flt(frappe.db.get_value("Plot Type", self.plot_type, "land_rent_rate"))
 		settings = frappe.get_single("LandMS Settings")
-		appl      = flt(settings.govt_appl_fee_amount) or 5000
-		reg_fee   = flt(settings.govt_registration_fee_amount) or 25000
+		appl = flt(settings.govt_appl_fee_amount) or 5000
+		reg_fee = flt(settings.govt_registration_fee_amount) or 25000
 		prem_rate = flt(settings.govt_premium_rate) or 0.0025
 
-		self.land_rent_rate      = land_rent_rate
-		self.land_rent           = flt(land_rent_rate * plot_sqm)
+		self.land_rent_rate = land_rent_rate
+		self.land_rent = flt(land_rent_rate * plot_sqm)
 		self.govt_application_fee = appl
-		self.premium             = flt(prem_rate * flt(self.selling_price))
+		self.premium = flt(prem_rate * flt(self.selling_price))
 		self.registration_prep_fee = flt(0.2 * self.land_rent)
 		self.govt_registration_fee = reg_fee
-		self.stamp_duty          = flt(((self.land_rent - 2000) / 20) + 500) if self.land_rent > 0 else 0
-		self.total_govt_fees     = flt(
-			self.govt_application_fee +
-			self.premium +
-			self.land_rent +
-			self.registration_prep_fee +
-			self.govt_registration_fee +
-			self.stamp_duty
+		self.stamp_duty = flt(((self.land_rent - 2000) / 20) + 500) if self.land_rent > 0 else 0
+		self.total_govt_fees = flt(
+			self.govt_application_fee
+			+ self.premium
+			+ self.land_rent
+			+ self.registration_prep_fee
+			+ self.govt_registration_fee
+			+ self.stamp_duty
 		)
-		self.total_plot_amount   = flt(self.selling_price) + self.total_govt_fees
+		self.total_plot_amount = flt(self.selling_price) + self.total_govt_fees
 
 	def validate_coordinate_pair(self):
 		"""Either both lat/lon are set, or both are blank."""
@@ -202,12 +203,14 @@ class PlotMaster(Document):
 		# runs on Stock Entry insert (i.e. *before* on_submit), so the Serial No
 		# must already exist by the time we hand it to the SE.
 		if not frappe.db.exists("Serial No", serial_number):
-			frappe.get_doc({
-				"doctype":   "Serial No",
-				"serial_no": serial_number,
-				"item_code": item_code,
-				"company":   settings.company,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Serial No",
+					"serial_no": serial_number,
+					"item_code": item_code,
+					"company": settings.company,
+				}
+			).insert(ignore_permissions=True)
 
 		se = frappe.get_doc(
 			_build_plot_stock_entry_doc(
@@ -225,7 +228,7 @@ class PlotMaster(Document):
 		se.submit()
 
 		self.db_set("stock_entry", se.name)
-		self.db_set("serial_no",   serial_number)
+		self.db_set("serial_no", serial_number)
 
 		frappe.msgprint(
 			f"Plot entered inventory. Stock Entry: {se.name} | Serial No: {serial_number}",
@@ -314,10 +317,13 @@ def get_plot_types_for_la(doctype, txt, searchfield, start, page_len, filters):
 	la = filters.get("land_acquisition") if isinstance(filters, dict) else None
 	if not la:
 		return []
-	return frappe.db.sql("""
+	return frappe.db.sql(
+		"""
 		SELECT DISTINCT plot_type
 		FROM `tabLand Acquisition Plot Type Rate`
 		WHERE parent = %s AND plot_type LIKE %s
 		ORDER BY plot_type
 		LIMIT %s OFFSET %s
-	""", (la, f"%{txt}%", page_len, start))
+	""",
+		(la, f"%{txt}%", page_len, start),
+	)

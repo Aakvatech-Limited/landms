@@ -38,15 +38,17 @@ class TestApplicationAndContractDeadlines(FrappeTestCase):
 		mock_logger,
 	):
 		mock_get_all.return_value = [
-			frappe._dict({
-				"name": "CTR-TEST-0001",
-				"sales_order": "SAL-ORD-TEST-0001",
-				"plot": "PLT-TEST-0001",
-				"customer": "Ekta",
-				"contract_status": "Ongoing",
-				"apply_auto_cancellation": 1,
-				"payment_deadline": "2026-04-01",
-			})
+			frappe._dict(
+				{
+					"name": "CTR-TEST-0001",
+					"sales_order": "SAL-ORD-TEST-0001",
+					"plot": "PLT-TEST-0001",
+					"customer": "Ekta",
+					"contract_status": "Ongoing",
+					"apply_auto_cancellation": 1,
+					"payment_deadline": "2026-04-01",
+				}
+			)
 		]
 		mock_exists.return_value = True
 		mock_get_value.return_value = 0
@@ -54,10 +56,12 @@ class TestApplicationAndContractDeadlines(FrappeTestCase):
 
 		tasks.auto_process_overdue_plot_contracts()
 
-		mock_set_value.assert_has_calls([
-			call("Plot Contract", "CTR-TEST-0001", "apply_auto_cancellation", 0, update_modified=False),
-			call("Plot Contract", "CTR-TEST-0001", "contract_status", "Overdue", update_modified=True),
-		])
+		mock_set_value.assert_has_calls(
+			[
+				call("Plot Contract", "CTR-TEST-0001", "apply_auto_cancellation", 0, update_modified=False),
+				call("Plot Contract", "CTR-TEST-0001", "contract_status", "Overdue", update_modified=True),
+			]
+		)
 		mock_commit.assert_called_once()
 
 	@patch("landms.tasks.frappe.logger")
@@ -78,15 +82,17 @@ class TestApplicationAndContractDeadlines(FrappeTestCase):
 		mock_logger,
 	):
 		mock_get_all.return_value = [
-			frappe._dict({
-				"name": "CTR-TEST-0002",
-				"sales_order": "SAL-ORD-TEST-0002",
-				"plot": "PLT-TEST-0002",
-				"customer": "Innocent",
-				"contract_status": "Ongoing",
-				"apply_auto_cancellation": 0,
-				"payment_deadline": "2026-04-01",
-			})
+			frappe._dict(
+				{
+					"name": "CTR-TEST-0002",
+					"sales_order": "SAL-ORD-TEST-0002",
+					"plot": "PLT-TEST-0002",
+					"customer": "Innocent",
+					"contract_status": "Ongoing",
+					"apply_auto_cancellation": 0,
+					"payment_deadline": "2026-04-01",
+				}
+			)
 		]
 		mock_exists.return_value = True
 		mock_get_value.return_value = 1

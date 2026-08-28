@@ -2,9 +2,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now
 
-
 RUN_ENDPOINT = "/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.run"
-REQUEST_STOP_ENDPOINT = "/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.request_stop"
+REQUEST_STOP_ENDPOINT = (
+	"/api/method/landms.landms.doctype.tcb_reconciliation_log.tcb_reconciliation_log.request_stop"
+)
 
 
 def _log_reconciliation_endpoint_failure(*, endpoint: str, action: str, name: str, error: str) -> None:
@@ -102,7 +103,8 @@ class TCBReconciliationLog(Document):
 		if self.status not in ("Draft", "Failed", "Stopped"):
 			frappe.throw(f"Cannot run a reconciliation log that is already {self.status}.")
 
-		self.db_set({
+		self.db_set(
+			{
 				"status": "Running",
 				"started_at": now(),
 				"completed_at": None,
@@ -116,7 +118,9 @@ class TCBReconciliationLog(Document):
 				"stop_requested": 0,
 				"stop_requested_at": None,
 				"stop_requested_by": "",
-			}, update_modified=True)
+			},
+			update_modified=True,
+		)
 		frappe.db.commit()
 
 		from landms.tcb import create_tcb_api_log
@@ -151,12 +155,15 @@ class TCBReconciliationLog(Document):
 		if self.stop_requested:
 			return {"ok": True, "status": "Ignored", "message": "Stop already requested."}
 
-		self.db_set({
-			"stop_requested": 1,
-			"stop_requested_at": now(),
-			"stop_requested_by": frappe.session.user,
-			"message": "Stop requested. The job will stop after the current step finishes.",
-		}, update_modified=True)
+		self.db_set(
+			{
+				"stop_requested": 1,
+				"stop_requested_at": now(),
+				"stop_requested_by": frappe.session.user,
+				"message": "Stop requested. The job will stop after the current step finishes.",
+			},
+			update_modified=True,
+		)
 		frappe.db.commit()
 
 		from landms.tcb import create_tcb_api_log

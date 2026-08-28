@@ -28,9 +28,12 @@ class TestPlotContractPaymentSyncPersistence(FrappeTestCase):
 		contract.payment_progress = "Advance Paid"
 		contract.contract_status = "Ongoing"
 
-		with patch("landms.landms.doctype.plot_contract.plot_contract.frappe.db.set_value") as mock_set_value, patch(
-			"landms.landms.doctype.plot_contract.plot_contract.frappe.clear_document_cache"
-		) as mock_clear_cache:
+		with (
+			patch("landms.landms.doctype.plot_contract.plot_contract.frappe.db.set_value") as mock_set_value,
+			patch(
+				"landms.landms.doctype.plot_contract.plot_contract.frappe.clear_document_cache"
+			) as mock_clear_cache,
+		):
 			contract._persist_payment_sync_state()
 
 		mock_set_value.assert_called_once_with(

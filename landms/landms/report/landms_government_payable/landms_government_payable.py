@@ -13,18 +13,42 @@ def execute(filters=None):
 
 def get_columns():
 	return [
-		{"label": "Date",            "fieldname": "posting_date",   "fieldtype": "Date",   "width": 110},
-		{"label": "Journal Entry",   "fieldname": "journal_entry",  "fieldtype": "Link",   "options": "Journal Entry",   "width": 180},
-		{"label": "Payment Entry",   "fieldname": "payment_entry",  "fieldtype": "Link",   "options": "Payment Entry",   "width": 180},
-		{"label": "Land Acquisition","fieldname": "land_acquisition","fieldtype": "Link",   "options": "Land Acquisition","width": 180},
-		{"label": "Customer",        "fieldname": "customer",        "fieldtype": "Link",   "options": "Customer",        "width": 200},
-		{"label": "Govt Share (TZS)","fieldname": "govt_amount",    "fieldtype": "Currency",                              "width": 170},
+		{"label": "Date", "fieldname": "posting_date", "fieldtype": "Date", "width": 110},
+		{
+			"label": "Journal Entry",
+			"fieldname": "journal_entry",
+			"fieldtype": "Link",
+			"options": "Journal Entry",
+			"width": 180,
+		},
+		{
+			"label": "Payment Entry",
+			"fieldname": "payment_entry",
+			"fieldtype": "Link",
+			"options": "Payment Entry",
+			"width": 180,
+		},
+		{
+			"label": "Land Acquisition",
+			"fieldname": "land_acquisition",
+			"fieldtype": "Link",
+			"options": "Land Acquisition",
+			"width": 180,
+		},
+		{
+			"label": "Customer",
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"options": "Customer",
+			"width": 200,
+		},
+		{"label": "Govt Share (TZS)", "fieldname": "govt_amount", "fieldtype": "Currency", "width": 170},
 	]
 
 
 def get_data(filters):
-	from_date       = filters.get("from_date")
-	to_date         = filters.get("to_date")
+	from_date = filters.get("from_date")
+	to_date = filters.get("to_date")
 	land_acquisition = filters.get("land_acquisition")
 
 	# CUMULATIVE government share collected — the total government 28.5% share across
@@ -63,7 +87,8 @@ def get_data(filters):
 
 	where = " AND ".join(conditions)
 
-	rows = frappe.db.sql(f"""
+	rows = frappe.db.sql(
+		f"""
 		SELECT
 			je.name                            AS journal_entry,
 			je.posting_date,
@@ -80,18 +105,23 @@ def get_data(filters):
 		GROUP BY je.name, je.posting_date, je.lms_payment_entry, pe.party
 		HAVING govt_amount > 0
 		ORDER BY je.posting_date DESC, je.name
-	""", params, as_dict=True)
+	""",
+		params,
+		as_dict=True,
+	)
 
 	data = []
 	for row in rows:
-		data.append({
-			"posting_date":    row.posting_date,
-			"journal_entry":   row.journal_entry,
-			"payment_entry":   row.payment_entry,
-			"land_acquisition": row.land_acquisition,
-			"customer":        row.customer,
-			"govt_amount":     flt(row.govt_amount),
-		})
+		data.append(
+			{
+				"posting_date": row.posting_date,
+				"journal_entry": row.journal_entry,
+				"payment_entry": row.payment_entry,
+				"land_acquisition": row.land_acquisition,
+				"customer": row.customer,
+				"govt_amount": flt(row.govt_amount),
+			}
+		)
 
 	return data
 
@@ -103,7 +133,7 @@ def get_summary(data):
 	count = len(data)
 	return [
 		{"label": "Total Government Payable", "value": total, "datatype": "Currency", "indicator": "Blue"},
-		{"label": "Number of Payments",        "value": count, "datatype": "Int",      "indicator": "Grey"},
+		{"label": "Number of Payments", "value": count, "datatype": "Int", "indicator": "Grey"},
 	]
 
 
