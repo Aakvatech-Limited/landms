@@ -1,10 +1,10 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestPlotContractPaymentSyncPersistence(FrappeTestCase):
+class TestPlotContractPaymentSyncPersistence(IntegrationTestCase):
 	def test_persist_payment_sync_state_saves_draft_contract(self):
 		contract = frappe.new_doc("Plot Contract")
 		contract.docstatus = 0
