@@ -61,15 +61,17 @@ class PlotContract(Document):
 				f"Plot {self.plot} is not Available (current status: {plot_status}). "
 				"Only Available plots can be contracted."
 			)
-		active = frappe.db.exists("Plot Contract", {
-			"plot": self.plot,
-			"docstatus": 1,
-			"contract_status": ["in", ["Ongoing", "Completed"]],
-		})
+		active = frappe.db.exists(
+			"Plot Contract",
+			{
+				"plot": self.plot,
+				"docstatus": 1,
+				"contract_status": ["in", ["Ongoing", "Completed"]],
+			},
+		)
 		if active:
 			frappe.throw(
-				f"Plot {self.plot} already has an active contract ({active}). "
-				"Terminate or complete it first."
+				f"Plot {self.plot} already has an active contract ({active}). Terminate or complete it first."
 			)
 
 	def _validate_sales_order_first_payment_gate(self):
@@ -81,10 +83,7 @@ class PlotContract(Document):
 
 		so_doc = frappe.get_doc("Sales Order", self.sales_order)
 		if so_doc.docstatus != 1:
-			frappe.throw(
-				f"Linked Sales Order {so_doc.name} is not submitted. "
-				"Submit the Sales Order first."
-			)
+			frappe.throw(f"Linked Sales Order {so_doc.name} is not submitted. Submit the Sales Order first.")
 		if so_doc.plot != self.plot or so_doc.customer != self.customer:
 			frappe.throw(
 				f"Contract {self.name} does not match linked Sales Order {so_doc.name} "
@@ -121,7 +120,11 @@ class PlotContract(Document):
 			return
 
 		grand_total = flt(si_doc.grand_total)
-		advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
+		advance_expected = (
+			flt(grand_total * flt(self.booking_fee_percent) / 100)
+			if grand_total and self.booking_fee_percent
+			else 0.0
+		)
 		total_paid = max(0.0, grand_total - flt(si_doc.outstanding_amount))
 		frappe.throw(
 			f"Cannot submit contract — advance of TZS {advance_expected:,.0f} has not been met. "
@@ -149,11 +152,14 @@ class PlotContract(Document):
 			self.selling_price = plot_data.selling_price
 		self.land_acquisition = plot_data.land_acquisition
 		if plot_data.land_acquisition:
-			self.acquisition_name = frappe.db.get_value(
-				"Land Acquisition",
-				plot_data.land_acquisition,
-				"acquisition_name",
-			) or ""
+			self.acquisition_name = (
+				frappe.db.get_value(
+					"Land Acquisition",
+					plot_data.land_acquisition,
+					"acquisition_name",
+				)
+				or ""
+			)
 
 		so_doc = self._get_sales_order_doc()
 		if so_doc:
@@ -190,30 +196,36 @@ class PlotContract(Document):
 		total_days = int(self.payment_completion_days or 90)
 
 		self.set("payment_schedule", [])
-		self.append("payment_schedule", {
-			"installment_number": 1,
-			"description": "Advance",
-			"due_date": self.contract_date,
-			"expected_amount": booking_fee,
-			"paid_amount": 0,
-			"outstanding_amount": booking_fee,
-			"paid_date": None,
-			"sales_invoice": "",
-			"status": "Pending",
-		})
-
-		if balance > 0:
-			self.append("payment_schedule", {
-				"installment_number": 2,
-				"description": "Balance",
-				"due_date": add_days(self.contract_date, total_days),
-				"expected_amount": balance,
+		self.append(
+			"payment_schedule",
+			{
+				"installment_number": 1,
+				"description": "Advance",
+				"due_date": self.contract_date,
+				"expected_amount": booking_fee,
 				"paid_amount": 0,
-				"outstanding_amount": balance,
+				"outstanding_amount": booking_fee,
 				"paid_date": None,
 				"sales_invoice": "",
 				"status": "Pending",
-			})
+			},
+		)
+
+		if balance > 0:
+			self.append(
+				"payment_schedule",
+				{
+					"installment_number": 2,
+					"description": "Balance",
+					"due_date": add_days(self.contract_date, total_days),
+					"expected_amount": balance,
+					"paid_amount": 0,
+					"outstanding_amount": balance,
+					"paid_date": None,
+					"sales_invoice": "",
+					"status": "Pending",
+				},
+			)
 
 	def calculate_payment_summary(self):
 		# For SO-linked contracts, payment totals are managed by
@@ -235,9 +247,7 @@ class PlotContract(Document):
 		self.total_outstanding = max(0.0, flt(self.selling_price) - total_paid)
 		self.payment_progress = self._derive_payment_progress(total_paid, self.total_outstanding)
 		if flt(self.government_share_percent) > 0:
-			self.government_fee_withheld = (
-				flt(self.selling_price) * flt(self.government_share_percent) / 100
-			)
+			self.government_fee_withheld = flt(self.selling_price) * flt(self.government_share_percent) / 100
 
 	def _derive_payment_progress(self, total_paid, total_outstanding, si_doc=None):
 		if flt(total_paid) <= 0:
@@ -251,7 +261,11 @@ class PlotContract(Document):
 		advance_expected = 0.0
 		if si_doc:
 			grand_total = flt(si_doc.grand_total)
-			advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
+			advance_expected = (
+				flt(grand_total * flt(self.booking_fee_percent) / 100)
+				if grand_total and self.booking_fee_percent
+				else 0.0
+			)
 		else:
 			for row in self.payment_schedule:
 				if cint(row.installment_number or 0) == 1:
@@ -278,7 +292,11 @@ class PlotContract(Document):
 		if total_paid <= 0:
 			return False
 
-		advance_expected = flt(grand_total * flt(self.booking_fee_percent) / 100) if grand_total and self.booking_fee_percent else 0.0
+		advance_expected = (
+			flt(grand_total * flt(self.booking_fee_percent) / 100)
+			if grand_total and self.booking_fee_percent
+			else 0.0
+		)
 		if advance_expected > 0:
 			return total_paid >= advance_expected
 
@@ -378,7 +396,9 @@ class PlotContract(Document):
 			self.contract_status = "Completed"
 			plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
 			if plot_status not in ("Delivered", "Title Closed"):
-				frappe.db.set_value("Plot Master", self.plot, "status", "Ready for Handover", update_modified=True)
+				frappe.db.set_value(
+					"Plot Master", self.plot, "status", "Ready for Handover", update_modified=True
+				)
 				frappe.clear_document_cache("Plot Master", self.plot)
 			self._sync_land_acquisition_summary()
 
@@ -416,7 +436,11 @@ class PlotContract(Document):
 		grand_total = flt(invoice.grand_total)
 		booking_fee_percent = flt(self.booking_fee_percent or 0)
 		total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
-		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		advance_amount = (
+			flt(grand_total * booking_fee_percent / 100)
+			if grand_total and booking_fee_percent
+			else grand_total
+		)
 		balance_amount = flt(grand_total - advance_amount)
 		row1_paid = min(total_paid, advance_amount)
 		row2_paid = max(0.0, total_paid - row1_paid)
@@ -426,17 +450,20 @@ class PlotContract(Document):
 			expected = advance_amount if idx == 1 else balance_amount
 			paid_amount = row1_paid if idx == 1 else row2_paid
 			outstanding = max(0.0, expected - paid_amount)
-			self.append("payment_schedule", {
-				"installment_number": idx,
-				"description": row.description or self._default_installment_label(idx),
-				"due_date": row.due_date,
-				"expected_amount": expected,
-				"paid_amount": paid_amount,
-				"outstanding_amount": outstanding,
-				"paid_date": None,
-				"sales_invoice": invoice.name,
-				"status": self._derive_installment_status(row.due_date, expected, outstanding),
-			})
+			self.append(
+				"payment_schedule",
+				{
+					"installment_number": idx,
+					"description": row.description or self._default_installment_label(idx),
+					"due_date": row.due_date,
+					"expected_amount": expected,
+					"paid_amount": paid_amount,
+					"outstanding_amount": outstanding,
+					"paid_date": None,
+					"sales_invoice": invoice.name,
+					"status": self._derive_installment_status(row.due_date, expected, outstanding),
+				},
+			)
 		self.save(ignore_permissions=True)
 
 	def _sync_schedule_rows_from_invoice(self, invoice, paid_dates):
@@ -444,7 +471,11 @@ class PlotContract(Document):
 		grand_total = flt(invoice.grand_total)
 		booking_fee_percent = flt(self.booking_fee_percent or 0)
 		total_paid = max(0.0, grand_total - flt(invoice.outstanding_amount))
-		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		advance_amount = (
+			flt(grand_total * booking_fee_percent / 100)
+			if grand_total and booking_fee_percent
+			else grand_total
+		)
 		balance_amount = flt(grand_total - advance_amount)
 		row1_paid = min(total_paid, advance_amount)
 		row2_paid = max(0.0, total_paid - row1_paid)
@@ -463,7 +494,9 @@ class PlotContract(Document):
 				expected = advance_amount if idx == 1 else balance_amount
 			paid_amount = row1_paid if idx == 1 else row2_paid
 			outstanding = max(0.0, expected - paid_amount)
-			status = self._derive_installment_status(source.due_date, expected, outstanding, today_date=today_date)
+			status = self._derive_installment_status(
+				source.due_date, expected, outstanding, today_date=today_date
+			)
 			paid_date = paid_dates.get(idx) if outstanding <= 0 else None
 
 			target.description = source.description or self._default_installment_label(idx)
@@ -484,18 +517,18 @@ class PlotContract(Document):
 				self.name,
 				{
 					"total_contract_value": flt(self.total_contract_value),
-					"total_paid":           flt(self.total_paid),
-					"total_outstanding":    flt(self.total_outstanding),
-					"overpaid_amount":      flt(self.overpaid_amount),
-					"payment_progress":     self.payment_progress or "",
-					"contract_status":      self.contract_status or "Draft",
-					"booking_fee_invoice":  self.booking_fee_invoice or "",
-					"payment_deadline":     self.payment_deadline,
+					"total_paid": flt(self.total_paid),
+					"total_outstanding": flt(self.total_outstanding),
+					"overpaid_amount": flt(self.overpaid_amount),
+					"payment_progress": self.payment_progress or "",
+					"contract_status": self.contract_status or "Draft",
+					"booking_fee_invoice": self.booking_fee_invoice or "",
+					"payment_deadline": self.payment_deadline,
 				},
 				update_modified=True,
 			)
 			# Also persist individual payment schedule rows for draft contracts
-			for row in (self.payment_schedule or []):
+			for row in self.payment_schedule or []:
 				if row.name:
 					row.db_update()
 			frappe.clear_document_cache("Plot Contract", self.name)
@@ -534,7 +567,11 @@ class PlotContract(Document):
 	def _get_paid_dates_by_installment(self, invoice):
 		grand_total = flt(invoice.grand_total)
 		booking_fee_percent = flt(self.booking_fee_percent or 0)
-		advance_amount = flt(grand_total * booking_fee_percent / 100) if grand_total and booking_fee_percent else grand_total
+		advance_amount = (
+			flt(grand_total * booking_fee_percent / 100)
+			if grand_total and booking_fee_percent
+			else grand_total
+		)
 		balance_amount = flt(grand_total - advance_amount)
 		schedule = invoice.get("payment_schedule") or []
 		thresholds = [advance_amount + (balance_amount * (i > 0)) for i in range(len(schedule))]
@@ -543,11 +580,13 @@ class PlotContract(Document):
 		for advance in invoice.get("advances") or []:
 			posting_date = self._get_payment_source_date(advance.reference_type, advance.reference_name)
 			if posting_date and flt(advance.allocated_amount):
-				payment_events.append({
-					"posting_date": posting_date,
-					"amount": flt(advance.allocated_amount),
-					"name": advance.reference_name,
-				})
+				payment_events.append(
+					{
+						"posting_date": posting_date,
+						"amount": flt(advance.allocated_amount),
+						"name": advance.reference_name,
+					}
+				)
 
 		payment_events.extend(self._get_invoice_payment_entry_events(invoice.name))
 		payment_events.sort(key=lambda d: (d["posting_date"], d["name"]))
@@ -621,17 +660,18 @@ class PlotContract(Document):
 			},
 		]
 
-		je = frappe.get_doc({
-			"doctype": "Journal Entry",
-			"posting_date": today(),
-			"company": settings.company,
-			"voucher_type": "Journal Entry",
-			"user_remark": (
-				f"Revenue recognition — Contract {self.name}, Plot {self.plot}, "
-				f"Customer {self.customer}"
-			),
-			"accounts": accounts,
-		})
+		je = frappe.get_doc(
+			{
+				"doctype": "Journal Entry",
+				"posting_date": today(),
+				"company": settings.company,
+				"voucher_type": "Journal Entry",
+				"user_remark": (
+					f"Revenue recognition — Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
+				),
+				"accounts": accounts,
+			}
+		)
 		je.insert(ignore_permissions=True)
 		je.submit()
 		self.db_set("government_fee_entry", je.name)
@@ -646,17 +686,19 @@ class PlotContract(Document):
 		if existing:
 			return existing
 
-		handover = frappe.get_doc({
-			"doctype": "Plot Handover",
-			"contract": self.name,
-			"handover_date": today(),
-			"customer": self.customer,
-			"plot": self.plot,
-			"acquisition_name": self.get("acquisition_name") or "",
-			"land_acquisition": self.get("land_acquisition") or "",
-			"contract_date": self.get("contract_date"),
-			"selling_price": flt(self.selling_price),
-		})
+		handover = frappe.get_doc(
+			{
+				"doctype": "Plot Handover",
+				"contract": self.name,
+				"handover_date": today(),
+				"customer": self.customer,
+				"plot": self.plot,
+				"acquisition_name": self.get("acquisition_name") or "",
+				"land_acquisition": self.get("land_acquisition") or "",
+				"contract_date": self.get("contract_date"),
+				"selling_price": flt(self.selling_price),
+			}
+		)
 		handover.flags.ignore_permissions = True
 		handover.flags.ignore_mandatory = True
 		handover.insert()
@@ -684,32 +726,34 @@ class PlotContract(Document):
 		if forfeiture_income <= 0:
 			return None
 
-		je = frappe.get_doc({
-			"doctype": "Journal Entry",
-			"posting_date": today(),
-			"company": settings.company,
-			"voucher_type": "Journal Entry",
-			"lms_refund_amount": refund_amount,
-			"user_remark": (
-				f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited, "
-				f"net of {govt_pct:.2f}% government share already withheld. "
-				f"Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
-			),
-			"accounts": [
-				{
-					"account": settings.customer_advance_account,
-					"debit_in_account_currency": forfeiture_income,
-					"cost_center": settings.cost_center,
-					"land_acquisition": self.land_acquisition,
-				},
-				{
-					"account": settings.forfeited_deposits_account,
-					"credit_in_account_currency": forfeiture_income,
-					"cost_center": settings.cost_center,
-					"land_acquisition": self.land_acquisition,
-				},
-			],
-		})
+		je = frappe.get_doc(
+			{
+				"doctype": "Journal Entry",
+				"posting_date": today(),
+				"company": settings.company,
+				"voucher_type": "Journal Entry",
+				"lms_refund_amount": refund_amount,
+				"user_remark": (
+					f"Contract termination — {forfeiture_pct:.0f}% of paid amount forfeited, "
+					f"net of {govt_pct:.2f}% government share already withheld. "
+					f"Contract {self.name}, Plot {self.plot}, Customer {self.customer}"
+				),
+				"accounts": [
+					{
+						"account": settings.customer_advance_account,
+						"debit_in_account_currency": forfeiture_income,
+						"cost_center": settings.cost_center,
+						"land_acquisition": self.land_acquisition,
+					},
+					{
+						"account": settings.forfeited_deposits_account,
+						"credit_in_account_currency": forfeiture_income,
+						"cost_center": settings.cost_center,
+						"land_acquisition": self.land_acquisition,
+					},
+				],
+			}
+		)
 		je.insert(ignore_permissions=True)
 		je.submit()
 		self.db_set("forfeiture_entry", je.name)
@@ -805,15 +849,14 @@ class PlotContract(Document):
 		nothing is left half-done and no live orphaned control number remains. An
 		already-declined number returns ok=True, so a retry passes straight through.
 		"""
-		from landms.sales_order_hooks import decline_reference_for_sales_order
 		from frappe.utils import cstr
+
+		from landms.sales_order_hooks import decline_reference_for_sales_order
 
 		so_name = self.sales_order
 		if not so_name or not frappe.db.exists("Sales Order", so_name):
 			return
-		control_number = cstr(
-			frappe.db.get_value("Sales Order", so_name, "control_number") or ""
-		).strip()
+		control_number = cstr(frappe.db.get_value("Sales Order", so_name, "control_number") or "").strip()
 		if not control_number:
 			return
 		result = decline_reference_for_sales_order(so_name, control_number)
@@ -876,7 +919,11 @@ def get_linked_documents_summary(plot_contract):
 	doc = frappe.get_doc("Plot Contract", plot_contract)
 	so_doc = doc._get_sales_order_doc()
 	plot_application = doc.plot_application or (so_doc.get("plot_application") if so_doc else "")
-	application_doc = frappe.get_doc("Plot Application", plot_application) if plot_application and frappe.db.exists("Plot Application", plot_application) else None
+	application_doc = (
+		frappe.get_doc("Plot Application", plot_application)
+		if plot_application and frappe.db.exists("Plot Application", plot_application)
+		else None
+	)
 
 	rows = [
 		("Sales Order", _doc_link("Sales Order", doc.sales_order)),
@@ -885,11 +932,13 @@ def get_linked_documents_summary(plot_contract):
 	]
 
 	if application_doc:
-		rows.extend([
-			("Plot Application", _doc_link("Plot Application", application_doc.name)),
-			("Application Fee Invoice", _doc_link("Sales Invoice", application_doc.sales_invoice)),
-			("Application Fee Payment Entry", _doc_link("Payment Entry", application_doc.payment_entry)),
-		])
+		rows.extend(
+			[
+				("Plot Application", _doc_link("Plot Application", application_doc.name)),
+				("Application Fee Invoice", _doc_link("Sales Invoice", application_doc.sales_invoice)),
+				("Application Fee Payment Entry", _doc_link("Payment Entry", application_doc.payment_entry)),
+			]
+		)
 
 	if doc.government_fee_entry:
 		rows.append(("Government Fee JE", _doc_link("Journal Entry", doc.government_fee_entry)))
@@ -900,7 +949,8 @@ def get_linked_documents_summary(plot_contract):
 	payment_entries_html = "<span class='text-muted'>-</span>"
 	if payment_entries:
 		payment_entries_html = "<br>".join(
-			_doc_link("Payment Entry", row.name) + f" <span class='text-muted'>({escape_html(str(row.posting_date))})</span>"
+			_doc_link("Payment Entry", row.name)
+			+ f" <span class='text-muted'>({escape_html(str(row.posting_date))})</span>"
 			for row in payment_entries
 		)
 

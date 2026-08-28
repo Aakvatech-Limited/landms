@@ -28,7 +28,9 @@ def validate_payment_entry(doc, method=None):
 		return
 
 	if doc.contact_person and not doc.mobile_no:
-		contact_info = frappe.get_cached_value("Contact", doc.contact_person, ["mobile_no", "phone"], as_dict=True)
+		contact_info = frappe.get_cached_value(
+			"Contact", doc.contact_person, ["mobile_no", "phone"], as_dict=True
+		)
 		doc.mobile_no = contact_info.get("mobile_no") or contact_info.get("phone")
 
 	normalized_rows = []
@@ -61,9 +63,9 @@ def validate_payment_entry(doc, method=None):
 			existing["payment_term_outstanding"] = flt(
 				getattr(row, "payment_term_outstanding", 0) or existing.get("payment_term_outstanding") or 0
 			)
-			existing["exchange_rate"] = flt(
-				getattr(row, "exchange_rate", 0) or existing.get("exchange_rate") or 0
-			) or 1
+			existing["exchange_rate"] = (
+				flt(getattr(row, "exchange_rate", 0) or existing.get("exchange_rate") or 0) or 1
+			)
 		else:
 			seen_invoice_rows[key] = {
 				"reference_doctype": "Sales Invoice",
@@ -155,8 +157,10 @@ def _sync_contract_after_payment(contract_name, pe_name=None):
 		unallocated = flt(frappe.db.get_value("Payment Entry", pe_name, "unallocated_amount") or 0)
 		if unallocated > 0:
 			frappe.db.set_value(
-				"Plot Contract", contract_name,
-				"overpaid_amount", unallocated,
+				"Plot Contract",
+				contract_name,
+				"overpaid_amount",
+				unallocated,
 				update_modified=False,
 			)
 
@@ -171,11 +175,13 @@ def _build_pe_references_for_invoice(si, total_allocated: float) -> list[dict]:
 	"""
 	schedule = si.get("payment_schedule") or []
 	if not schedule:
-		return [{
-			"reference_doctype": "Sales Invoice",
-			"reference_name": si.name,
-			"allocated_amount": flt(total_allocated),
-		}]
+		return [
+			{
+				"reference_doctype": "Sales Invoice",
+				"reference_name": si.name,
+				"allocated_amount": flt(total_allocated),
+			}
+		]
 
 	refs = []
 	remaining = flt(total_allocated)
@@ -186,27 +192,33 @@ def _build_pe_references_for_invoice(si, total_allocated: float) -> list[dict]:
 		if row_outstanding <= 0:
 			continue
 		alloc = min(remaining, row_outstanding)
-		refs.append({
-			"reference_doctype": "Sales Invoice",
-			"reference_name": si.name,
-			"allocated_amount": alloc,
-			"payment_term": row.payment_term,
-		})
+		refs.append(
+			{
+				"reference_doctype": "Sales Invoice",
+				"reference_name": si.name,
+				"allocated_amount": alloc,
+				"payment_term": row.payment_term,
+			}
+		)
 		remaining -= alloc
 
 	# If there's still remaining (overpayment or no matching terms), add a catch-all row
 	if remaining > 0:
-		refs.append({
+		refs.append(
+			{
+				"reference_doctype": "Sales Invoice",
+				"reference_name": si.name,
+				"allocated_amount": remaining,
+			}
+		)
+
+	return refs or [
+		{
 			"reference_doctype": "Sales Invoice",
 			"reference_name": si.name,
-			"allocated_amount": remaining,
-		})
-
-	return refs or [{
-		"reference_doctype": "Sales Invoice",
-		"reference_name": si.name,
-		"allocated_amount": flt(total_allocated),
-	}]
+			"allocated_amount": flt(total_allocated),
+		}
+	]
 
 
 def create_payment_entry_for_sales_order(
@@ -243,15 +255,10 @@ def create_payment_entry_for_sales_order(
 		posting_date=payment_date or today(),
 	)
 	if not invoice_name or not frappe.db.exists("Sales Invoice", invoice_name):
-		frappe.throw(
-			f"Sales Order {sales_order_name} has no plot Sales Invoice yet. "
-			"Cannot apply payment."
-		)
+		frappe.throw(f"Sales Order {sales_order_name} has no plot Sales Invoice yet. Cannot apply payment.")
 
 	if _payment_reference_exists(invoice_name, reference_no):
-		frappe.throw(
-			f"Duplicate payment reference {reference_no} for Sales Invoice {invoice_name}."
-		)
+		frappe.throw(f"Duplicate payment reference {reference_no} for Sales Invoice {invoice_name}.")
 
 	si = frappe.get_doc("Sales Invoice", invoice_name)
 	if si.docstatus != 1:
@@ -259,30 +266,29 @@ def create_payment_entry_for_sales_order(
 
 	outstanding = flt(si.outstanding_amount)
 	if outstanding <= 0:
-		frappe.throw(
-			f"Sales Invoice {invoice_name} has no outstanding balance. "
-			"Nothing to apply."
-		)
+		frappe.throw(f"Sales Invoice {invoice_name} has no outstanding balance. Nothing to apply.")
 
 	allocated = min(flt(amount), outstanding)
 	pe_references = _build_pe_references_for_invoice(si, allocated)
 
-	pe = frappe.get_doc({
-		"doctype": "Payment Entry",
-		"payment_type": "Receive",
-		"posting_date": payment_date or today(),
-		"company": si.company,
-		"party_type": "Customer",
-		"party": si.customer,
-		"paid_from": si.debit_to,
-		"paid_to": bank_account,
-		"paid_amount": flt(amount),
-		"received_amount": flt(amount),
-		"reference_no": cstr(reference_no),
-		"reference_date": payment_date or today(),
-		"remarks": remarks or f"Payment against {invoice_name}",
-		"references": pe_references,
-	})
+	pe = frappe.get_doc(
+		{
+			"doctype": "Payment Entry",
+			"payment_type": "Receive",
+			"posting_date": payment_date or today(),
+			"company": si.company,
+			"party_type": "Customer",
+			"party": si.customer,
+			"paid_from": si.debit_to,
+			"paid_to": bank_account,
+			"paid_amount": flt(amount),
+			"received_amount": flt(amount),
+			"reference_no": cstr(reference_no),
+			"reference_date": payment_date or today(),
+			"remarks": remarks or f"Payment against {invoice_name}",
+			"references": pe_references,
+		}
+	)
 	pe.name = cstr(reference_no)
 	pe.flags.name_set = True
 
@@ -393,7 +399,14 @@ def _resolve_landms_plot_reference(
 		invoice = frappe.db.get_value(
 			"Sales Invoice",
 			invoice_name,
-			["name", "is_plot_sale_invoice", "grand_total", "outstanding_amount", "due_date", "plot_contract"],
+			[
+				"name",
+				"is_plot_sale_invoice",
+				"grand_total",
+				"outstanding_amount",
+				"due_date",
+				"plot_contract",
+			],
 			as_dict=True,
 		)
 		if not invoice or not invoice.is_plot_sale_invoice:
@@ -416,7 +429,15 @@ def _resolve_landms_plot_reference(
 		invoice = frappe.db.get_value(
 			"Sales Invoice",
 			reference_name,
-			["name", "is_plot_sale_invoice", "grand_total", "outstanding_amount", "due_date", "plot_contract", "land_acquisition"],
+			[
+				"name",
+				"is_plot_sale_invoice",
+				"grand_total",
+				"outstanding_amount",
+				"due_date",
+				"plot_contract",
+				"land_acquisition",
+			],
 			as_dict=True,
 		)
 		if not invoice or not invoice.is_plot_sale_invoice:
@@ -427,8 +448,8 @@ def _resolve_landms_plot_reference(
 			"sales_order_name": sales_order_name or "",
 			"invoice_name": invoice.name,
 			"plot_contract": invoice.plot_contract
-				or frappe.db.get_value("Sales Order", sales_order_name, "plot_contract")
-				or "",
+			or frappe.db.get_value("Sales Order", sales_order_name, "plot_contract")
+			or "",
 			"grand_total": invoice.grand_total,
 			"outstanding_amount": invoice.outstanding_amount,
 			"due_date": invoice.due_date,
@@ -502,7 +523,10 @@ def _sync_sales_order_billing_from_plot_invoice(so, invoice):
 
 	total_amount = sum(abs(flt(row.amount)) for row in so.items)
 	billed_amount = sum(
-		min(abs(flt(row.amount)), abs(flt(frappe.db.get_value("Sales Order Item", row.name, "billed_amt") or 0)))
+		min(
+			abs(flt(row.amount)),
+			abs(flt(frappe.db.get_value("Sales Order Item", row.name, "billed_amt") or 0)),
+		)
 		for row in so.items
 	)
 	per_billed = round((billed_amount / total_amount) * 100, 6) if total_amount else 0.0
@@ -579,43 +603,45 @@ def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice, booking_fee_pe
 		due_date = source_rows[0].due_date if source_rows else target_rows[0].due_date
 		outstanding = max(0.0, grand_total - total_paid)
 		frappe.db.set_value(
-			"Payment Schedule", target_rows[0].name,
+			"Payment Schedule",
+			target_rows[0].name,
 			{
-				"due_date":            due_date,
-				"invoice_portion":     100.0,
-				"payment_amount":      grand_total,
+				"due_date": due_date,
+				"invoice_portion": 100.0,
+				"payment_amount": grand_total,
 				"base_payment_amount": grand_total,
-				"paid_amount":         total_paid,
-				"outstanding":         outstanding,
-				"base_paid_amount":    total_paid,
-				"base_outstanding":    outstanding,
+				"paid_amount": total_paid,
+				"outstanding": outstanding,
+				"base_paid_amount": total_paid,
+				"base_outstanding": outstanding,
 			},
 			update_modified=True,
 		)
 		return
 
 	# Two rows: Row 1 = Advance, Row 2 = Balance
-	advance_amount  = flt(grand_total * booking_fee_percent / 100)
-	balance_amount  = flt(grand_total - advance_amount)
+	advance_amount = flt(grand_total * booking_fee_percent / 100)
+	balance_amount = flt(grand_total - advance_amount)
 	balance_percent = flt(100.0 - booking_fee_percent)
 
-	row1_paid        = min(total_paid, advance_amount)
+	row1_paid = min(total_paid, advance_amount)
 	row1_outstanding = max(0.0, advance_amount - row1_paid)
-	row2_paid        = max(0.0, total_paid - row1_paid)
+	row2_paid = max(0.0, total_paid - row1_paid)
 	row2_outstanding = max(0.0, balance_amount - row2_paid)
 
 	due_date_1 = source_rows[0].due_date if source_rows else target_rows[0].due_date
 	frappe.db.set_value(
-		"Payment Schedule", target_rows[0].name,
+		"Payment Schedule",
+		target_rows[0].name,
 		{
-			"due_date":            due_date_1,
-			"invoice_portion":     booking_fee_percent,
-			"payment_amount":      advance_amount,
+			"due_date": due_date_1,
+			"invoice_portion": booking_fee_percent,
+			"payment_amount": advance_amount,
 			"base_payment_amount": advance_amount,
-			"paid_amount":         row1_paid,
-			"outstanding":         row1_outstanding,
-			"base_paid_amount":    row1_paid,
-			"base_outstanding":    row1_outstanding,
+			"paid_amount": row1_paid,
+			"outstanding": row1_outstanding,
+			"base_paid_amount": row1_paid,
+			"base_outstanding": row1_outstanding,
 		},
 		update_modified=True,
 	)
@@ -623,16 +649,17 @@ def _sync_payment_schedule_rows_from_invoice(parent_doc, invoice, booking_fee_pe
 	if len(target_rows) >= 2:
 		due_date_2 = source_rows[1].due_date if len(source_rows) > 1 else target_rows[1].due_date
 		frappe.db.set_value(
-			"Payment Schedule", target_rows[1].name,
+			"Payment Schedule",
+			target_rows[1].name,
 			{
-				"due_date":            due_date_2,
-				"invoice_portion":     balance_percent,
-				"payment_amount":      balance_amount,
+				"due_date": due_date_2,
+				"invoice_portion": balance_percent,
+				"payment_amount": balance_amount,
 				"base_payment_amount": balance_amount,
-				"paid_amount":         row2_paid,
-				"outstanding":         row2_outstanding,
-				"base_paid_amount":    row2_paid,
-				"base_outstanding":    row2_outstanding,
+				"paid_amount": row2_paid,
+				"outstanding": row2_outstanding,
+				"base_paid_amount": row2_paid,
+				"base_outstanding": row2_outstanding,
 			},
 			update_modified=True,
 		)
@@ -707,6 +734,7 @@ def _payment_reference_exists(invoice_name: str, reference_no: str) -> bool:
 #  Government share JE                                                     #
 # ---------------------------------------------------------------------- #
 
+
 def _post_government_share_je(pe_doc):
 	"""Post government share JE for each plot sale payment.
 
@@ -770,33 +798,42 @@ def _post_government_share_je(pe_doc):
 	]
 
 	if settle_govt_share:
-		accounts.append({
-			"account": settings.government_payable_account,
-			"debit_in_account_currency": govt_amount,
-			"cost_center": settings.cost_center,
-			"land_acquisition": land_acquisition or "",
-		})
-		accounts.append({
-			"account": bank_account,
-			"credit_in_account_currency": govt_amount,
-			"cost_center": settings.cost_center,
-			"land_acquisition": land_acquisition or "",
-		})
+		accounts.append(
+			{
+				"account": settings.government_payable_account,
+				"debit_in_account_currency": govt_amount,
+				"cost_center": settings.cost_center,
+				"land_acquisition": land_acquisition or "",
+			}
+		)
+		accounts.append(
+			{
+				"account": bank_account,
+				"credit_in_account_currency": govt_amount,
+				"cost_center": settings.cost_center,
+				"land_acquisition": land_acquisition or "",
+			}
+		)
 
-	je = frappe.get_doc({
-		"doctype": "Journal Entry",
-		"posting_date": pe_doc.posting_date or today(),
-		"company": pe_doc.company,
-		"voucher_type": "Journal Entry",
-		"lms_payment_entry": pe_doc.name,
-		"user_remark": (
-			f"Government share {flt(govt_pct):.2f}% on payment {pe_doc.name} "
-			f"— Sales Order {so_name}"
-			+ (" (accrued + remitted to government)" if settle_govt_share
-			   else " (accrued only — bank account not configured)")
-		),
-		"accounts": accounts,
-	})
+	je = frappe.get_doc(
+		{
+			"doctype": "Journal Entry",
+			"posting_date": pe_doc.posting_date or today(),
+			"company": pe_doc.company,
+			"voucher_type": "Journal Entry",
+			"lms_payment_entry": pe_doc.name,
+			"user_remark": (
+				f"Government share {flt(govt_pct):.2f}% on payment {pe_doc.name} "
+				f"— Sales Order {so_name}"
+				+ (
+					" (accrued + remitted to government)"
+					if settle_govt_share
+					else " (accrued only — bank account not configured)"
+				)
+			),
+			"accounts": accounts,
+		}
+	)
 	je.insert(ignore_permissions=True)
 	je.submit()
 
@@ -835,7 +872,8 @@ def _get_govt_share_fields_from_pe(pe_doc):
 
 		if row.reference_doctype == "Sales Invoice":
 			si = frappe.db.get_value(
-				"Sales Invoice", row.reference_name,
+				"Sales Invoice",
+				row.reference_name,
 				["is_plot_sale_invoice", "plot_contract"],
 				as_dict=True,
 			)
@@ -855,7 +893,8 @@ def _get_govt_share_fields_from_pe(pe_doc):
 		if so_name is None:
 			so_name = row_so_name
 			govt_pct, land_acquisition = frappe.db.get_value(
-				"Sales Order", so_name,
+				"Sales Order",
+				so_name,
 				["government_share_percent", "land_acquisition"],
 			) or (0, "")
 

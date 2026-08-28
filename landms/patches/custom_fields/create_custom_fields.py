@@ -8,13 +8,19 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 FOLDER = "custom_fields_json"
 
 DISALLOWED_FIELDS = {
-	"name", "owner", "creation", "modified", "modified_by",
-	"docstatus", "idx", "is_system_generated",
+	"name",
+	"owner",
+	"creation",
+	"modified",
+	"modified_by",
+	"docstatus",
+	"idx",
+	"is_system_generated",
 }
 
 
 def _load_json(filepath):
-	with open(filepath, "r") as f:
+	with open(filepath) as f:
 		return json.load(f)
 
 

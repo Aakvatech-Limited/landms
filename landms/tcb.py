@@ -43,7 +43,6 @@ from frappe.utils import (
 	today,
 )
 
-
 DEFAULT_PATTERN = "99911####00##"
 GENERATION_RETRIES = 20
 TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
@@ -52,7 +51,6 @@ TCB_MOBILE_PATTERN = re.compile(r"^255\d{9}$")
 # ---------------------------------------------------------------------- #
 #  Pattern handling                                                        #
 # ---------------------------------------------------------------------- #
-
 
 
 def _pattern_to_regex(pattern: str) -> re.Pattern:
@@ -70,17 +68,13 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
 
 
 def is_valid_control_number(
-	value: str,
-	pattern: str | None = None,
-	*,
-	related: bool = False,
-	sales_order_name: str | None = None
+	value: str, pattern: str | None = None, *, related: bool = False, sales_order_name: str | None = None
 ) -> bool:
 	"""Strict pattern check — same shape used by generation."""
 	value = cstr(value).strip()
 	if not value:
 		return False
-	
+
 	if not pattern and sales_order_name:
 		land_acq = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition")
 		if land_acq:
@@ -155,22 +149,21 @@ def _control_number_exists(candidate: str) -> bool:
 
 
 def generate_control_number(
-	sales_order_name: str | None = None, 
-	*, 
-	related: bool = False,
-	pattern: str | None = None
+	sales_order_name: str | None = None, *, related: bool = False, pattern: str | None = None
 ) -> str:
 	"""Generate a unique TCB control number.
 
 	The pattern is read from the Sales Order's associated Land Acquisition.
-	The result is checked against Sales Order fields and the TCB Control Number 
+	The result is checked against Sales Order fields and the TCB Control Number
 	registry to avoid collisions.
 	"""
 	if not pattern and sales_order_name:
 		land_acq = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition")
 		if not land_acq:
-			frappe.throw(f"Sales Order {sales_order_name} is missing a Land Acquisition. Cannot generate TCB control number.")
-		
+			frappe.throw(
+				f"Sales Order {sales_order_name} is missing a Land Acquisition. Cannot generate TCB control number."
+			)
+
 		field = "related_control_number_pattern" if related else "control_number_pattern"
 		pattern = frappe.db.get_value("Land Acquisition", land_acq, field)
 		if not pattern:
@@ -184,9 +177,7 @@ def generate_control_number(
 
 	if "#" not in pattern:
 		label = "Related Control Number Pattern" if related else "Control Number Pattern"
-		frappe.throw(
-			f"{label} is missing '#'. Cannot generate randomized references."
-		)
+		frappe.throw(f"{label} is missing '#'. Cannot generate randomized references.")
 
 	for _ in range(GENERATION_RETRIES):
 		candidate = _fill_pattern(pattern)
@@ -301,29 +292,35 @@ def should_auto_apply_reconciliation_payments() -> bool:
 	)
 
 
-
 # ---------------------------------------------------------------------- #
 #  Registry helpers                                                        #
 # ---------------------------------------------------------------------- #
 
 
-def create_or_get_registry(*, control_number: str, sales_order: str,
-                           customer: str | None = None, amount: float = 0,
-                           related_control_number: str = ""):
+def create_or_get_registry(
+	*,
+	control_number: str,
+	sales_order: str,
+	customer: str | None = None,
+	amount: float = 0,
+	related_control_number: str = "",
+):
 	"""Idempotent registry creation. Returns the registry doc."""
 	if frappe.db.exists("TCB Control Number", control_number):
 		return frappe.get_doc("TCB Control Number", control_number)
-	doc = frappe.get_doc({
-		"doctype":                "TCB Control Number",
-		"control_number":         control_number,
-		"sales_order":            sales_order,
-		"customer":               customer or "",
-		"amount":                 flt(amount),
-		"related_control_number": related_control_number or "",
-		"status":                 "Generated",
-		"generated_at":           now(),
-		"last_event":             f"Generated for {sales_order}",
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "TCB Control Number",
+			"control_number": control_number,
+			"sales_order": sales_order,
+			"customer": customer or "",
+			"amount": flt(amount),
+			"related_control_number": related_control_number or "",
+			"status": "Generated",
+			"generated_at": now(),
+			"last_event": f"Generated for {sales_order}",
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -355,25 +352,33 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 		frappe.throw(f"Sales Order {sales_order_name} not found.")
 
 	so = frappe.db.get_value(
-		"Sales Order", sales_order_name,
-		["customer", "customer_name", "contact_mobile", "contact_phone",
-			"related_control_number", "payment_option", "include_amount",
-			"payment_deadline", "include_expire_date", "grand_total", "land_acquisition"],
+		"Sales Order",
+		sales_order_name,
+		[
+			"customer",
+			"customer_name",
+			"contact_mobile",
+			"contact_phone",
+			"related_control_number",
+			"payment_option",
+			"include_amount",
+			"payment_deadline",
+			"include_expire_date",
+			"grand_total",
+			"land_acquisition",
+		],
 		as_dict=True,
 	)
 	if not so.land_acquisition:
 		frappe.throw(f"Sales Order {sales_order_name} must have a land acquisition.")
-	
+
 	project_info = frappe.db.get_value(
-		"Land Acquisition", so.land_acquisition,
+		"Land Acquisition",
+		so.land_acquisition,
 		["partner_code", "profile_id"],
 		as_dict=True,
 	)
-	if (
-		not project_info or
-		not project_info.partner_code or
-		not project_info.profile_id
-	):
+	if not project_info or not project_info.partner_code or not project_info.profile_id:
 		frappe.throw(f"Land Acquisition {so.land_acquisition} must have a partner code and profile id.")
 
 	customer_name = so.customer_name or so.customer or ""
@@ -394,11 +399,11 @@ def _build_reference_payload(*, control_number: str, sales_order_name: str = "")
 
 	payload = {
 		"partnerCode": project_info.get("partner_code") or "",
-		"profileID":   project_info.get("profile_id") or "",
-		"reference":   control_number,
-		"name":        customer_name,
-		"mobile":      mobile,
-		"message":     message,
+		"profileID": project_info.get("profile_id") or "",
+		"reference": control_number,
+		"name": customer_name,
+		"mobile": mobile,
+		"message": message,
 	}
 	if related_ref:
 		payload["relatedRef"] = related_ref
@@ -455,12 +460,18 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			sales_order=sales_order_name,
 			plot_contract=plot_contract,
 			request_payload=payload,
-			response_payload={"message": "Outbound reference registration skipped (integration disabled or mode Off)."},
+			response_payload={
+				"message": "Outbound reference registration skipped (integration disabled or mode Off)."
+			},
 		)
-		_record_registry_event(control_number, "Reference Create", "Ignored", log_name,
-		                       note="Outbound mode Off — skipped.")
-		return {"ok": True, "mode": "Off",
-		        "message": "TCB outbound mode is Off; reference registration skipped."}
+		_record_registry_event(
+			control_number, "Reference Create", "Ignored", log_name, note="Outbound mode Off — skipped."
+		)
+		return {
+			"ok": True,
+			"mode": "Off",
+			"message": "TCB outbound mode is Off; reference registration skipped.",
+		}
 
 	if outbound_mode == "Log Only":
 		log_name = create_tcb_api_log(
@@ -476,18 +487,29 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			request_payload=payload,
 			response_payload={"message": "Outbound Log Only mode — no call sent to TCB."},
 		)
-		_record_registry_event(control_number, "Reference Create", "Ignored", log_name,
-		                       note="Outbound mode Log Only — no live call.")
-		return {"ok": True, "mode": "Log Only",
-		        "message": "TCB outbound mode is Log Only; no live call was made."}
+		_record_registry_event(
+			control_number,
+			"Reference Create",
+			"Ignored",
+			log_name,
+			note="Outbound mode Log Only — no live call.",
+		)
+		return {
+			"ok": True,
+			"mode": "Log Only",
+			"message": "TCB outbound mode is Log Only; no live call was made.",
+		}
 
 	# ALREADY REGISTERED — nothing to do. Return success so the register-first gate
 	# on SO submit (and re-submits after a blocked attempt) passes straight through
 	# instead of re-calling TCB on a number that is already live at the bank.
 	registry = _get_registry(control_number)
 	if registry and registry.status == "Registered":
-		return {"ok": True, "status": "Already Registered",
-		        "message": f"Control number {control_number} is already registered."}
+		return {
+			"ok": True,
+			"status": "Already Registered",
+			"message": f"Control number {control_number} is already registered.",
+		}
 
 	# --- Live ---
 	_validate_live_reference_settings(settings, need="reference")
@@ -543,8 +565,7 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		registry = _get_registry(control_number)
 		if registry:
 			if ok:
-				registry.mark_registered(log_name=log_name,
-				                         note=tcb_message or "Registered with TCB.")
+				registry.mark_registered(log_name=log_name, note=tcb_message or "Registered with TCB.")
 				# Durably record the successful bank call NOW, so a later rollback
 				# (e.g. a throw in the SO's on_submit steps that run after this) cannot
 				# erase it. Without this the registry would revert to 'Generated' while
@@ -554,9 +575,11 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 				# live at the bank to remember.
 				frappe.db.commit()
 			else:
-				registry.mark_failed(log_name=log_name,
-				                     event_type="Reference Create",
-				                     note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
+				registry.mark_failed(
+					log_name=log_name,
+					event_type="Reference Create",
+					note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}",
+				)
 
 		if not ok:
 			_notify_so_owner(
@@ -565,7 +588,8 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 				"red",
 			)
 			return {
-				"ok": False, "mode": "Live",
+				"ok": False,
+				"mode": "Live",
 				"message": (
 					f"TCB reference registration failed "
 					f"(HTTP {http_status}, TCB Status {tcb_status}: {tcb_message or 'No message'})."
@@ -580,9 +604,11 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 			)
 
 		return {
-			"ok": True, "mode": "Live",
+			"ok": True,
+			"mode": "Live",
 			"message": tcb_message or "TCB reference registered successfully.",
-			"http_status": http_status, "tcb_status": tcb_status,
+			"http_status": http_status,
+			"tcb_status": tcb_status,
 		}
 	except Exception as exc:
 		traceback = frappe.get_traceback()
@@ -606,9 +632,11 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		)
 		registry = _get_registry(control_number)
 		if registry:
-			registry.mark_failed(log_name=log_name,
-			                     event_type="Reference Create",
-			                     note="Reference Create raised an exception. See log.")
+			registry.mark_failed(
+				log_name=log_name,
+				event_type="Reference Create",
+				note="Reference Create raised an exception. See log.",
+			)
 
 		_notify_so_owner(
 			sales_order_name,
@@ -617,7 +645,8 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 		)
 
 		return {
-			"ok": False, "mode": "Live",
+			"ok": False,
+			"mode": "Live",
 			"message": f"TCB reference registration raised an exception: {exc_short}",
 		}
 
@@ -645,8 +674,11 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 	# it, which would make the gate wrongly block a legitimate retry).
 	registry = _get_registry(control_number)
 	if registry and registry.status == "Declined":
-		return {"ok": True, "status": "Already Declined",
-		        "message": f"Control number {control_number} is already declined."}
+		return {
+			"ok": True,
+			"status": "Already Declined",
+			"message": f"Control number {control_number} is already declined.",
+		}
 
 	if settings.get("outbound_mode") != "Live":
 		# Do NOT mark the registry 'Declined' here — no live call was made, so the
@@ -656,18 +688,31 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		# 'Declined' must only ever mean a confirmed bank decline. Just log the skip.
 		registry = _get_registry(control_number)
 		if registry:
-			registry.append_log(None, "Reference Decline", "Ignored",
-			                    note="Outbound mode not Live — decline call skipped; number left as-is.")
-		return {"ok": True, "status": "Ignored", "message": "Outbound mode is not Live; decline call skipped."}
+			registry.append_log(
+				None,
+				"Reference Decline",
+				"Ignored",
+				note="Outbound mode not Live — decline call skipped; number left as-is.",
+			)
+		return {
+			"ok": True,
+			"status": "Ignored",
+			"message": "Outbound mode is not Live; decline call skipped.",
+		}
 
 	_validate_live_reference_settings(settings, need="decline")
 
-	land_acquisition = frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition") if sales_order_name else None
+	land_acquisition = (
+		frappe.db.get_value("Sales Order", sales_order_name, "land_acquisition") if sales_order_name else None
+	)
 	if not land_acquisition:
-		frappe.throw(f"Sales Order {sales_order_name} must have a land acquisition to decline the TCB reference.")
+		frappe.throw(
+			f"Sales Order {sales_order_name} must have a land acquisition to decline the TCB reference."
+		)
 
 	project_info = frappe.db.get_value(
-		"Land Acquisition", land_acquisition,
+		"Land Acquisition",
+		land_acquisition,
 		["partner_code", "profile_id"],
 		as_dict=True,
 	)
@@ -678,8 +723,8 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 	url = _reference_decline_url(settings)
 	payload = {
 		"partnerCode": project_info.partner_code or "",
-		"acctNo":      project_info.profile_id or "",
-		"refNo":       control_number,
+		"acctNo": project_info.profile_id or "",
+		"refNo": control_number,
 	}
 	verify_ssl = bool(cint(settings.get("verify_ssl", 1)))
 	connect_timeout = flt(settings.get("connect_timeout_seconds") or 5)
@@ -692,7 +737,8 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 	try:
 		session = get_request_session()
 		response = session.post(
-			url, json=payload,
+			url,
+			json=payload,
 			timeout=(connect_timeout, read_timeout),
 			verify=verify_ssl,
 		)
@@ -725,7 +771,9 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 				# money was received. Just record the decline acknowledgment.
 				if registry.status in ("Paid", "Declined", "Expired"):
 					registry.append_log(
-						log_name, "Reference Decline", "Success",
+						log_name,
+						"Reference Decline",
+						"Success",
 						note=(
 							f"TCB accepted decline but registry is already "
 							f"{registry.status}; local status left unchanged. "
@@ -745,8 +793,12 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 				# Committing on success makes the already-declined short-circuit trustworthy.
 				frappe.db.commit()
 			else:
-				registry.append_log(log_name, "Reference Decline", "Failed",
-				                    note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}")
+				registry.append_log(
+					log_name,
+					"Reference Decline",
+					"Failed",
+					note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}",
+				)
 
 		if ok:
 			frappe.msgprint(
@@ -763,7 +815,9 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			alert=True,
 		)
 		return {
-			"ok": False, "status": "Failed", "block_cancel": block_cancel,
+			"ok": False,
+			"status": "Failed",
+			"block_cancel": block_cancel,
 			"message": (
 				f"TCB decline failed (HTTP {http_status}, TCB Status {tcb_status}: "
 				f"{tcb_message or 'No message'})."
@@ -788,8 +842,9 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		)
 		registry = _get_registry(control_number)
 		if registry:
-			registry.append_log(log_name, "Reference Decline", "Failed",
-			                    note="Reference Decline raised an exception.")
+			registry.append_log(
+				log_name, "Reference Decline", "Failed", note="Reference Decline raised an exception."
+			)
 		block_cancel = policy == "Block Cancel"
 		frappe.msgprint(
 			f"TCB decline failed for <b>{control_number}</b>. Check TCB API Log.",
@@ -797,7 +852,9 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			alert=True,
 		)
 		return {
-			"ok": False, "status": "Failed", "block_cancel": block_cancel,
+			"ok": False,
+			"status": "Failed",
+			"block_cancel": block_cancel,
 			"message": "TCB decline call failed with exception. Check TCB API Log.",
 		}
 
@@ -837,7 +894,11 @@ def apply_tcb_payment_to_sales_order(
 	payment_date = _normalize_date_string(payment_date)
 
 	if not control_number:
-		return {"ok": False, "status": "Failed", "message": "Missing control/reference number from TCB payload."}
+		return {
+			"ok": False,
+			"status": "Failed",
+			"message": "Missing control/reference number from TCB payload.",
+		}
 	if amount <= 0:
 		return {"ok": False, "status": "Failed", "message": "TCB payment amount must be greater than zero."}
 
@@ -846,7 +907,8 @@ def apply_tcb_payment_to_sales_order(
 	# never issued this control number, so it cannot be ours.
 	if not frappe.db.exists("TCB Control Number", control_number):
 		return {
-			"ok": False, "status": "Failed",
+			"ok": False,
+			"status": "Failed",
 			"message": f"Control number {control_number} is not in the TCB Control Number registry.",
 		}
 
@@ -860,7 +922,11 @@ def apply_tcb_payment_to_sales_order(
 			# order may receive a payment.
 			standard_so_name = frappe.db.get_value(
 				"Sales Order",
-				{"control_number": control_number, "docstatus": 1, "status": ["not in", ["Closed", "Cancelled"]]},
+				{
+					"control_number": control_number,
+					"docstatus": 1,
+					"status": ["not in", ["Closed", "Cancelled"]],
+				},
 				"name",
 			)
 	except Exception:
@@ -868,14 +934,16 @@ def apply_tcb_payment_to_sales_order(
 
 	if not standard_so_name:
 		return {
-			"ok": False, "status": "Failed",
+			"ok": False,
+			"status": "Failed",
 			"message": f"No active Sales Order was found for control number {control_number} (it may be closed or cancelled).",
 		}
 
 	reference_no = payment_reference or control_number
 	if _has_payment_reference_for_sales_order(standard_so_name, reference_no):
 		return {
-			"ok": True, "status": "Ignored",
+			"ok": True,
+			"status": "Ignored",
 			"message": f"Payment reference {reference_no} already exists for Sales Order {standard_so_name}.",
 			"sales_order": standard_so_name,
 		}
@@ -883,7 +951,8 @@ def apply_tcb_payment_to_sales_order(
 	bank_account = frappe.db.get_single_value("LandMS Settings", "tcb_bank_account")
 	if not bank_account:
 		return {
-			"ok": False, "status": "Failed",
+			"ok": False,
+			"status": "Failed",
 			"message": "LandMS Settings is missing TCB Bank Account; cannot auto-apply payment.",
 			"sales_order": standard_so_name,
 		}
@@ -902,12 +971,14 @@ def apply_tcb_payment_to_sales_order(
 			# Draft PE — do NOT mark registry as paid. The money is not yet
 			# booked; a reviewer must submit the PE first.
 			return {
-				"ok": True, "status": "Success",
+				"ok": True,
+				"status": "Success",
 				"message": (
 					f"Payment Entry {pe_name} created in Draft for {standard_so_name} "
 					"— pending manual review before submission."
 				),
-				"sales_order": standard_so_name, "payment_entry": pe_name,
+				"sales_order": standard_so_name,
+				"payment_entry": pe_name,
 			}
 
 		registry = _get_registry(control_number)
@@ -919,21 +990,27 @@ def apply_tcb_payment_to_sales_order(
 				note=f"Auto-applied to {standard_so_name}.",
 			)
 		return {
-			"ok": True, "status": "Success",
+			"ok": True,
+			"status": "Success",
 			"message": f"Payment auto-applied to {standard_so_name}.",
-			"sales_order": standard_so_name, "payment_entry": pe_name,
+			"sales_order": standard_so_name,
+			"payment_entry": pe_name,
 		}
 	except Exception as exc:
 		msg = cstr(exc)
 		if "Duplicate payment reference" in msg:
 			return {
-				"ok": True, "status": "Ignored", "message": msg,
+				"ok": True,
+				"status": "Ignored",
+				"message": msg,
 				"sales_order": standard_so_name,
 			}
 		return {
-			"ok": False, "status": "Failed",
+			"ok": False,
+			"status": "Failed",
 			"message": msg or "Failed to auto-apply TCB payment.",
-			"sales_order": standard_so_name, "error": frappe.get_traceback(),
+			"sales_order": standard_so_name,
+			"error": frappe.get_traceback(),
 		}
 
 
@@ -962,7 +1039,11 @@ def run_tcb_reconciliation_job(
 		settings = _get_tcb_settings()
 		lookback_days = cint(settings.get("reconciliation_lookback_days") or 1)
 		end = _normalize_date_string(end_date)
-		start = _normalize_date_string(start_date) if start_date else _normalize_date_string(add_days(end, -lookback_days))
+		start = (
+			_normalize_date_string(start_date)
+			if start_date
+			else _normalize_date_string(add_days(end, -lookback_days))
+		)
 
 		# Create a new log doc if one was not supplied by the caller (scheduler path).
 		if not log_name:
@@ -999,8 +1080,7 @@ def run_tcb_reconciliation_job(
 				response_payload={"message": msg},
 				error=msg,
 			)
-			_update_recon_log(log_name, status="Failed", message=msg,
-			                  duration=time.time() - t_start)
+			_update_recon_log(log_name, status="Failed", message=msg, duration=time.time() - t_start)
 			return {"ok": True, "status": "Ignored", "message": msg}
 
 		if not cint(settings.get("reconciliation_enabled")):
@@ -1016,8 +1096,7 @@ def run_tcb_reconciliation_job(
 				response_payload={"message": msg},
 				error=msg,
 			)
-			_update_recon_log(log_name, status="Failed", message=msg,
-			                  duration=time.time() - t_start)
+			_update_recon_log(log_name, status="Failed", message=msg, duration=time.time() - t_start)
 			return {"ok": True, "status": "Ignored", "message": msg}
 
 		land_acquisitions = frappe.get_all(
@@ -1027,8 +1106,9 @@ def run_tcb_reconciliation_job(
 		)
 		if not land_acquisitions:
 			err_msg = "No Approved or Subdivided Land Acquisitions found. Cannot run reconciliation."
-			_update_recon_log(log_name, status="Failed", message=err_msg,
-			                  error=err_msg, duration=time.time() - t_start)
+			_update_recon_log(
+				log_name, status="Failed", message=err_msg, error=err_msg, duration=time.time() - t_start
+			)
 			return {"ok": False, "status": "Failed", "message": err_msg}
 
 		rows = []
@@ -1042,8 +1122,9 @@ def run_tcb_reconciliation_job(
 			)
 			if not fetch_result.get("ok"):
 				err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
-				_update_recon_log(log_name, status="Failed", message=err_msg,
-				                  error=err_msg, duration=time.time() - t_start)
+				_update_recon_log(
+					log_name, status="Failed", message=err_msg, error=err_msg, duration=time.time() - t_start
+				)
 				return {"ok": False, "status": "Failed", "message": err_msg}
 
 			rows.extend(fetch_result.get("rows") or [])
@@ -1245,10 +1326,15 @@ def run_tcb_reconciliation_job(
 		)
 
 		return {
-			"ok": True, "status": final_status,
+			"ok": True,
+			"status": final_status,
 			"message": summary,
-			"rows": total, "applied": applied, "ignored": ignored, "failed": failed,
-			"start_date": start, "end_date": end,
+			"rows": total,
+			"applied": applied,
+			"ignored": ignored,
+			"failed": failed,
+			"start_date": start,
+			"end_date": end,
 		}
 	except Exception:
 		err = frappe.get_traceback()
@@ -1282,21 +1368,23 @@ def run_tcb_reconciliation_job(
 def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
 	"""Insert a new TCB Reconciliation Log doc in Running state. Best-effort."""
 	try:
-		doc = frappe.get_doc({
-			"doctype":          "TCB Reconciliation Log",
-			"naming_series":    "TCB-RECON-.YYYY.-.######",
-			"status":           "Running",
-			"triggered_by":     triggered_by,
-			"started_at":       now(),
-			"completed_at":     None,
-			"duration_seconds": 0,
-			"total_rows":       0,
-			"applied":          0,
-			"ignored":          0,
-			"failed":           0,
-			"date_range_start": start,
-			"date_range_end":   end,
-		})
+		doc = frappe.get_doc(
+			{
+				"doctype": "TCB Reconciliation Log",
+				"naming_series": "TCB-RECON-.YYYY.-.######",
+				"status": "Running",
+				"triggered_by": triggered_by,
+				"started_at": now(),
+				"completed_at": None,
+				"duration_seconds": 0,
+				"total_rows": 0,
+				"applied": 0,
+				"ignored": 0,
+				"failed": 0,
+				"date_range_start": start,
+				"date_range_end": end,
+			}
+		)
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
 		return doc.name
@@ -1325,15 +1413,15 @@ def _update_recon_log(
 			"TCB Reconciliation Log",
 			log_name,
 			{
-				"status":           status,
-				"completed_at":     now(),
+				"status": status,
+				"completed_at": now(),
 				"duration_seconds": round(duration, 2),
-				"total_rows":       total_rows,
-				"applied":          applied,
-				"ignored":          ignored,
-				"failed":           failed,
-				"message":          (message or "")[:500],
-				"error":            error or "",
+				"total_rows": total_rows,
+				"applied": applied,
+				"ignored": ignored,
+				"failed": failed,
+				"message": (message or "")[:500],
+				"error": error or "",
 			},
 			update_modified=True,
 		)
@@ -1358,15 +1446,18 @@ def _append_recon_log_row(
 		return
 	try:
 		doc = frappe.get_doc("TCB Reconciliation Log", log_name)
-		doc.append("rows", {
-			"reference":      reference,
-			"amount":         flt(amount),
-			"transaction_id": transaction_id,
-			"row_status":     row_status,
-			"sales_order":    sales_order,
-			"payment_entry":  payment_entry,
-			"message":        (message or "")[:500],
-		})
+		doc.append(
+			"rows",
+			{
+				"reference": reference,
+				"amount": flt(amount),
+				"transaction_id": transaction_id,
+				"row_status": row_status,
+				"sales_order": sales_order,
+				"payment_entry": payment_entry,
+				"message": (message or "")[:500],
+			},
+		)
 		doc.save(ignore_permissions=True)
 		frappe.db.commit()
 	except Exception:
@@ -1393,8 +1484,7 @@ def _stop_reconciliation_if_requested(
 		return None
 
 	message = (
-		f"Stopped after processing {total_rows} rows: "
-		f"applied={applied}, ignored={ignored}, failed={failed}."
+		f"Stopped after processing {total_rows} rows: applied={applied}, ignored={ignored}, failed={failed}."
 	)
 	_update_recon_log(
 		log_name,
@@ -1464,31 +1554,33 @@ def create_tcb_api_log(
 			payment_entry = ""
 		if reconciliation_log and not frappe.db.exists("TCB Reconciliation Log", reconciliation_log):
 			reconciliation_log = ""
-		doc = frappe.get_doc({
-			"doctype":            "TCB API Log",
-			"naming_series":      "TCB-LOG-.YYYY.-.######",
-			"requested_at":       now(),
-			"response_at":        now(),
-			"direction":          direction,
-			"event_type":         event_type,
-			"status":             status,
-			"processing_mode":    processing_mode or "",
-			"is_duplicate":       cint(is_duplicate),
-			"endpoint":           endpoint or "",
-			"http_status_code":   cint(http_status_code),
-			"tcb_status_code":    cint(tcb_status_code),
-			"tcb_message":        (tcb_message or "")[:140],
-			"external_reference": external_reference or "",
-			"related_ref":        related_ref or "",
-			"transaction_id":     transaction_id or "",
-			"sales_order":        sales_order or "",
-			"plot_contract":      plot_contract or "",
-			"payment_entry":      payment_entry or "",
-			"reconciliation_log": reconciliation_log or "",
-			"request_payload":    _to_pretty_json_text(request_payload),
-			"response_payload":   _to_pretty_json_text(response_payload),
-			"error":              error or "",
-		})
+		doc = frappe.get_doc(
+			{
+				"doctype": "TCB API Log",
+				"naming_series": "TCB-LOG-.YYYY.-.######",
+				"requested_at": now(),
+				"response_at": now(),
+				"direction": direction,
+				"event_type": event_type,
+				"status": status,
+				"processing_mode": processing_mode or "",
+				"is_duplicate": cint(is_duplicate),
+				"endpoint": endpoint or "",
+				"http_status_code": cint(http_status_code),
+				"tcb_status_code": cint(tcb_status_code),
+				"tcb_message": (tcb_message or "")[:140],
+				"external_reference": external_reference or "",
+				"related_ref": related_ref or "",
+				"transaction_id": transaction_id or "",
+				"sales_order": sales_order or "",
+				"plot_contract": plot_contract or "",
+				"payment_entry": payment_entry or "",
+				"reconciliation_log": reconciliation_log or "",
+				"request_payload": _to_pretty_json_text(request_payload),
+				"response_payload": _to_pretty_json_text(response_payload),
+				"error": error or "",
+			}
+		)
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
 		return doc.name
@@ -1525,8 +1617,9 @@ def has_duplicate_ipn(transaction_id: str, reference: str) -> bool:
 		return False
 
 
-def _record_registry_event(control_number: str, event_type: str, event_status: str,
-                           log_name: str | None, note: str | None = None) -> None:
+def _record_registry_event(
+	control_number: str, event_type: str, event_status: str, log_name: str | None, note: str | None = None
+) -> None:
 	"""Append a non-state-changing event to the registry trail."""
 	registry = _get_registry(control_number)
 	if registry:
@@ -1555,8 +1648,8 @@ def _validate_live_reference_settings(settings: dict[str, Any], *, need: str = "
 	missing = []
 
 	url_field = {
-		"reference":      "reference_create_url",
-		"decline":        "reference_decline_url",
+		"reference": "reference_create_url",
+		"decline": "reference_decline_url",
 		"reconciliation": "reconciliation_url",
 	}.get(need, "reference_create_url")
 
@@ -1565,8 +1658,7 @@ def _validate_live_reference_settings(settings: dict[str, Any], *, need: str = "
 
 	if missing:
 		frappe.throw(
-			"TCB outbound mode is Live but required integration fields are missing: "
-			+ ", ".join(missing)
+			"TCB outbound mode is Live but required integration fields are missing: " + ", ".join(missing)
 		)
 
 
@@ -1623,14 +1715,12 @@ def _fetch_reconciliation_rows(
 	url = _reconciliation_url(settings)
 	endpoint = _masked_reconciliation_endpoint(settings)
 	reconciliation_id = (
-		land_acquisition.get("reconciliation_id")
-		or land_acquisition.get("partner_code")
-		or ""
+		land_acquisition.get("reconciliation_id") or land_acquisition.get("partner_code") or ""
 	)
 	payload = {
 		"partnerCode": reconciliation_id,
-		"startDate":   start_date,
-		"endDate":     end_date,
+		"startDate": start_date,
+		"endDate": end_date,
 	}
 	verify_ssl = bool(cint(settings.get("verify_ssl", 1)))
 	connect_timeout = flt(settings.get("connect_timeout_seconds") or 5)
@@ -1663,7 +1753,11 @@ def _fetch_reconciliation_rows(
 		success_rows = []
 		ok = False
 		if isinstance(parsed_body, list):
-			if parsed_body and isinstance(parsed_body[0], dict) and ("Status" in parsed_body[0] or "status" in parsed_body[0]):
+			if (
+				parsed_body
+				and isinstance(parsed_body[0], dict)
+				and ("Status" in parsed_body[0] or "status" in parsed_body[0])
+			):
 				ok = False
 			else:
 				success_rows = parsed_body

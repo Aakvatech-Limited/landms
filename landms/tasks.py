@@ -22,6 +22,7 @@ def run_daily_tcb_reconciliation():
 	"""Nightly TCB reconciliation job — wired to daily_long scheduler."""
 	try:
 		from landms.tcb import run_tcb_reconciliation_job
+
 		run_tcb_reconciliation_job(triggered_by="Scheduled")
 	except Exception:
 		frappe.log_error(
@@ -128,6 +129,7 @@ def auto_expire_paid_applications_past_deadline():
 				# Close button): forfeits net of govt, credit-notes the outstanding,
 				# declines the TCB control number, releases the plot, cancels the app.
 				from landms.sales_order_hooks import close_sales_order
+
 				close_sales_order(app.sales_order)
 				frappe.db.commit()  # per-order: persist this success on its own
 				expired_count += 1

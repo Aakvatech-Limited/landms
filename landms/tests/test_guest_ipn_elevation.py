@@ -47,9 +47,12 @@ class TestGuestIpnElevation(FrappeTestCase):
 		# build (the vulnerable call).
 		doc = frappe._dict(name="SAL-ORD-GUEST-TEST", plot="PLOT-X", customer="CUST-X")
 
-		with patch("landms.sales_order_hooks.frappe.db.sql", return_value=[]), patch(
-			"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice",
-			spy_make_sales_invoice,
+		with (
+			patch("landms.sales_order_hooks.frappe.db.sql", return_value=[]),
+			patch(
+				"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice",
+				spy_make_sales_invoice,
+			),
 		):
 			frappe.set_user("Guest")
 			with self.assertRaises(_BuildReached):
@@ -71,10 +74,10 @@ class TestGuestIpnElevation(FrappeTestCase):
 
 		so = frappe._dict(name="SAL-ORD-GUEST-TEST", docstatus=1, plot_sales_invoice=None)
 
-		with patch("landms.payment_sync.frappe.db.exists", return_value=True), patch(
-			"landms.payment_sync.frappe.get_doc", return_value=so
-		), patch(
-			"landms.payment_sync.ensure_plot_sales_invoice_for_sales_order", spy_ensure
+		with (
+			patch("landms.payment_sync.frappe.db.exists", return_value=True),
+			patch("landms.payment_sync.frappe.get_doc", return_value=so),
+			patch("landms.payment_sync.ensure_plot_sales_invoice_for_sales_order", spy_ensure),
 		):
 			frappe.set_user("Guest")
 			with self.assertRaises(_BuildReached):

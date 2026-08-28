@@ -46,7 +46,6 @@ from landms.tcb import (
 	run_tcb_reconciliation_job,
 )
 
-
 IPN_ENDPOINT = "/api/method/landms.api.tcb.ipn_callback"
 RUN_RECONCILIATION_ENDPOINT = "/api/method/landms.api.tcb.run_reconciliation"
 
@@ -71,20 +70,31 @@ def ipn_callback() -> dict[str, Any]:
 	transaction_id = ""
 	notification_name = ""
 
-	def _finalize(notification_status: str, *, message: str = "",
-	              error: str = "", sales_order: str = "",
-	              payment_entry: str = "", log_name: str = "") -> None:
+	def _finalize(
+		notification_status: str,
+		*,
+		message: str = "",
+		error: str = "",
+		sales_order: str = "",
+		payment_entry: str = "",
+		log_name: str = "",
+	) -> None:
 		if not notification_name:
 			return
 		try:
-			frappe.db.set_value("TCB Payment Notification", notification_name, {
-				"status":             notification_status,
-				"processing_message": (message or "")[:500],
-				"error":              error or "",
-				"sales_order":        sales_order or "",
-				"payment_entry":      payment_entry or "",
-				"tcb_api_log":        log_name or "",
-			}, update_modified=True)
+			frappe.db.set_value(
+				"TCB Payment Notification",
+				notification_name,
+				{
+					"status": notification_status,
+					"processing_message": (message or "")[:500],
+					"error": error or "",
+					"sales_order": sales_order or "",
+					"payment_entry": payment_entry or "",
+					"tcb_api_log": log_name or "",
+				},
+				update_modified=True,
+			)
 		except Exception:
 			frappe.logger("landms").error(
 				"Failed to update TCB Payment Notification",
@@ -113,9 +123,14 @@ def ipn_callback() -> dict[str, Any]:
 		lock_name, lock_acquired = _acquire_ipn_lock(transaction_id, reference)
 		if lock_name and not lock_acquired:
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Ignored",
-				processing_mode=mode, endpoint=IPN_ENDPOINT, is_duplicate=1,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Ignored",
+				processing_mode=mode,
+				endpoint=IPN_ENDPOINT,
+				is_duplicate=1,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Concurrent IPN — another worker is processing."},
 			)
@@ -144,9 +159,13 @@ def ipn_callback() -> dict[str, Any]:
 		# 3. Off mode — log and decline.
 		if mode == "Off":
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Ignored",
-				processing_mode="Off", endpoint=IPN_ENDPOINT,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Ignored",
+				processing_mode="Off",
+				endpoint=IPN_ENDPOINT,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Inbound mode Off."},
 			)
@@ -161,15 +180,23 @@ def ipn_callback() -> dict[str, Any]:
 		auth_hold = False
 		if not auth_ok and auth_mode == "Enforce":
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Failed",
-				processing_mode=mode, endpoint=IPN_ENDPOINT,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Failed",
+				processing_mode=mode,
+				endpoint=IPN_ENDPOINT,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": f"IPN auth rejected: {auth_message}"},
 				error=auth_message,
 			)
-			_finalize("Failed", message=f"IPN auth rejected: {auth_message}",
-			          error=auth_message, log_name=log_name or "")
+			_finalize(
+				"Failed",
+				message=f"IPN auth rejected: {auth_message}",
+				error=auth_message,
+				log_name=log_name or "",
+			)
 			return {"ok": False, "status": "Rejected", "message": "IPN auth token rejected."}
 		if not auth_ok:
 			# Log Only — don't drop it; force manual review downstream.
@@ -178,9 +205,14 @@ def ipn_callback() -> dict[str, Any]:
 		# 4. Idempotency — duplicate IPN with same transaction_id + reference.
 		if transaction_id and has_duplicate_ipn(transaction_id, reference):
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Ignored",
-				processing_mode=mode, endpoint=IPN_ENDPOINT, is_duplicate=1,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Ignored",
+				processing_mode=mode,
+				endpoint=IPN_ENDPOINT,
+				is_duplicate=1,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Duplicate IPN — already processed."},
 			)
@@ -189,7 +221,8 @@ def ipn_callback() -> dict[str, Any]:
 			# the winning request's Processed status and blank the linked documents.
 			current_status = (
 				frappe.db.get_value("TCB Payment Notification", notification_name, "status")
-				if notification_name else None
+				if notification_name
+				else None
 			)
 			if current_status != "Processed":
 				_finalize("Duplicate", message="Duplicate IPN — already processed.", log_name=log_name or "")
@@ -198,9 +231,13 @@ def ipn_callback() -> dict[str, Any]:
 		# 5. Log Only — log and exit.
 		if mode == "Log Only":
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Success",
-				processing_mode="Log Only", endpoint=IPN_ENDPOINT,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Success",
+				processing_mode="Log Only",
+				endpoint=IPN_ENDPOINT,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Log Only — payment not applied."},
 			)
@@ -210,9 +247,13 @@ def ipn_callback() -> dict[str, Any]:
 		# 6. Apply Payment — only if auto-apply is on.
 		if not is_callback_auto_apply_enabled():
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Ignored",
-				processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Ignored",
+				processing_mode="Apply Payment",
+				endpoint=IPN_ENDPOINT,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Auto-apply switch is OFF — payment not created."},
 			)
@@ -222,14 +263,22 @@ def ipn_callback() -> dict[str, Any]:
 		# 7. Validate minimum payload before going to the matcher.
 		if not reference or amount <= 0:
 			log_name = create_tcb_api_log(
-				direction="Inbound", event_type="IPN Callback", status="Failed",
-				processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
-				external_reference=reference, transaction_id=transaction_id,
+				direction="Inbound",
+				event_type="IPN Callback",
+				status="Failed",
+				processing_mode="Apply Payment",
+				endpoint=IPN_ENDPOINT,
+				external_reference=reference,
+				transaction_id=transaction_id,
 				request_payload=raw_payload,
 				response_payload={"message": "Missing reference or non-positive amount."},
 			)
-			_finalize("Failed", message="Missing reference or non-positive amount.",
-			          error="Validation failure.", log_name=log_name or "")
+			_finalize(
+				"Failed",
+				message="Missing reference or non-positive amount.",
+				error="Validation failure.",
+				log_name=log_name or "",
+			)
 			return {"ok": False, "status": "Failed", "message": "Missing reference or non-positive amount."}
 
 		# 8. IP allowlist check — if configured and the client IP is not in the
@@ -243,9 +292,13 @@ def ipn_callback() -> dict[str, Any]:
 		# auth token failed under Log Only mode. Never drop a real payment.
 		hold_for_review = ip_blocked or auth_hold
 		ip_message = (
-			f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
-			"PE will be created as Draft for manual review."
-		) if ip_blocked else ""
+			(
+				f"Client IP {client_ip or 'unknown'} is not in the TCB allowlist; "
+				"PE will be created as Draft for manual review."
+			)
+			if ip_blocked
+			else ""
+		)
 		if auth_hold:
 			ip_message = (ip_message + " " if ip_message else "") + (
 				f"IPN auth (Log Only): {auth_message}; PE held as Draft for review."
@@ -262,10 +315,13 @@ def ipn_callback() -> dict[str, Any]:
 			result["message"] = (result.get("message") or "") + " " + ip_message
 
 		log_name = create_tcb_api_log(
-			direction="Inbound", event_type="IPN Callback",
+			direction="Inbound",
+			event_type="IPN Callback",
 			status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
-			processing_mode="Apply Payment", endpoint=IPN_ENDPOINT,
-			external_reference=reference, transaction_id=transaction_id,
+			processing_mode="Apply Payment",
+			endpoint=IPN_ENDPOINT,
+			external_reference=reference,
+			transaction_id=transaction_id,
 			sales_order=result.get("sales_order"),
 			payment_entry=result.get("payment_entry"),
 			request_payload=raw_payload,
@@ -276,7 +332,7 @@ def ipn_callback() -> dict[str, Any]:
 		final_status = {
 			"Success": "Processed",
 			"Ignored": "Duplicate",
-			"Failed":  "Failed",
+			"Failed": "Failed",
 		}.get(result.get("status") or "", "Failed")
 
 		_finalize(
@@ -382,7 +438,9 @@ def run_reconciliation(start_date: str | None = None, end_date: str | None = Non
 	create_tcb_api_log(
 		direction="Inbound",
 		event_type="Reconciliation",
-		status=result.get("status") if result.get("status") in ("Success", "Failed", "Ignored", "Stopped") else ("Success" if result.get("ok") else "Failed"),
+		status=result.get("status")
+		if result.get("status") in ("Success", "Failed", "Ignored", "Stopped")
+		else ("Success" if result.get("ok") else "Failed"),
 		processing_mode="Endpoint",
 		endpoint=RUN_RECONCILIATION_ENDPOINT,
 		request_payload=request_payload,
@@ -496,7 +554,7 @@ def _verify_ipn_auth_token() -> tuple[bool, str, str]:
 		# Tolerate 'Bearer <tok>' / 'Token <tok>' prefixes.
 		for prefix in ("Bearer ", "Token "):
 			if presented.startswith(prefix):
-				presented = presented[len(prefix):].strip()
+				presented = presented[len(prefix) :].strip()
 				break
 		# Compare on bytes, not str. hmac.compare_digest raises TypeError on a
 		# non-ASCII str (a stray latin-1 header byte would otherwise crash the whole
@@ -585,11 +643,11 @@ def _read_request_payload() -> tuple[Any, dict[str, Any]]:
 	# the full incoming request. This is the only place TCB's actual
 	# request shape is captured for auditing.
 	debug_envelope = {
-		"method":       method,
-		"source_ip":    source_ip,
+		"method": method,
+		"source_ip": source_ip,
 		"query_string": query_string,
-		"headers":      headers,
-		"body":         raw_body or parsed,
+		"headers": headers,
+		"body": raw_body or parsed,
 	}
 
 	return debug_envelope, parsed
@@ -639,29 +697,34 @@ def _upsert_payment_notification(
 			if existing:
 				return existing
 
-		doc = frappe.get_doc({
-			"doctype":          "TCB Payment Notification",
-			"status":           initial_status,
-			"received_at":      now(),
-			"tcb_status_code":  _safe_int(envelope.get("status")),
-			"tcb_status_desc":  cstr(envelope.get("statusDesc") or envelope.get("status_desc") or "")[:140],
-			"transaction_id":   transaction_id,
-			"reference":        cstr(body.get("reference") or "")[:140],
-			"account_no":       cstr(body.get("account_no") or "")[:140],
-			"amount":           flt(body.get("amount")),
-			"currency":         cstr(body.get("currency") or "TZS")[:20],
-			"charge":           flt(body.get("charge")),
-			"transaction_date": _parse_tcb_datetime(body.get("transaction_date") or body.get("trans_date")),
-			"phone":            cstr(body.get("phone") or "")[:140],
-			"description":      cstr(body.get("description") or "")[:1000],
-			"tcb_control_number": (
-				body.get("reference")
-				if body.get("reference")
-				and frappe.db.exists("TCB Control Number", body.get("reference"))
-				else ""
-			),
-			"raw_payload":      _to_text(raw_payload),
-		})
+		doc = frappe.get_doc(
+			{
+				"doctype": "TCB Payment Notification",
+				"status": initial_status,
+				"received_at": now(),
+				"tcb_status_code": _safe_int(envelope.get("status")),
+				"tcb_status_desc": cstr(envelope.get("statusDesc") or envelope.get("status_desc") or "")[
+					:140
+				],
+				"transaction_id": transaction_id,
+				"reference": cstr(body.get("reference") or "")[:140],
+				"account_no": cstr(body.get("account_no") or "")[:140],
+				"amount": flt(body.get("amount")),
+				"currency": cstr(body.get("currency") or "TZS")[:20],
+				"charge": flt(body.get("charge")),
+				"transaction_date": _parse_tcb_datetime(
+					body.get("transaction_date") or body.get("trans_date")
+				),
+				"phone": cstr(body.get("phone") or "")[:140],
+				"description": cstr(body.get("description") or "")[:1000],
+				"tcb_control_number": (
+					body.get("reference")
+					if body.get("reference") and frappe.db.exists("TCB Control Number", body.get("reference"))
+					else ""
+				),
+				"raw_payload": _to_text(raw_payload),
+			}
+		)
 		doc.insert(ignore_permissions=True)
 		# Commit immediately so the audit record survives any later rollback
 		# triggered by payment processing errors. The notification is the
@@ -694,6 +757,7 @@ def _parse_tcb_datetime(value) -> str | None:
 		return None
 	try:
 		from frappe.utils import get_datetime
+
 		dt = get_datetime(value)
 		if dt is None:
 			return None
