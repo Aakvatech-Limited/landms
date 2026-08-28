@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms.landms.doctype.plot_application.plot_application import PlotApplication
 
 
-class TestPlotApplicationAmendReset(FrappeTestCase):
+class TestPlotApplicationAmendReset(IntegrationTestCase):
 	def test_amended_application_resets_payment_state(self):
 		doc = PlotApplication(
 			{
@@ -71,7 +71,7 @@ class TestPlotApplicationAmendReset(FrappeTestCase):
 		self.assertEqual(doc.sales_order, "SAL-ORD-2026-00011")
 
 
-class TestPlotApplicationCancellation(FrappeTestCase):
+class TestPlotApplicationCancellation(IntegrationTestCase):
 	def test_cancel_linked_draft_sales_order_clears_link_before_delete(self):
 		doc = PlotApplication(
 			{
