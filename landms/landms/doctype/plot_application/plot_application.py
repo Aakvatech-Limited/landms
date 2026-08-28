@@ -145,6 +145,16 @@ class PlotApplication(Document):
 		self.application_fee      = flt(settings.application_fee_amount)
 		self.unpaid_validity_days = int(settings.unpaid_application_expiry_days or 3)
 		self.validity_days        = int(settings.application_fee_validity_days or 7)
+		# Per-plot rule: a plot flagged "No Advance Deadline" grants the FULL
+		# payment window (Payment Completion Days, defined on the Land Acquisition
+		# and snapshotted onto the plot) instead of the standard advance window.
+		if self.plot:
+			plot_rule = frappe.db.get_value(
+				"Plot Master", self.plot,
+				["no_advance_deadline", "payment_completion_days"], as_dict=True,
+			)
+			if plot_rule and cint(plot_rule.no_advance_deadline) and cint(plot_rule.payment_completion_days) > 0:
+				self.validity_days = cint(plot_rule.payment_completion_days)
 
 	def _lock_plot_row(self):
 		"""Serialize submit/payment operations per plot to reduce race conditions."""

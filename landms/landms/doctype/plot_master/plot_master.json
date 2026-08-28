@@ -93,6 +93,11 @@
    "read_only": 1
   },
   {
+   "fieldname": "tab_pricing",
+   "fieldtype": "Tab Break",
+   "label": "Pricing & Payment"
+  },
+  {
    "fieldname": "financials_section",
    "fieldtype": "Section Break",
    "label": "Financials",
@@ -130,60 +135,17 @@
    "read_only": 1
   },
   {
-   "fieldname": "location_section",
-   "fieldtype": "Section Break",
-   "label": "Location",
-   "collapsible": 1
+   "fieldname": "no_advance_deadline",
+   "fieldtype": "Check",
+   "label": "No Advance Deadline",
+   "default": "0",
+   "allow_on_submit": 1,
+   "description": "Customer gets the full payment period, with no separate advance deadline."
   },
   {
-   "fieldname": "latitude",
-   "fieldtype": "Float",
-   "label": "Latitude",
-   "precision": "6"
-  },
-  {
-   "fieldname": "longitude",
-   "fieldtype": "Float",
-   "label": "Longitude",
-   "precision": "6"
-  },
-  {
-   "fieldname": "col_break_location",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "location_description",
-   "fieldtype": "Small Text",
-   "label": "Location Description"
-  },
-  {
-   "fieldname": "references_section",
-   "fieldtype": "Section Break",
-   "label": "System References",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "serial_no",
-   "fieldtype": "Data",
-   "label": "Serial No",
-   "read_only": 1,
-   "description": "Auto-assigned on submission (equals plot name)"
-  },
-  {
-   "fieldname": "stock_entry",
-   "fieldtype": "Link",
-   "label": "Stock Entry",
-   "options": "Stock Entry",
-   "read_only": 1,
-   "description": "Material Receipt that moved this plot's value from LUD into Plot Inventory"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "options": "Plot Master",
-   "read_only": 1,
-   "print_hide": 1
+   "fieldname": "tab_govt_fees",
+   "fieldtype": "Tab Break",
+   "label": "Government Fees"
   },
   {
    "fieldname": "govt_fees_section",
@@ -257,6 +219,72 @@
    "label": "Total Amount (CAPS + Govt Fees)",
    "read_only": 1,
    "bold": 1
+  },
+  {
+   "fieldname": "tab_location",
+   "fieldtype": "Tab Break",
+   "label": "Location"
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Location",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "col_break_location",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "location_description",
+   "fieldtype": "Small Text",
+   "label": "Location Description"
+  },
+  {
+   "fieldname": "tab_system",
+   "fieldtype": "Tab Break",
+   "label": "System"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "System References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "label": "Serial No",
+   "read_only": 1,
+   "description": "Auto-assigned on submission (equals plot name)"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "description": "Material Receipt that moved this plot's value from LUD into Plot Inventory"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Plot Master",
+   "read_only": 1,
+   "print_hide": 1
   }
  ],
  "permissions": [
