@@ -12,6 +12,6 @@ def before_save_journal_entry(doc, method=None):
 	if not cost_center:
 		return
 
-	for row in (doc.accounts or []):
+	for row in doc.accounts or []:
 		if row.get("land_acquisition"):
 			row.cost_center = cost_center

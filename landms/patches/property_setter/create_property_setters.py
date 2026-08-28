@@ -8,13 +8,20 @@ from frappe.custom.doctype.property_setter.property_setter import make_property_
 FOLDER = "property_setters_json"
 
 DISALLOWED_FIELDS = {
-	"name", "owner", "creation", "modified", "modified_by",
-	"docstatus", "idx", "is_system_generated", "__last_sync_on",
+	"name",
+	"owner",
+	"creation",
+	"modified",
+	"modified_by",
+	"docstatus",
+	"idx",
+	"is_system_generated",
+	"__last_sync_on",
 }
 
 
 def _load_json(filepath):
-	with open(filepath, "r") as f:
+	with open(filepath) as f:
 		return json.load(f)
 
 

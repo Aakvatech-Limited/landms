@@ -21,7 +21,10 @@ class TestTCBEndpointLogging(FrappeTestCase):
 		self.assertEqual(mock_create_log.call_args.kwargs["status"], "Failed")
 
 	@patch("landms.api.tcb.create_tcb_api_log")
-	@patch("landms.api.tcb.run_tcb_reconciliation_job", return_value={"ok": True, "status": "Success", "message": "Done"})
+	@patch(
+		"landms.api.tcb.run_tcb_reconciliation_job",
+		return_value={"ok": True, "status": "Success", "message": "Done"},
+	)
 	@patch("landms.api.tcb.frappe.get_roles", return_value=["System Manager"])
 	def test_manual_reconciliation_success_is_logged(self, mock_roles, mock_run, mock_create_log):
 		with patch("landms.api.tcb.frappe.session", frappe._dict(user="qa@example.com")):
@@ -34,8 +37,14 @@ class TestTCBEndpointLogging(FrappeTestCase):
 
 	@patch("landms.api.tcb.create_tcb_api_log")
 	@patch("landms.api.tcb.get_tcb_inbound_mode", side_effect=RuntimeError("boom"))
-	@patch("landms.api.tcb._extract_ipn_body", return_value={"reference": "9991145330056", "transaction_id": "048-503-DDE7Y0JNV0", "amount": 200})
-	@patch("landms.api.tcb._read_request_payload", return_value=({"body": {"status": 0}}, {"param": {"reference": "9991145330056"}}))
+	@patch(
+		"landms.api.tcb._extract_ipn_body",
+		return_value={"reference": "9991145330056", "transaction_id": "048-503-DDE7Y0JNV0", "amount": 200},
+	)
+	@patch(
+		"landms.api.tcb._read_request_payload",
+		return_value=({"body": {"status": 0}}, {"param": {"reference": "9991145330056"}}),
+	)
 	def test_ipn_unhandled_exception_is_logged(self, mock_read, mock_extract, mock_mode, mock_create_log):
 		result = api_tcb.ipn_callback()
 
@@ -47,13 +56,15 @@ class TestTCBEndpointLogging(FrappeTestCase):
 
 	@patch("landms.tcb.create_tcb_api_log")
 	def test_decline_control_number_invalid_status_is_logged(self, mock_create_log):
-		doc = TCBControlNumber({
-			"doctype": "TCB Control Number",
-			"name": "9991145330056",
-			"control_number": "9991145330056",
-			"status": "Paid",
-			"sales_order": "SAL-ORD-2026-00003",
-		})
+		doc = TCBControlNumber(
+			{
+				"doctype": "TCB Control Number",
+				"name": "9991145330056",
+				"control_number": "9991145330056",
+				"status": "Paid",
+				"sales_order": "SAL-ORD-2026-00003",
+			}
+		)
 
 		with patch(
 			"landms.landms.doctype.tcb_control_number.tcb_control_number.frappe.session",
