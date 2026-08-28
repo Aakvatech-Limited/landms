@@ -1,11 +1,11 @@
 from unittest.mock import patch
 
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import tcb
 
 
-class TestDuplicateIPNGuard(FrappeTestCase):
+class TestDuplicateIPNGuard(IntegrationTestCase):
 	@patch("landms.tcb.frappe.db.exists")
 	def test_failed_ipn_log_does_not_block_retry(self, mock_exists):
 		tcb.has_duplicate_ipn("048-503-DDE7Y0JNV0", "9991145330056")

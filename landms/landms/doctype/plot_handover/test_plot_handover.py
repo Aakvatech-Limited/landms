@@ -1,6 +1,6 @@
 # test_plot_handover.py
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestPlotMaster(FrappeTestCase):
+class TestPlotMaster(IntegrationTestCase):
 	pass

@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
 from landms.payment_sync import _build_pe_references_for_invoice
@@ -12,7 +12,7 @@ from landms.sales_order_hooks import (
 from landms.tcb import is_valid_tcb_mobile
 
 
-class TestDraftPlotContractSync(FrappeTestCase):
+class TestDraftPlotContractSync(IntegrationTestCase):
 	def _make_source_doc(
 		self, *, control_number="9991145330056", payment_amounts=None, apply_auto_cancellation=1
 	):
@@ -75,7 +75,7 @@ class TestDraftPlotContractSync(FrappeTestCase):
 		self.assertFalse(_draft_contract_matches_sales_order(contract, source_doc))
 
 
-class TestTcbCustomerMobileValidation(FrappeTestCase):
+class TestTcbCustomerMobileValidation(IntegrationTestCase):
 	def test_tcb_mobile_validator_accepts_required_format(self):
 		self.assertTrue(is_valid_tcb_mobile("255762064315"))
 		self.assertFalse(is_valid_tcb_mobile("0762064315"))
@@ -102,7 +102,7 @@ class TestTcbCustomerMobileValidation(FrappeTestCase):
 			frappe.db.get_value = original_get_value
 
 
-class TestLandMsPaymentScheduleTerms(FrappeTestCase):
+class TestLandMsPaymentScheduleTerms(IntegrationTestCase):
 	def test_schedule_rows_include_named_payment_terms(self):
 		rows = build_payment_schedule_rows(
 			total_amount=1000,

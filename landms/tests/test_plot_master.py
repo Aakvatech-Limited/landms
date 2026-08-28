@@ -1,9 +1,9 @@
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms.landms.doctype.plot_master.plot_master import _build_plot_stock_entry_doc
 
 
-class TestPlotMasterStockEntryAccounts(FrappeTestCase):
+class TestPlotMasterStockEntryAccounts(IntegrationTestCase):
 	def test_plot_stock_entry_uses_asset_account_not_item_cogs_default(self):
 		doc = _build_plot_stock_entry_doc(
 			company="LAND ACQUISITION",

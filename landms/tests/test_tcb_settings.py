@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms import tcb
 
 
-class TestTCBSettingsBackwardCompatibility(FrappeTestCase):
+class TestTCBSettingsBackwardCompatibility(IntegrationTestCase):
 	@patch("landms.tcb._get_tcb_integration_doc")
 	def test_missing_optional_single_fields_do_not_crash(self, mock_get_settings_doc):
 		mock_get_settings_doc.return_value = frappe._dict(

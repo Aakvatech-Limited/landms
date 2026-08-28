@@ -1,14 +1,14 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from landms.api import tcb as api_tcb
 from landms.landms.doctype.tcb_control_number.tcb_control_number import TCBControlNumber
 from landms.landms.doctype.tcb_reconciliation_log import tcb_reconciliation_log
 
 
-class TestTCBEndpointLogging(FrappeTestCase):
+class TestTCBEndpointLogging(IntegrationTestCase):
 	@patch("landms.api.tcb.create_tcb_api_log")
 	@patch("landms.api.tcb.frappe.get_roles", return_value=["Accounts User"])
 	def test_manual_reconciliation_permission_denied_is_logged(self, mock_roles, mock_create_log):
