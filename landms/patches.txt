@@ -4,3 +4,5 @@
 landms.patches.setup_data.create_roles
 landms.patches.setup_data.create_payment_terms
 landms.patches.recalculate_la_costs_include_je
+landms.patches.backfill_payment_channel
+landms.patches.backfill_collect_via_tcb

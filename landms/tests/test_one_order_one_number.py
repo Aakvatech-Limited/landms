@@ -128,3 +128,24 @@ class TestOneOrderOneNumber(FrappeTestCase):
 		) as register:
 			registry.retry_registration()
 		register.assert_called_once()
+
+	# Scan, 14 Oct 2026: a stop that waits for TCB leaves the number at Failed on a
+	# cancelled or closed order; Retry Registration must never make it live at TCB.
+	# (A Draft order, whose submit failed, is the normal retry case: tested above.)
+
+	def _retry_after(self, docstatus, status):
+		number = self._hold("Failed")
+		frappe.db.set_value(
+			"Sales Order", self.so, {"control_number": number, "docstatus": docstatus, "status": status}
+		)
+		registry = frappe.get_doc("TCB Control Number", number)
+		with patch("landms.payments.router.register_reference_for_sales_order") as register:
+			with self.assertRaisesRegex(frappe.ValidationError, "is not registered at TCB"):
+				registry.retry_registration()
+		register.assert_not_called()
+
+	def test_a_cancelled_order_is_refused(self):
+		self._retry_after(2, "Cancelled")
+
+	def test_a_closed_order_is_refused(self):
+		self._retry_after(1, "Closed")

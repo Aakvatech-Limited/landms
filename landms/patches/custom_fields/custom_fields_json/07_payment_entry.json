@@ -34,6 +34,35 @@
         "doctype": "Custom Field"
     },
     {
+        "name": "Payment Entry-payment_rail",
+        "dt": "Payment Entry",
+        "label": "Payment Rail",
+        "fieldname": "payment_rail",
+        "insert_after": "plot_outstanding_amount",
+        "fieldtype": "Select",
+        "options": "\nTCB\nMalipopay",
+        "read_only": 1,
+        "allow_on_submit": 1,
+        "no_copy": 1,
+        "search_index": 1,
+        "in_standard_filter": 1,
+        "description": "Which collection rail delivered this payment. Empty = manual / other. Set by the rail's own recording path; drives the Collections-by-Channel report and the externalPayments answer served to Malipopay.",
+        "doctype": "Custom Field"
+    },
+    {
+        "name": "Payment Entry-malipopay_collection",
+        "dt": "Payment Entry",
+        "label": "Malipopay Collection",
+        "fieldname": "malipopay_collection",
+        "insert_after": "payment_rail",
+        "fieldtype": "Link",
+        "options": "Malipopay Collection",
+        "read_only": 1,
+        "allow_on_submit": 1,
+        "no_copy": 1,
+        "doctype": "Custom Field"
+    },
+    {
         "name": "Payment Entry-mobile_no",
         "dt": "Payment Entry",
         "label": "Mobile No",

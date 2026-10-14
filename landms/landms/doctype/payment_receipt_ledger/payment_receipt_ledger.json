@@ -1,0 +1,168 @@
+{
+ "doctype": "DocType",
+ "name": "Payment Receipt Ledger",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "autoname": "format:PRL-{source_rail}-{txn_id}",
+ "naming_rule": "Expression",
+ "title_field": "txn_id",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "source_rail",
+   "fieldtype": "Select",
+   "label": "Source Rail",
+   "options": "TCB\nMalipopay\nManual",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "txn_id",
+   "fieldtype": "Data",
+   "label": "Provider Transaction ID",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The rail's own canonical transaction id (TCB transaction_id / Malipopay providerTxnId). Combined with Source Rail it forms the document name — one receipt per (rail, txn) is enforced by the database. This id, not the Payment Entry name, is the stable externalTxnId served to Malipopay's poll: it survives PE cancel, amend, and rename."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Booked\nVoided by Operator\nSuspense\nSuppressed",
+   "default": "Booked",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Booked: money recorded, PE live. Voided by Operator: a surgery removed the money — the row STILL counts as 'seen', so nothing ever re-books it automatically. Suspense: money is real but unapplicable right now (dead order / zero outstanding) — Draft PE + operator flag. Suppressed: seen, deliberately never booked. Rows are immutable facts and are never deleted; corrections are new states, not new rows."
+  },
+  {
+   "fieldname": "col_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Control Number (Reference)",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "ml_reference",
+   "fieldtype": "Data",
+   "label": "Malipopay Reference (ML...)",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break",
+   "label": "Receipt Detail"
+  },
+  {
+   "fieldname": "paid_at",
+   "fieldtype": "Datetime",
+   "label": "Paid At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "label": "Channel",
+   "read_only": 1,
+   "description": "Where the money physically entered: CRDB, M-Pesa, Airtel Money, NMB, CASH, ... (Malipopay breakdown 'source' / operator-entered for manual receipts)."
+  },
+  {
+   "fieldname": "col_break_detail",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "govt_je",
+   "fieldtype": "Link",
+   "label": "Government Share JE",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_links",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "webhook_event",
+   "fieldtype": "Link",
+   "label": "Webhook Event",
+   "options": "Malipopay Webhook Event",
+   "read_only": 1
+  },
+  {
+   "fieldname": "malipopay_collection",
+   "fieldtype": "Link",
+   "label": "Malipopay Collection",
+   "options": "Malipopay Collection",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ]
+}

@@ -24,13 +24,20 @@ from frappe.utils import add_days, cint, cstr, flt, getdate, today
 
 from landms.elevation import become_administrator, restore_caller
 from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
+
+# Register/decline route through the payment-channel router, which resolves the
+# channel from the order's Land Acquisition ("Control Numbers Issued By"). For a
+# TCB-issued project — every project today — these land in the identical
+# landms.tcb functions.
+from landms.payments.router import (
+	decline_reference_for_sales_order,
+	register_reference_on_submit,
+)
 from landms.tcb import (
 	create_or_get_registry,
-	decline_reference_for_sales_order,
 	generate_control_number,
 	is_valid_control_number,
 	is_valid_tcb_mobile,
-	register_reference_for_sales_order,
 )
 
 
@@ -140,7 +147,8 @@ def submit_sales_order(doc, method=None):
 
 	# The control number was minted and registered in before_submit_sales_order
 	# (the register-first gate). If registration had failed the submit would have
-	# been blocked, so by the time we reach here the number is live at the bank.
+	# been blocked, so by the time we reach here the number is live at the bank —
+	# or, when TCB was down, on Malipopay (flagged below; a person registers it at TCB later).
 	doc.db_set("plot_outstanding_amount", flt(doc.grand_total), update_modified=False)
 	doc.plot_outstanding_amount = flt(doc.grand_total)
 
@@ -150,6 +158,24 @@ def submit_sales_order(doc, method=None):
 		doc.db_set("plot_contract", contract_name, update_modified=False)
 		doc.plot_contract = contract_name
 	_mark_plot_pending_advance(doc)
+
+	if doc.flags.get("landms_issuer_pending"):
+		from landms.payments import tcb_catch_up
+
+		tcb_catch_up.add(
+			"Register",
+			doc.name,
+			doc.control_number,
+			"Sold through Malipopay while TCB was not answering; the number still has to be set up at TCB.",
+		)
+		doc.add_comment(
+			"Info",
+			(
+				f"Submitted while TCB was not answering: payment number {doc.control_number} is not set up at "
+				f"TCB yet. The customer can pay through Malipopay meanwhile. The TCB step is listed under "
+				f"Waiting for TCB and is finished there once TCB is back."
+			),
+		)
 
 
 def before_cancel_sales_order(doc, method=None):
@@ -344,6 +370,15 @@ def reopen_sales_order(sales_order_name: str):
 	if not _is_landms_sales_order(so):
 		frappe.throw("This Sales Order is not a LandMS plot sale.")
 	_refuse_reopen_if_terminated(so.name)
+	# "Close for good at Malipopay" is final: its Malipopay bill is expired and a
+	# returning customer is a new sale.
+	from landms.malipopay import is_closed_for_good
+
+	if is_closed_for_good(so.name):
+		frappe.throw(
+			f"Sales Order {so.name} was closed for good at Malipopay and can no longer be reopened. "
+			"A returning customer needs a new order."
+		)
 
 	SO = so.name
 	PLOT = so.plot
@@ -619,6 +654,10 @@ def reopen_sales_order(sales_order_name: str):
 	if control_number:
 		reg = _reregister_after_reopen(SO, control_number)
 		registered, reg_msg = reg.get("registered", False), reg.get("message") or ""
+		# The close expired the Malipopay bill; bring one back (never blocks the reopen).
+		from landms.malipopay import reopen_collection_for_sales_order
+
+		reopen_collection_for_sales_order(SO)
 
 	if registered:
 		frappe.msgprint(
@@ -1272,8 +1311,23 @@ def _register_with_tcb(doc, control_number: str):
 	just create a dead order; instead we throw a clear banner and the user retries.
 	An already-registered number returns ok=True (see register_reference_for_sales_order),
 	so re-submitting after a blocked attempt passes straight through.
+
+	On a project that also collects through Malipopay, one working rail is
+	enough: if TCB cannot register but Malipopay can take payment, the order
+	goes through and the TCB step is queued under Waiting for TCB (payments.tcb_catch_up),
+	finished once TCB is back — automatically when that is switched on, else by Try now.
 	"""
-	result = register_reference_for_sales_order(doc.name, control_number)
+	result = register_reference_on_submit(doc.name, control_number)
+	if result.get("status") == "Issuer Pending":
+		doc.flags.landms_issuer_pending = result
+		frappe.msgprint(
+			f"The bank (TCB) is not answering right now, so payment number {control_number} is not "
+			f"set up there yet. The order is submitted: the customer can pay through Malipopay now. "
+			f"The TCB step is listed under Waiting for TCB and is finished there once TCB is back.",
+			indicator="orange",
+			alert=True,
+		)
+		return
 	if not result.get("ok"):
 		frappe.throw(
 			f"This order could not be submitted because its payment number could not "

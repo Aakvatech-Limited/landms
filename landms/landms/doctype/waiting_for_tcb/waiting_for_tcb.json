@@ -1,0 +1,195 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-10-14 18:00:00.000000",
+ "description": "A TCB step that could not be done because TCB was down: register the number of an order sold through Malipopay, or switch off the number of an order stopped while TCB was down. Only new events from the Malipopay go-live are added here; older data is never touched.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "action",
+  "status",
+  "control_number",
+  "sales_order",
+  "customer",
+  "column_break_main",
+  "reason",
+  "queued_by",
+  "queued_at",
+  "attempts_section",
+  "attempts",
+  "last_attempt_at",
+  "column_break_attempts",
+  "last_result",
+  "closed_section",
+  "closed_at",
+  "closed_note"
+ ],
+ "fields": [
+  {
+   "default": "WFT-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "WFT-.YYYY.-.#####",
+   "read_only": 1
+  },
+  {
+   "description": "Register: set the number up at TCB (the order was sold through Malipopay while TCB was down). Decline: switch the number off at TCB (the order was stopped while TCB was down).",
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Action",
+   "options": "Register\nDecline",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Waiting",
+   "description": "Waiting: to be done once TCB answers. Done: TCB confirmed. Dropped: no longer needed (checked before calling TCB) or stopped by a person. Needs a Person: still not done after 3 days.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Waiting\nDone\nDropped\nNeeds a Person",
+   "read_only": 1
+  },
+  {
+   "fieldname": "control_number",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Payment Number",
+   "options": "TCB Control Number",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Why It Is Waiting",
+   "read_only": 1
+  },
+  {
+   "fieldname": "queued_by",
+   "fieldtype": "Link",
+   "label": "Added By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "queued_at",
+   "fieldtype": "Datetime",
+   "label": "Added At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempts_section",
+   "fieldtype": "Section Break",
+   "label": "Attempts"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_attempts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_result",
+   "fieldtype": "Small Text",
+   "label": "Last Answer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_section",
+   "fieldtype": "Section Break",
+   "label": "Closed"
+  },
+  {
+   "fieldname": "closed_at",
+   "fieldtype": "Datetime",
+   "label": "Closed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_note",
+   "fieldtype": "Small Text",
+   "label": "Closing Note",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-14 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LandMS",
+ "name": "Waiting for TCB",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "read": 1,
+   "role": "Accounts User"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  },
+  {
+   "read": 1,
+   "role": "LandMS Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "control_number",
+ "track_changes": 1
+}
