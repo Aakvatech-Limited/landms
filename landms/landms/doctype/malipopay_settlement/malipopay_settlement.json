@@ -1,0 +1,210 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-10-14 21:30:00.000000",
+ "description": "Malipopay's cut of each Malipopay payment, from Malipopay's own figures, recorded for later settlement. No accounting entry.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "status",
+  "receipt",
+  "payment_entry",
+  "receipt_date",
+  "column_break_ref",
+  "sales_order",
+  "customer",
+  "control_number",
+  "malipopay_collection",
+  "amounts_section",
+  "gross_amount",
+  "fee_percent",
+  "column_break_amounts",
+  "fee_amount",
+  "net_amount",
+  "fee_source",
+  "transaction_fee",
+  "notes_section",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "default": "MPSET-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "MPSET-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "default": "Recorded",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Waiting for Malipopay\nRecorded\nSettled"
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Link",
+   "label": "Malipopay Receipt",
+   "options": "Payment Receipt Ledger",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Paid On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "control_number",
+   "fieldtype": "Data",
+   "label": "Control Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "malipopay_collection",
+   "fieldtype": "Link",
+   "label": "Malipopay Bill",
+   "options": "Malipopay Collection",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amounts_section",
+   "fieldtype": "Section Break",
+   "label": "Amounts"
+  },
+  {
+   "fieldname": "gross_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Paid by the Customer",
+   "read_only": 1
+  },
+  {
+   "description": "As stated by Malipopay on the bill (feePercent).",
+   "fieldname": "fee_percent",
+   "fieldtype": "Percent",
+   "label": "Malipopay's Percentage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "As posted in Malipopay's own ledger for this payment; this payment x Malipopay's percentage when that line was not there yet (see Cut Taken From).",
+   "fieldname": "fee_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Malipopay's Cut",
+   "read_only": 1
+  },
+  {
+   "fieldname": "net_amount",
+   "fieldtype": "Currency",
+   "label": "Left After the Cut",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fee_source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Cut Taken From",
+   "options": "\nMalipopay Ledger\nFee Percent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transaction_fee",
+   "fieldtype": "Currency",
+   "description": "As stated by Malipopay on the bill (transactionFee).",
+   "label": "Transaction Fee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-15 00:20:00.000000",
+ "modified_by": "Administrator",
+ "module": "LandMS",
+ "name": "Malipopay Settlement",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "sales_order",
+ "track_changes": 1
+}

@@ -1,0 +1,248 @@
+{
+ "doctype": "DocType",
+ "name": "Malipopay Collection",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "control_number",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "MPC-.YYYY.-.#####",
+   "default": "MPC-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "control_number",
+   "fieldtype": "Data",
+   "label": "Control Number (Our Reference)",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "OUR control number (issued via TCB) — sent to Malipopay as 'reference', stored by them as customerReference. One collection EPOCH per row: a reopen after forfeiture gets a NEW row, so this is indexed but not unique. At most one non-Dead row may exist per control number (enforced in validate)."
+  },
+  {
+   "fieldname": "ml_reference",
+   "fieldtype": "Data",
+   "label": "Malipopay Reference (ML...)",
+   "search_index": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "THEIR reference, minted on collection create. Until Malipopay's Phase 2 ships, this is the only number payable at CRDB / mobile-money channels. All Malipopay read endpoints are addressed by it.",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "stored_customer_reference",
+   "fieldtype": "Data",
+   "label": "Customer Reference (as stored by Malipopay)",
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The exact customerReference Malipopay stored — proven to be verbatim what we SENT (the 2026-09-07 test bill was created with 999GVATEST0002 and stored unchanged). Lookups by customerReference must use THIS value; never reconstruct it."
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "label": "State",
+   "options": "Pending Create\nCreating\nActive\nCreate Failed\nSuspend Requested\nSuspended\nResume Requested\nKill Requested\nDead\nNeeds Attention",
+   "default": "Pending Create",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "OUR lifecycle for this epoch. 'Creating' is the write-ahead intent around the non-idempotent create call; 'Kill Requested' means the TCB number died and the Malipopay bill must die (their poll of reference_status is the Phase-1 kill mechanism); 'Dead' is terminal — a reopen mints a new epoch row."
+  },
+  {
+   "fieldname": "col_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "reqd": 1,
+   "search_index": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Land Acquisition",
+   "options": "Land Acquisition",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Int",
+   "label": "Amount Billed (TZS)",
+   "read_only": 1,
+   "description": "Integer TZS sent on create — Malipopay accepts no decimals or separators."
+  },
+  {
+   "fieldname": "flags_section",
+   "fieldtype": "Section Break",
+   "label": "Operational Flags"
+  },
+  {
+   "fieldname": "maintenance_hold",
+   "fieldtype": "Check",
+   "label": "Maintenance Hold (Surgery)",
+   "default": "0",
+   "description": "Set by the operator as step 0 of any money surgery touching this order. While set: reference_status answers 'inconclusive' (their contract keeps the bill open, collects nothing against stale data), sweeps skip this collection, webhook events queue without booking. Clear when the surgery is complete."
+  },
+  {
+   "fieldname": "needs_attention",
+   "fieldtype": "Check",
+   "label": "Needs Attention",
+   "default": "0",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "col_break_flags",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "attention_reason",
+   "fieldtype": "Small Text",
+   "label": "Attention Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_section",
+   "fieldtype": "Section Break",
+   "label": "Provider Snapshot (display only — never drives closure)"
+  },
+  {
+   "fieldname": "provider_status",
+   "fieldtype": "Data",
+   "label": "Provider Status",
+   "read_only": 1,
+   "description": "Their last reported status (PROCESSING / PARTIAL / SUCCESSFUL / ...). Display only: closure is driven from breakdown fullyPaid / outstanding, never from status — per the integration contract."
+  },
+  {
+   "fieldname": "provider_paid_amount",
+   "fieldtype": "Currency",
+   "label": "Provider Paid (Cumulative)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provider_fully_paid",
+   "fieldtype": "Check",
+   "label": "Provider Fully Paid",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_link",
+   "fieldtype": "Data",
+   "label": "Payment Link",
+   "read_only": 1,
+   "description": "Shareable payment page returned on create (link.co.tz/...) — can be sent to the customer."
+  },
+  {
+   "fieldname": "col_break_provider",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_breakdown_at",
+   "fieldtype": "Datetime",
+   "label": "Last Breakdown Fetch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_synced_at",
+   "fieldtype": "Datetime",
+   "label": "Last Synced At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_polled_at",
+   "fieldtype": "Datetime",
+   "label": "Last Polled By Malipopay",
+   "read_only": 1,
+   "description": "Last reference_status hit for this control number. Their polling IS the Phase-1 kill mechanism — if a live collection stops being polled, dead bills stay payable and nobody notices; the sweep alerts on stale values."
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Lifecycle"
+  },
+  {
+   "fieldname": "activated_at",
+   "fieldtype": "Datetime",
+   "label": "Activated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dead_at",
+   "fieldtype": "Datetime",
+   "label": "Dead At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_lifecycle",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "create_attempts",
+   "fieldtype": "Int",
+   "label": "Create Attempts",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_event",
+   "fieldtype": "Small Text",
+   "label": "Last Event",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

@@ -3,6 +3,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, create_batch, flt, today
 
+from landms.after_submit import drop_rounding_noise_on_locked_fields
+
 
 class LandAcquisition(Document):
 	def validate(self):
@@ -11,7 +13,92 @@ class LandAcquisition(Document):
 		self._validate_coordinates()
 		self._validate_sales_defaults()
 		self._validate_plot_type_rates()
+		self._validate_channel_roles()
 		self._validate_and_set_tcb_patterns()
+
+	def _validate_channel_roles(self):
+		"""One issuer, ticked; every other ticked channel is its dependent.
+
+		The issuer (payment_channel, 'Control Numbers Issued By') is the
+		independent channel whose numbering mints this project's references.
+		It must be one of the enabled channels — a project cannot issue
+		numbers through a channel it does not collect with.
+		"""
+		enabled = {
+			"TCB": cint(self.get("collect_via_tcb")),
+			"Malipopay": cint(self.get("collect_via_malipopay")),
+		}
+		if not any(enabled.values()):
+			frappe.throw(_("Enable at least one payment channel (tick TCB or Malipopay)."))
+
+		enabled_names = [name for name, on in enabled.items() if on]
+		issuer = (self.get("payment_channel") or "").strip()
+
+		# Exactly one channel ticked -> it IS the issuer; set it so the operator
+		# never has to state (or correct) the obvious.
+		if len(enabled_names) == 1:
+			only = enabled_names[0]
+			if issuer != only:
+				self.payment_channel = only
+				frappe.msgprint(
+					_("Control numbers will be issued by {0} (the only enabled channel).").format(only),
+					alert=True,
+					indicator="blue",
+				)
+			self._validate_issuer_can_mint(self.payment_channel)
+			return
+
+		if not issuer:
+			frappe.throw(_("Select which channel issues the control numbers ('Control Numbers Issued By')."))
+		if not enabled.get(issuer):
+			frappe.throw(
+				_(
+					"Control numbers cannot be issued by {0} because it is not ticked as a "
+					"collection channel on this project. Tick it, or choose a ticked channel as issuer."
+				).format(issuer)
+			)
+		self._validate_issuer_can_mint(issuer)
+
+	# Channels that actually have a control-number generation block today.
+	# Malipopay's is DELIBERATELY absent (operator decision 2026-09-05): until a
+	# project needs Malipopay as issuer, that code stays unwritten — so an LA
+	# must not be savable in a shape that names an issuer with no minting code.
+	_CHANNELS_WITH_GENERATION = ("TCB",)
+
+	def _validate_issuer_can_mint(self, issuer):
+		if issuer and issuer not in self._CHANNELS_WITH_GENERATION:
+			frappe.throw(
+				_(
+					"{0} cannot issue control numbers yet — its number-generation "
+					"block is not built. Keep TCB ticked as the issuing channel "
+					"(other channels can still collect alongside it)."
+				).format(issuer)
+			)
+
+	def before_update_after_submit(self):
+		"""Ticking a collection channel on a submitted project (operator, 14 Oct
+		2026: the live project is submitted, so Malipopay could not be ticked).
+
+		The form refreshes the cost figures and the period summary when it opens;
+		those must not block the save. Frappe skips validate() on this save, so the
+		channel rules are checked here. The issuer itself stays locked."""
+		drop_rounding_noise_on_locked_fields(self)
+		# a display line rebuilt by the form from fields locked after submit
+		self.payment_period_summary = frappe.db.get_value(
+			"Land Acquisition", self.name, "payment_period_summary"
+		)
+		issuer = (self.get("payment_channel") or "").strip()
+		ticked = {
+			"TCB": cint(self.get("collect_via_tcb")),
+			"Malipopay": cint(self.get("collect_via_malipopay")),
+		}
+		if issuer and not ticked.get(issuer):
+			frappe.throw(
+				_(
+					"{0} issues this project's control numbers, so it must stay ticked. Nothing was changed."
+				).format(issuer)
+			)
+		self._validate_channel_roles()
 
 	def before_submit(self):
 		if self.status != "Approved":
@@ -178,6 +265,9 @@ class LandAcquisition(Document):
 			frappe.throw(_("Payment Completion Days must be greater than zero."))
 
 	def _validate_and_set_tcb_patterns(self):
+		# TCB credentials/patterns only apply when TCB is an enabled channel.
+		if not cint(self.get("collect_via_tcb")):
+			return
 		if not self.partner_code:
 			frappe.throw(_("Partner Code is required."))
 

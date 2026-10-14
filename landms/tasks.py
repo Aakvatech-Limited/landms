@@ -203,6 +203,13 @@ def auto_expire_paid_applications_past_deadline(attempted=None, started=None):
 			)
 			continue
 
+		if _malipopay_money_waiting(app.sales_order):
+			frappe.logger("landms").info(
+				f"Skipped expiring Plot Application {app.name}: Malipopay money was found on "
+				f"{app.sales_order}, or Malipopay could not be read — tried again next night"
+			)
+			continue
+
 		if _sales_order_has_advance_payment(app.sales_order):
 			# Money is in → close via the forfeiture-aware flow (same as the
 			# Close button): forfeits net of govt, credit-notes the outstanding,
@@ -290,6 +297,74 @@ def _expire_without_advance(app):
 	doc.flags.ignore_permissions = True
 	doc.flags._cancellation_reason = "Expired"
 	doc.cancel()
+
+
+def _malipopay_money_waiting(sales_order):
+	"""Before the nightly run stops an order on a Malipopay project, book any
+	Malipopay payment whose notice never arrived: Malipopay does not resend a
+	lost notice, and the 04:40 sweep comes after this run.
+
+	Returns True when the order must wait for the next night:
+	- money was found and booked (the order is no longer what the run saw);
+	- the order has a live Malipopay bill whose payments cannot be checked
+	  (Malipopay switched off or not applying payments, unreadable, money
+	  parked or not bookable) — each such night raises an Error Log so a
+	  person looks, instead of an order being held unseen.
+	An order without a live Malipopay bill goes ahead as before. A read only:
+	nothing is created, paused or ended at Malipopay. Never throws."""
+	if not sales_order:
+		return False
+	try:
+		from landms.malipopay import (
+			book_receipts_for_collection,
+			collects_via_malipopay,
+			get_malipopay_settings,
+		)
+
+		if not collects_via_malipopay(sales_order):
+			return False
+		bills = _live_malipopay_bills(sales_order)
+		if not bills:
+			return False
+		settings = get_malipopay_settings()
+		if not settings.enabled or settings.inbound_mode != "Apply Payment":
+			state = (
+				"switched off" if not settings.enabled else f"not applying payments ({settings.inbound_mode})"
+			)
+			_held_needs_a_look(sales_order, f"it has a live Malipopay bill but Malipopay is {state}")
+			return True
+		for bill in bills:
+			result = book_receipts_for_collection(bill)
+			if result.booked:
+				return True
+			if result.suspense or result.failed or not result.ok:
+				_held_needs_a_look(
+					sales_order, f"Malipopay bill {bill}: {result.message or 'money found but not booked'}"
+				)
+				return True
+		return False
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(frappe.get_traceback(), f"LandMS nightly: Malipopay check for {sales_order} failed")
+		frappe.db.commit()  # keep the log
+		return True
+
+
+def _held_needs_a_look(sales_order, reason):
+	frappe.log_error(
+		f"The nightly run did not stop {sales_order} tonight: {reason}. It is checked again every "
+		"night; please look at the order and its Malipopay bill.",
+		f"LandMS nightly: {sales_order} held — Malipopay needs a look",
+	)
+	frappe.db.commit()  # keep the log
+
+
+def _live_malipopay_bills(sales_order):
+	return frappe.get_all(
+		"Malipopay Collection",
+		filters={"sales_order": sales_order, "state": ["!=", "Dead"], "ml_reference": ["is", "set"]},
+		pluck="name",
+	)
 
 
 def _active_contract(so_name):
@@ -390,6 +465,15 @@ def _process_overdue_contract(row):
 			f"Marked Plot Contract {row.name} overdue "
 			f"(plot {row.plot}, customer {row.customer}) — "
 			"awaiting manual action because auto-cancellation is off"
+		)
+		return
+
+	# Termination is final: never on a customer whose Malipopay payment is still
+	# unbooked. Checked only here, where a contract is about to be terminated.
+	if _malipopay_money_waiting(row.sales_order):
+		frappe.logger("landms").info(
+			f"Skipped terminating Plot Contract {row.name}: Malipopay money was found on "
+			f"{row.sales_order}, or Malipopay could not be read — tried again next night"
 		)
 		return
 

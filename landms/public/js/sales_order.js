@@ -4,7 +4,9 @@ frappe.ui.form.on("Sales Order", {
     _render_so_close_button(frm);
     _hide_erpnext_reopen(frm);
     _render_so_reopen_button(frm);
+    _render_so_close_for_good_button(frm);
     _render_so_registration_banner(frm);
+    _render_so_malipopay_banner(frm);
   },
 
   setup(frm) {
@@ -95,7 +97,7 @@ function _render_so_close_button(frm) {
     () => {
       frappe.confirm(
         __(
-          "Close this Sales Order? The plot will be released and the TCB reference declined. This cannot be undone."
+          "Close this Sales Order? The plot will be released and the payment number declined at TCB. If it has a Malipopay bill, the bill is paused when money was paid on it (Reopen brings it back) and ended when nothing was."
         ),
         () => {
           frappe.call({
@@ -124,6 +126,8 @@ function _render_so_reopen_button(frm) {
   if (!frm.doc.forfeiture_entry) return;
   // Reopen (reversing a forfeiture) is System Manager only — more restricted than Close.
   if (!frappe.user.has_role("System Manager")) return;
+  // Closed for good at Malipopay is final — the server refuses a reopen too.
+  if (frm.doc.malipopay_closed_for_good) return;
 
   frm.add_custom_button(
     __("Reopen Sales Order"),
@@ -140,6 +144,50 @@ function _render_so_reopen_button(frm) {
             freeze_message: __("Reopening Sales Order..."),
             callback(r) {
               if (r.exc) return;
+              frm.reload_doc();
+            },
+          });
+        }
+      );
+    },
+    __("Actions")
+  );
+}
+
+function _render_so_close_for_good_button(frm) {
+  if (frm.is_new()) return;
+  if (!frm.doc.plot) return;
+  if (frm.doc.docstatus !== 1) return;
+  // The other way out of a Closed order: end its paused Malipopay bill for good.
+  if (frm.doc.status !== "Closed") return;
+  if (!frm.doc.forfeiture_entry) return; // closed with money — the orders Reopen also serves
+  if (!frm.doc.malipopay_reference || frm.doc.malipopay_closed_for_good)
+    return;
+  // Same audience as Reopen: System Manager only (the server checks again).
+  if (!frappe.user.has_role("System Manager")) return;
+
+  frm.add_custom_button(
+    __("Close for good at Malipopay"),
+    () => {
+      frappe.confirm(
+        __(
+          "Close this order for good at Malipopay? Its paused Malipopay bill {0} is expired — that is final — and this Sales Order can no longer be reopened. If the customer comes back, they need a new order.",
+          [frm.doc.malipopay_reference]
+        ),
+        () => {
+          frappe.call({
+            method: "landms.malipopay.close_for_good_at_malipopay",
+            args: { sales_order_name: frm.doc.name },
+            freeze: true,
+            freeze_message: __("Closing for good at Malipopay..."),
+            callback(r) {
+              if (r.exc) return;
+              if (r.message && r.message.message) {
+                frappe.show_alert({
+                  message: r.message.message,
+                  indicator: "green",
+                });
+              }
               frm.reload_doc();
             },
           });
@@ -217,4 +265,62 @@ function _render_so_registration_banner(frm) {
         frm.set_intro("");
       }
     });
+}
+
+const MP_BANNER_POLL_MS = 4000; // registration usually takes ~15 s
+const MP_BANNER_MAX_POLLS = 30; // stop asking after 2 minutes
+
+function _render_so_malipopay_banner(frm, poll) {
+  // Submitted plot orders on a project that collects through Malipopay: say so
+  // when the Malipopay bill is not working, with a link to it, and when TCB has
+  // not set the number up yet (link to Waiting for TCB). The TCB banner above is
+  // Draft-only, so the two never share the intro. Silent when all is well.
+  // While the bill is still registering (it is created by a worker after the
+  // save) it says so, asks again every few seconds, and clears itself once the
+  // bill is Active. One server call that never throws; any failure shows nothing.
+  poll = poll || 0;
+  clearTimeout(frm._mp_banner_timer);
+  if (frm.is_new() || frm.doc.docstatus !== 1) return;
+  if (!frm.doc.plot || !frm.doc.control_number || !frm.doc.land_acquisition)
+    return;
+  if (["Closed", "Completed"].includes(frm.doc.status)) return;
+
+  const order = frm.doc.name;
+  frappe.call({
+    method: "landms.malipopay.sales_order_malipopay_notice",
+    args: { sales_order: order },
+    error: () => {},
+    callback(r) {
+      if (frm.doc.name !== order) return; // the user has moved to another order
+      const notice = (r && r.message) || {};
+      if (!notice.message) {
+        // clear only a message this banner put there itself
+        if (frm._mp_banner_for === order) frm.set_intro("");
+        frm._mp_banner_for = null;
+        return;
+      }
+      let link = notice.collection
+        ? ` <a href="/app/malipopay-collection/${encodeURIComponent(
+            notice.collection
+          )}">${frappe.utils.escape_html(notice.collection)}</a>`
+        : "";
+      if (notice.waiting_for_tcb) {
+        link += ` <a href="/app/waiting-for-tcb/${encodeURIComponent(
+          notice.waiting_for_tcb
+        )}">${__("Waiting for TCB")}</a>`;
+      }
+      const mark = notice.pending ? "⏳ " : "⚠ ";
+      frm.set_intro(
+        mark + frappe.utils.escape_html(notice.message) + link,
+        notice.indicator || "orange"
+      );
+      frm._mp_banner_for = order;
+      if (notice.pending && poll < MP_BANNER_MAX_POLLS) {
+        frm._mp_banner_timer = setTimeout(
+          () => _render_so_malipopay_banner(frm, poll + 1),
+          MP_BANNER_POLL_MS
+        );
+      }
+    },
+  });
 }
