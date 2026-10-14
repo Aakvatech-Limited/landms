@@ -159,6 +159,22 @@
    "label": "Notes / Special Conditions"
   },
   {
+   "fieldname": "receipt_verification_section",
+   "fieldtype": "Section Break",
+   "label": "Receipt Verification",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "verification_code",
+   "fieldtype": "Data",
+   "label": "Verification Code",
+   "read_only": 1,
+   "unique": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "description": "Set when the handover is submitted. Printed on the receipt as a QR code; scanning it checks the receipt against our records."
+  },
+  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",

@@ -1,0 +1,97 @@
+{
+ "doctype": "DocType",
+ "name": "Receipt Verification Log",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "in_create": 1,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "code_entered",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "description": "One row per check of a receipt QR code or verification code, from the public verify page.",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "RVL-.YYYY.-.######",
+   "default": "RVL-.YYYY.-.######",
+   "reqd": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Select",
+   "label": "Result",
+   "options": "Valid\nCancelled\nNot Valid",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "code_entered",
+   "fieldtype": "Data",
+   "label": "Code Entered",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "plot_handover",
+   "fieldtype": "Link",
+   "label": "Plot Handover",
+   "options": "Plot Handover",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Data",
+   "label": "Reason",
+   "read_only": 1,
+   "description": "Why the check failed. Never shown to the person checking."
+  },
+  {
+   "fieldname": "col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "user_agent",
+   "fieldtype": "Small Text",
+   "label": "Device",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  }
+ ],
+ "track_changes": 0,
+ "modified": "2026-09-29 18:00:00.000000",
+ "owner": "Administrator",
+ "modified_by": "Administrator",
+ "creation": "2026-09-29 18:00:00.000000",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0
+}
