@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Collections"] = {
+frappe.query_reports["LandMS Collections"] = {
   filters: [
     {
       fieldname: "customer",
