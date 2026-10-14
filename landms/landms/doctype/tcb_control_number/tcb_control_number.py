@@ -21,11 +21,9 @@ ALLOWED_TRANSITIONS = {
 	"Paid": {"Reopened"},
 	"Declined": {"Reopened"},
 	"Expired": {"Reopened"},
-	"Failed": {
-		"Generated",
-		"Registered",
-		"Reopened",
-	},  # recovery on retry / restore after a failed reopen re-register
+	# recovery on retry / restore after a failed reopen re-register; Declined once
+	# TCB confirms it holds nothing live under a number it never registered
+	"Failed": {"Generated", "Registered", "Reopened", "Declined"},
 	# A reopened number is being re-registered: -> Registered on success, -> Failed on a
 	# bank error. "Paid" is also allowed so a payment that lands while it is still Reopened
 	# (a race / reconciliation / manual entry) can never get stuck on an illegal transition.
@@ -242,6 +240,36 @@ class TCBControlNumber(Document):
 
 		if not self.sales_order:
 			message = f"Control number {self.name} has no linked Sales Order. Cannot retry registration."
+			_log_manual_action(
+				event_type="Reference Create",
+				endpoint=RETRY_REGISTRATION_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=message,
+			)
+			frappe.throw(message)
+
+		# Never register a number the order no longer carries: the customer could
+		# pay on it and the payment would find no order (SO-05458, Oct 2026).
+		# When a Save has blanked the order's number, its newest number is still
+		# its own and may be retried (the next Submit reuses that one too).
+		on_order = frappe.db.get_value(
+			"Sales Order", self.sales_order, ["control_number", "related_control_number"]
+		) or ("", "")
+		carried = [n.strip() for n in on_order if n and n.strip()]
+		newest = frappe.db.get_value(
+			"TCB Control Number",
+			{"sales_order": self.sales_order, "status": ["in", ["Generated", "Failed", "Registered"]]},
+			"name",
+			order_by="creation desc",
+		)
+		if self.name not in carried and (carried or self.name != newest):
+			message = (
+				f"Control number {self.name} is no longer the payment number of {self.sales_order} "
+				f"(the order uses {on_order[0] or newest or 'no number yet'}). Registering it would give the "
+				f"customer a second number to pay on, so it is not retried."
+			)
 			_log_manual_action(
 				event_type="Reference Create",
 				endpoint=RETRY_REGISTRATION_ENDPOINT,
