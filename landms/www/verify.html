@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt Verification — Great Vision Adventures Limited</title>
+<meta name="description" content="Check a plot receipt issued by Great Vision Adventures Limited against GVA's records.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F7F4EF; --sand:#EDE8DF; --ink:#121b22; --gold:#fcc431; --primary:#f5b832;
+    --green:#0b3d2e; --green-lt:#e8f0ec; --red:#8c1c13; --red-lt:#fbeceb;
+    --line:#dcd5c9; --hair:#eee9e0; --muted:#6b6459; --charcoal:#212121;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--cream); color:var(--ink);
+       font-family:"Open Sans",system-ui,-apple-system,sans-serif; font-size:16px; line-height:1.6;
+       -webkit-font-smoothing:antialiased}
+  h1,h2,h3,h4{font-family:"Oswald",system-ui,sans-serif; font-weight:600; letter-spacing:.02em}
+  a{color:var(--ink)}
+  .wrap{max-width:860px; margin:0 auto; padding:0 18px}
+
+  .accent{height:3px; background:var(--primary)}
+  header{background:#fff; border-bottom:1px solid var(--line)}
+  .mast{display:flex; align-items:center; justify-content:space-between; gap:16px;
+        padding-top:16px; padding-bottom:16px; flex-wrap:wrap}
+  .ident{display:flex; align-items:center; gap:14px; min-width:0}
+  .ident svg{height:34px; width:auto; flex:none}
+  .who strong{display:block; font-family:"Oswald",sans-serif; font-weight:600; font-size:16px;
+              letter-spacing:.05em; text-transform:uppercase; line-height:1.2}
+  .who span{display:block; font-size:11.5px; color:var(--muted); margin-top:2px}
+  .reach a{font-family:"Oswald",sans-serif; font-size:16px; text-decoration:none; color:var(--ink)}
+  .reach span{display:block; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+
+  .hero{background:var(--sand); border-bottom:1px solid var(--line)}
+  .hero .wrap{padding-top:32px; padding-bottom:30px}
+  .eyebrow{font-family:"Oswald",sans-serif; font-size:12px; letter-spacing:.24em;
+           text-transform:uppercase; color:var(--muted); margin:0 0 6px}
+  h1{font-size:34px; line-height:1.1; margin:0 0 12px; text-transform:uppercase}
+  .rule{height:3px; width:56px; background:var(--gold); margin:0 0 14px}
+  .lede{margin:0; max-width:62ch; color:#3d3830}
+
+  main .wrap{padding-top:28px; padding-bottom:12px}
+  .card{background:#fff; border:1px solid var(--line); border-radius:5px; overflow:hidden;
+        box-shadow:0 1px 3px rgba(18,27,34,.05)}
+  .verdict{display:flex; align-items:flex-start; gap:16px; padding:22px 24px; color:#fff; background:var(--ink)}
+  .verdict.ok{background:var(--green)}
+  .verdict.bad{background:var(--red)}
+  .verdict.err{background:#5a4a1c}
+  .verdict.void{background:#3b3f45}
+  .note.void{background:#eef0f2; border-top-color:#d9dde1}
+  .mark{width:44px; height:44px; border-radius:50%; flex:none; display:grid; place-items:center;
+        background:rgba(255,255,255,.17); font-size:23px; line-height:1}
+  .verdict h2{margin:0 0 4px; font-size:23px; line-height:1.15; text-transform:uppercase; color:#fff}
+  .verdict p{margin:0; font-size:14.5px; opacity:.93; max-width:62ch}
+  .stamp{margin-top:8px; font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+         font-family:"Oswald",sans-serif; opacity:.8}
+
+  dl{margin:0; padding:6px 24px 16px}
+  .row{display:flex; gap:16px; padding:12px 0; border-bottom:1px solid var(--hair)}
+  .row:last-child{border-bottom:0}
+  dt{flex:0 0 34%; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+     font-family:"Oswald",sans-serif; padding-top:3px}
+  dd{margin:0; flex:1; font-weight:600; word-break:break-word}
+  dd.big{font-size:19px; line-height:1.3}
+  .note{background:var(--green-lt); border-top:1px solid #d3e0d8; padding:14px 24px; font-size:14px}
+  .note.warn{background:var(--red-lt); border-top-color:#f0d3d0}
+
+  section.blk{margin-top:36px}
+  h2.sec{font-size:21px; text-transform:uppercase; margin:0 0 4px}
+  .sub{color:var(--muted); margin:0 0 14px; max-width:66ch; font-size:15px}
+  .panel{background:#fff; border:1px solid var(--line); border-radius:5px; padding:20px 22px}
+  .entry{display:flex; gap:10px; flex-wrap:wrap}
+  input[type=text]{flex:1 1 240px; min-width:0; padding:12px 14px; font:inherit; font-size:17px;
+    letter-spacing:.08em; text-transform:uppercase; border:1px solid #c9c1b3; border-radius:3px; color:var(--ink)}
+  input[type=text]:focus{outline:2px solid var(--gold); outline-offset:1px; border-color:var(--gold)}
+  .btn{padding:12px 24px; font-family:"Oswald",sans-serif; font-size:14px; font-weight:600;
+       letter-spacing:.12em; text-transform:uppercase; cursor:pointer; border-radius:3px;
+       border:1px solid var(--ink); background:var(--ink); color:#fff}
+  .btn:disabled{opacity:.6; cursor:wait}
+  .hint{font-size:13px; color:var(--muted); margin:10px 0 0}
+
+  .help{background:var(--ink); color:#cfc9be; border-radius:5px; padding:24px 24px 20px; font-size:14.5px}
+  .help h2{color:#fff; font-size:20px; text-transform:uppercase; margin:0 0 8px}
+  .help ol{padding-left:20px; margin:0 0 16px}
+  .help li{margin-bottom:6px}
+  .help a{color:#fff}
+
+  footer{background:var(--charcoal); color:rgba(250,250,250,.65); margin-top:40px;
+         padding:32px 0 24px; font-size:14px}
+  footer strong{color:#fafafa; font-family:"Oswald",sans-serif; letter-spacing:.05em;
+                text-transform:uppercase; font-weight:600}
+  footer p{margin:4px 0}
+  footer a{color:rgba(250,250,250,.8)}
+  .fine{border-top:1px solid rgba(250,250,250,.1); margin-top:18px; padding-top:14px;
+        font-size:12px; color:rgba(250,250,250,.4)}
+
+  @media (max-width:560px){
+    h1{font-size:27px}
+    .row{flex-direction:column; gap:2px}
+    dt{flex:none}
+    .verdict{padding:18px; gap:12px}
+    .verdict h2{font-size:19px}
+  }
+  @media print{
+    .panel,.help,footer,.accent,section.blk{display:none!important}
+    body{background:#fff}
+    .verdict{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<div class="accent"></div>
+<header>
+  <div class="wrap mast">
+    <div class="ident">
+      <svg viewBox="0 0 67.41 30.49" role="img" aria-label="Great Vision Adventures">
+        <path fill="#121b22" d="M11.23,11.28c-.98.98-1.58,2.33-1.58,3.82,0,2.98,2.42,5.4,5.39,5.4h2.32s-5.68,9.21-5.68,9.21C5.18,28.1.35,22.24.35,15.24.35,7.03,7.01.37,15.22.37h14.54l-5.75,9.32h-8.97c-1.49,0-2.84.61-3.81,1.58"/>
+        <polygon fill="#121b22" points="23.83 30.11 14.16 30.11 32.5 .37 42.17 .37 23.83 30.11"/>
+        <polygon fill="#fcc431" points="67.06 20.49 57.39 20.49 55.83 17.96 49.78 8.15 54.58 .37 67.06 20.49"/>
+        <polygon fill="#121b22" points="54.58 .38 49.78 8.15 36.24 30.11 26.57 30.11 44.91 .38 54.58 .38"/>
+        <path fill="#121b22" d="M22.57,12.03l-3.78,6.13h-3.75c-1.69,0-3.07-1.37-3.07-3.07s1.37-3.07,3.07-3.07h7.53Z"/>
+      </svg>
+      <div class="who">
+        <strong>Great Vision Adventures Limited</strong>
+        <span>Land Development and Property Investment &middot; Dar es Salaam, Tanzania</span>
+      </div>
+    </div>
+    <div class="reach">
+      <a href="tel:+255222400646">+255 22 240 0646</a>
+      <span>Enquiries</span>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Official Document Check</p>
+    <h1>Receipt Verification</h1>
+    <div class="rule"></div>
+    <p class="lede">Check a plot receipt issued by Great Vision Adventures Limited. The check is made
+      against GVA's records at the moment you ask, and shows the receipt exactly as our records hold it today.</p>
+  </div>
+</div>
+
+<main>
+  <div class="wrap">
+
+    <div class="card" id="result">
+      <div class="verdict" id="verdict">
+        <div class="mark" id="mark">&ndash;</div>
+        <div>
+          <h2 id="headline">Waiting for a receipt</h2>
+          <p id="subline">Scan the QR code printed on the receipt, or type its verification code below.</p>
+          <div class="stamp" id="stamp" hidden></div>
+        </div>
+      </div>
+      <dl id="details" hidden></dl>
+      <div class="note" id="note" hidden></div>
+    </div>
+
+    <section class="blk" id="check">
+      <h2 class="sec">Enter a verification code</h2>
+      <p class="sub">The 12-character code is printed under the QR code on the receipt, for example
+        <strong>7KQ2-M9XD-4TPA</strong>. Dashes and small letters are fine.</p>
+      <div class="panel">
+        <form class="entry" id="form" autocomplete="off">
+          <input type="text" id="code" inputmode="text" maxlength="80" aria-label="Verification code"
+                 placeholder="XXXX-XXXX-XXXX">
+          <button class="btn" id="go" type="submit">Check</button>
+        </form>
+        <p class="hint">A link copied from a receipt can be pasted here too.</p>
+      </div>
+    </section>
+
+    <section class="blk">
+      <div class="help">
+        <h2>If the check fails</h2>
+        <ol>
+          <li>Make sure the code was scanned or typed exactly as printed.</li>
+          <li>Compare every detail on the screen with the paper. Any difference means the paper was altered.</li>
+          <li>A receipt shown as <strong>Cancelled</strong> was issued by GVA but no longer stands.
+            A receipt shown as <strong>Not valid</strong> is unknown to GVA's records.</li>
+          <li>If the receipt is not confirmed, do not rely on it. Call our office on
+            <a href="tel:+255222400646">+255 22 240 0646</a> or write to
+            <a href="mailto:info@gva.co.tz">info@gva.co.tz</a>, quoting the receipt number and code.</li>
+        </ol>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <strong>Great Vision Adventures Limited</strong>
+    <p>Plot No. 29363, Urafiki Area &middot; P.O. Box 63314, Dar es Salaam, Tanzania</p>
+    <p><a href="tel:+255222400646">+255 22 240 0646</a> &middot; <a href="mailto:info@gva.co.tz">info@gva.co.tz</a> &middot; www.gva.co.tz</p>
+    <p class="fine">&copy; <span id="yr">2026</span> Great Vision Adventures Limited. Changing Lives One Home At A Time.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  var CSRF = "{{ csrf_token or '' }}";
+  var API = "/api/method/landms.receipt_verification.verify_receipt";
+
+  var $ = function (id) { return document.getElementById(id); };
+  $("yr").textContent = new Date().getFullYear();
+
+  // Anything typed or pasted -> the 12-character code, or "" if it cannot be one.
+  function toCode(raw) {
+    var s = String(raw || "").trim();
+    var m = s.match(/\/verify\/([^\/?#\s]+)/i);
+    if (m) s = decodeURIComponent(m[1]);
+    s = s.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+    if (s.length !== 12) return "";
+    for (var i = 0; i < s.length; i++) if (ALPHABET.indexOf(s[i]) < 0) return "";
+    return s;
+  }
+  function pretty(code) { return code.replace(/(.{4})(?=.)/g, "$1-"); }
+
+  function show(kind, mark, headline, subline, stamp) {
+    $("verdict").className = "verdict " + kind;
+    $("mark").textContent = mark;
+    $("headline").textContent = headline;
+    $("subline").textContent = subline;
+    $("stamp").hidden = !stamp;
+    $("stamp").textContent = stamp || "";
+    $("details").hidden = true;
+    $("details").textContent = "";
+    $("note").hidden = true;
+  }
+  function row(label, value, big) {
+    var r = document.createElement("div"); r.className = "row";
+    var dt = document.createElement("dt"); dt.textContent = label;
+    var dd = document.createElement("dd"); dd.textContent = value || "—";
+    if (big) dd.className = "big";
+    r.appendChild(dt); r.appendChild(dd); $("details").appendChild(r);
+  }
+  function note(text, kind) {
+    $("note").textContent = text;
+    $("note").className = "note" + (kind ? " " + kind : "");
+    $("note").hidden = false;
+  }
+  function checkedAt() {
+    var d = new Date();
+    return "Checked against GVA's records on " + d.toLocaleDateString(undefined,
+      { day: "numeric", month: "long", year: "numeric" }) + " at " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function check(code) {
+    $("go").disabled = true;
+    show("", "…", "Checking", "Asking GVA's records about " + pretty(code) + ".");
+    var headers = { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" };
+    if (CSRF && CSRF !== "None") headers["X-Frappe-CSRF-Token"] = CSRF;
+    fetch(API, { method: "POST", headers: headers, credentials: "same-origin",
+                 body: "code=" + encodeURIComponent(code) })
+      .then(function (res) {
+        if (res.status === 429) throw { kind: "busy" };
+        if (!res.ok) throw { kind: "down" };
+        return res.json();
+      })
+      .then(function (data) {
+        var answer = (data && data.message) || {};
+        if (answer.valid && answer.receipt) {
+          var r = answer.receipt;
+          show("ok", "✓", "Genuine receipt — paid in full",
+            "GVA's records confirm this receipt and show the plot paid in full.", checkedAt());
+          row("Receipt number", r.receipt_no);
+          row("Buyer", r.holder, true);
+          row("Plot", r.plot, true);
+          row("Project", r.project);
+          row("Paid in full", r.amount_paid);
+          row("Handover date", r.handover_date);
+          row("Verification code", r.code);
+          $("details").hidden = false;
+          note("Compare every detail above with the paper. If anything differs, the paper has been altered — do not rely on it.");
+        } else if (answer.status === "cancelled") {
+          show("void", "⊘", "Cancelled",
+            "This receipt was issued by GVA but has since been cancelled. It is no longer valid.", checkedAt());
+          note("Do not rely on this receipt. For the current position of this plot, call our office on +255 22 240 0646 with the receipt number and code.", "void");
+        } else {
+          show("bad", "✕", "Not valid",
+            "GVA's records have no receipt with code " + pretty(code) + ".", checkedAt());
+          note("Do not rely on this receipt. Check the code was entered exactly as printed. If you believe the receipt is genuine, call our office on +255 22 240 0646 with the receipt number and code.", "warn");
+        }
+      })
+      .catch(function (e) {
+        if (e && e.kind === "busy") {
+          show("err", "!", "Too many checks", "Too many checks were made from this connection. Please wait a few minutes and try again.");
+        } else {
+          show("err", "!", "Could not reach GVA's records",
+            "This is not a verdict on the receipt. Check your internet connection and try again, or call our office on +255 22 240 0646.");
+        }
+      })
+      .then(function () { $("go").disabled = false; });
+  }
+
+  $("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var code = toCode($("code").value);
+    if (!code) {
+      show("bad", "?", "That is not a verification code",
+        "A code has 12 letters and digits, printed under the QR code — for example 7KQ2-M9XD-4TPA.");
+      return;
+    }
+    if (window.history && history.replaceState) history.replaceState(null, "", "/verify/" + code);
+    check(code);
+  });
+
+  var fromAddress = toCode(location.pathname);
+  if (fromAddress) { $("code").value = pretty(fromAddress); check(fromAddress); }
+})();
+</script>
+</body>
+</html>
