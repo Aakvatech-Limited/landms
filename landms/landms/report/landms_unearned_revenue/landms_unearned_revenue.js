@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Unearned Revenue"] = {
+frappe.query_reports["LandMS Unearned Revenue"] = {
   filters: [
     {
       fieldname: "customer",

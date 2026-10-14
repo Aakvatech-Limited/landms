@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Plot Inventory"] = {
+frappe.query_reports["LandMS Plot Inventory"] = {
   filters: [
     {
       fieldname: "land_acquisition",
