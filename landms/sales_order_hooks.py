@@ -22,6 +22,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_days, cint, cstr, flt, getdate, today
 
+from landms.elevation import become_administrator, restore_caller
 from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 from landms.tcb import (
 	create_or_get_registry,
@@ -271,8 +272,32 @@ def close_sales_order(sales_order_name):
 	frappe.msgprint(close_msg, indicator="orange", alert=True)
 
 
-@frappe.whitelist()
-def reopen_sales_order(sales_order_name):
+def _refuse_reopen_if_terminated(sales_order_name):
+	"""A terminated contract is final (operator rule, 14 Oct 2026): the customer
+	failed for good, so its order is never reopened — not by LandMS's Reopen,
+	not by ERPNext's Status > Re-open. The order stays Closed (not cancelled)
+	because its invoice, payments and forfeiture are the record."""
+	if frappe.db.exists(
+		"Plot Contract", {"sales_order": sales_order_name, "contract_status": "Terminated", "docstatus": 1}
+	):
+		frappe.throw(
+			f"Sales Order {sales_order_name} cannot be reopened: its contract was terminated, and a "
+			f"termination is final. A returning customer needs a new order."
+		)
+
+
+def before_change_sales_order(doc, method=None):
+	"""Every db_set on a Sales Order runs this — ERPNext's Status > Re-open sets
+	the status that way. Refuse lifting Closed from a terminated plot order.
+	LandMS's own Reopen writes the status directly and checks the same rule."""
+	if doc.docstatus != 1 or doc.get("status") == "Closed" or not doc.get("plot"):
+		return
+	if frappe.db.get_value("Sales Order", doc.name, "status") == "Closed":
+		_refuse_reopen_if_terminated(doc.name)
+
+
+@frappe.whitelist(methods=["POST"])  # it commits mid-way: never reachable by a plain link (GET)
+def reopen_sales_order(sales_order_name: str):
 	"""Reopen a Closed / forfeited plot Sales Order (productizes operator Scripts F + G).
 
 	REVERSE-FIRST (mirrors running Script F, then Script G — the operator's proven order):
@@ -318,6 +343,7 @@ def reopen_sales_order(sales_order_name):
 	so = frappe.get_doc("Sales Order", sales_order_name)
 	if not _is_landms_sales_order(so):
 		frappe.throw("This Sales Order is not a LandMS plot sale.")
+	_refuse_reopen_if_terminated(so.name)
 
 	SO = so.name
 	PLOT = so.plot
@@ -1023,10 +1049,8 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 	# customer's receivable account and raises PermissionError for a Guest caller
 	# (the public TCB IPN runs as Guest). Previously only insert/submit were
 	# elevated, so a new order's first live payment failed at the build step.
-	original_user = frappe.session.user
+	caller = become_administrator()
 	try:
-		frappe.set_user("Administrator")
-
 		invoice = make_sales_invoice(doc.name, ignore_permissions=True)
 		invoice.posting_date = posting_date
 		invoice.due_date = doc.payment_deadline or add_days(
@@ -1074,7 +1098,7 @@ def _ensure_plot_sales_invoice(doc, contract_name, *, posting_date: str | None =
 		invoice.insert(ignore_permissions=True)
 		invoice.submit()
 	finally:
-		frappe.set_user(original_user)
+		restore_caller(caller)
 
 	_link_plot_invoice_to_sales_order(doc, invoice.name)
 	_link_plot_invoice_to_contract(contract_name, invoice.name)
@@ -1137,13 +1161,55 @@ def _link_plot_invoice_to_contract(contract_name, invoice_name):
 
 def _ensure_control_number(doc) -> str:
 	current = cstr(doc.get("control_number") or "").strip()
-	if current and is_valid_control_number(current, sales_order_name=doc.name):
+	if current and _reusable_number(current, doc.name):
 		return current
 
-	new_cn = generate_control_number(doc.name)
+	# One order, one number. A submit the bank refused (TCB down) has already
+	# given this order a number — the TCB API log commits mid-transaction, so it
+	# stays saved — but the form that pressed Submit never received it, and a
+	# Save from that form blanks it again. Reuse it rather than mint a second
+	# number the customer could be told and pay on (SO-05458, Oct 2026).
+	new_cn = _number_already_held(doc) or generate_control_number(doc.name)
 	doc.db_set("control_number", new_cn, update_modified=False)
 	doc.control_number = new_cn
 	return new_cn
+
+
+def _number_already_held(doc) -> str:
+	"""The payment number an earlier, failed submit of this order left behind:
+	the one saved on the order, else the newest live registry row for it."""
+	if doc.is_new():
+		return ""
+	stored = cstr(frappe.db.get_value("Sales Order", doc.name, "control_number") or "").strip()
+	if stored and _reusable_number(stored, doc.name):
+		return stored
+	for name in frappe.get_all(
+		"TCB Control Number",
+		filters={"sales_order": doc.name, "status": ("in", ("Generated", "Failed", "Registered"))},
+		order_by="creation desc",
+		pluck="name",
+	):
+		if is_valid_control_number(name, sales_order_name=doc.name):
+			return name
+	return ""
+
+
+# A number in one of these states is dead at TCB (or has already taken money):
+# it is never handed to an order being submitted.
+_DEAD_NUMBER_STATES = ("Declined", "Expired", "Paid")
+
+
+def _reusable_number(number, sales_order_name) -> bool:
+	"""A number this order may submit with: it fits the project's pattern, is
+	not dead at TCB, and is not another order's. An amended or copied order can
+	carry its original's number — switched off when the original was cancelled
+	— and registering that again would leave the order stuck in Draft."""
+	if not is_valid_control_number(number, sales_order_name=sales_order_name):
+		return False
+	row = frappe.db.get_value("TCB Control Number", number, ["status", "sales_order"], as_dict=True)
+	if not row:
+		return True
+	return row.status not in _DEAD_NUMBER_STATES and (row.sales_order or sales_order_name) == sales_order_name
 
 
 def _block_manual_control_number(doc):
@@ -1179,10 +1245,21 @@ def _ensure_related_control_number(doc):
 	existing = cstr(doc.get("related_control_number") or "").strip()
 	if existing and is_valid_control_number(existing, related=True, sales_order_name=doc.name):
 		return
+	# same as _ensure_control_number: reuse the related number a refused submit left behind
+	primary_cn = cstr(doc.get("control_number") or "").strip()
+	held = ""
+	if not doc.is_new():
+		held = frappe.db.get_value("Sales Order", doc.name, "related_control_number") or ""
+		if not held and primary_cn:
+			held = frappe.db.get_value("TCB Control Number", primary_cn, "related_control_number") or ""
+	held = cstr(held).strip()
+	if held and is_valid_control_number(held, related=True, sales_order_name=doc.name):
+		doc.db_set("related_control_number", held, update_modified=False)
+		doc.related_control_number = held
+		return
 	related_cn = generate_control_number(doc.name, related=True)
 	doc.db_set("related_control_number", related_cn, update_modified=False)
 	doc.related_control_number = related_cn
-	primary_cn = cstr(doc.get("control_number") or "").strip()
 	if primary_cn and frappe.db.exists("TCB Control Number", primary_cn):
 		frappe.db.set_value("TCB Control Number", primary_cn, "related_control_number", related_cn)
 
@@ -1511,13 +1588,12 @@ def _post_credit_note_for_outstanding(si_name):
 		}
 	)
 
-	original_user = frappe.session.user
+	caller = become_administrator()
 	try:
-		frappe.set_user("Administrator")
 		credit_note.insert(ignore_permissions=True)
 		credit_note.submit()
 	finally:
-		frappe.set_user(original_user)
+		restore_caller(caller)
 
 	return credit_note.name
 
