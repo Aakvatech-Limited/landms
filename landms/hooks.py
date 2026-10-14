@@ -15,6 +15,14 @@ doctype_js = {
 
 after_install = "landms.install.after_install"
 
+# Receipt verification (TRA-style QR on the plot handover receipt)
+jinja = {
+	"methods": ["landms.receipt_verification.landms_receipt_verification"],
+}
+website_route_rules = [
+	{"from_route": "/verify/<code>", "to_route": "verify"},
+]
+
 after_migrate = [
 	"landms.patches.custom_fields.create_custom_fields.execute",
 	"landms.patches.property_setter.create_property_setters.execute",
