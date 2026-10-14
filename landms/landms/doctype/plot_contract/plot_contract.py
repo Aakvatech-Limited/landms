@@ -859,7 +859,9 @@ class PlotContract(Document):
 		control_number = cstr(frappe.db.get_value("Sales Order", so_name, "control_number") or "").strip()
 		if not control_number:
 			return
-		result = decline_reference_for_sales_order(so_name, control_number)
+		# final: a terminated contract never reopens, so rails that follow the
+		# decline (Malipopay) end their copy of the number instead of pausing it
+		result = decline_reference_for_sales_order(so_name, control_number, final=True)
 		if not result.get("ok"):
 			frappe.throw(
 				f"This contract could not be terminated yet because the bank could "

@@ -11,6 +11,7 @@
   "outbound_col_break",
   "decline_reference_on_so_cancel",
   "decline_failure_policy",
+  "auto_catch_up",
   "inbound_section",
   "inbound_mode",
   "auto_apply_callback_payments",
@@ -82,6 +83,13 @@
    "fieldtype": "Select",
    "label": "Decline Failure Policy",
    "options": "Allow Cancel and Flag\nBlock Cancel"
+  },
+  {
+   "default": "0",
+   "description": "Every three hours (never at midnight), finish the TCB steps listed under Waiting for TCB: register the numbers of orders sold through Malipopay while TCB was down, and switch off the numbers of orders stopped while TCB was down. Each step is checked again before anything is sent. Only steps added after the Malipopay go-live are ever in that list; older numbers are never touched. When off, the list still fills and staff use its Try now button.",
+   "fieldname": "auto_catch_up",
+   "fieldtype": "Check",
+   "label": "Automatic Catch-up (Waiting for TCB)"
   },
   {
    "fieldname": "inbound_section",

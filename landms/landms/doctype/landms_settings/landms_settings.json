@@ -57,7 +57,7 @@
    "label": "Cost Center",
    "options": "Cost Center",
    "reqd": 1,
-   "description": "Cost center applied to all plot-related accounting entries — Sales Orders, Sales Invoices, and Journal Entries"
+   "description": "Cost center applied to all plot-related accounting entries \u2014 Sales Orders, Sales Invoices, and Journal Entries"
   },
   {
    "fieldname": "asset_accounts_section",
@@ -84,6 +84,13 @@
    "label": "TCB Bank Account",
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "description": "Bank/Cash account that receives money collected through Malipopay. Payment Entries booked from Malipopay receipts are paid into this account and the government share is settled out of it — exactly as TCB Bank Account works for the TCB rail. Leave empty until the Malipopay rail goes live.",
+   "fieldname": "malipopay_bank_account",
+   "fieldtype": "Link",
+   "label": "Malipopay Bank Account",
+   "options": "Account"
   },
   {
    "fieldname": "col_break_accounts",
@@ -128,7 +135,7 @@
    "label": "Seller Payable Account",
    "options": "Account",
    "reqd": 1,
-   "description": "Creditors account used when land is acquired — Dr Land Under Development / Cr this account"
+   "description": "Creditors account used when land is acquired \u2014 Dr Land Under Development / Cr this account"
   },
   {
    "fieldname": "col_break_liabilities",
@@ -204,14 +211,14 @@
    "fieldtype": "Float",
    "label": "Govt Application Fee (TZS)",
    "default": "5000",
-   "description": "Fixed government application fee (APPL). Not your revenue — shown on plot documents for buyer reference."
+   "description": "Fixed government application fee (APPL). Not your revenue \u2014 shown on plot documents for buyer reference."
   },
   {
    "fieldname": "govt_registration_fee_amount",
    "fieldtype": "Float",
    "label": "Govt Registration Fee (TZS)",
    "default": "25000",
-   "description": "Fixed government registration fee (REGISTR). Not your revenue — shown on plot documents for buyer reference."
+   "description": "Fixed government registration fee (REGISTR). Not your revenue \u2014 shown on plot documents for buyer reference."
   },
   {
    "fieldname": "col_break_govt_fees",
