@@ -13,6 +13,14 @@
    "columns": 2
   },
   {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Project",
+   "options": "Land Acquisition",
+   "read_only": 1
+  },
+  {
    "fieldname": "amount",
    "fieldtype": "Currency",
    "label": "Amount (TZS)",
@@ -20,10 +28,16 @@
    "columns": 2
   },
   {
+   "fieldname": "sender",
+   "fieldtype": "Data",
+   "label": "Sender",
+   "read_only": 1
+  },
+  {
    "fieldname": "row_status",
    "fieldtype": "Select",
    "label": "Result",
-   "options": "Applied\nIgnored\nFailed",
+   "options": "Applied\nIgnored\nFailed\nUnmatched",
    "in_list_view": 1,
    "bold": 1,
    "columns": 1

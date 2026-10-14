@@ -30,9 +30,12 @@ frappe.ui.form.on("TCB Reconciliation Log", {
       frm
         .add_custom_button(__("Run Reconciliation"), () => {
           frappe.confirm(
-            __("Run TCB reconciliation for {0} to {1}?", [
+            __("Run TCB reconciliation for {0} to {1} — {2}?", [
               frm.doc.date_range_start,
               frm.doc.date_range_end,
+              frm.doc.land_acquisition
+                ? __("project {0} only", [frm.doc.land_acquisition])
+                : __("all projects, one combined log"),
             ]),
             () => {
               frm.call({
@@ -86,6 +89,7 @@ frappe.ui.form.on("TCB Reconciliation Log", {
     frm.set_df_property("date_range_start", "read_only", !editable);
     frm.set_df_property("date_range_end", "read_only", !editable);
     frm.set_df_property("triggered_by", "read_only", !editable);
+    frm.set_df_property("land_acquisition", "read_only", !editable);
   },
 });
 
@@ -110,6 +114,7 @@ function _render_status_indicator(frm) {
       Applied: { bg: "#d3f9d8", color: "#1b7a2e", label: "✓ Applied" },
       Ignored: { bg: "#fff3cd", color: "#856404", label: "⚠ Ignored" },
       Failed: { bg: "#fde8e8", color: "#c0392b", label: "✗ Failed" },
+      Unmatched: { bg: "#e7f0fd", color: "#1c4e80", label: "? Unmatched" },
     };
 
     grid.wrapper.find(".grid-row").each(function () {
