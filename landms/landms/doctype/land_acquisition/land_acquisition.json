@@ -6,12 +6,12 @@
  "engine": "InnoDB",
  "field_order": [
   "tab_overview",
+  "naming_series",
   "acquisition_name",
   "acquisition_date",
+  "status",
   "col_break_header",
   "company",
-  "status",
-  "column_break_obho",
   "approved_by",
   "approval_date",
   "location_section",
@@ -22,23 +22,12 @@
   "latitude",
   "longitude",
   "location_description",
-  "column_break_eanp",
   "total_area_sqm",
   "land_use_type",
   "title_deed_number",
-  "tcb_details_section",
-  "partner_code",
-  "control_number_pattern",
-  "column_break_gmww",
-  "profile_id",
-  "related_control_number_pattern",
-  "column_break_carp",
-  "reconciliation_id",
-  "naming_series",
   "tab_pricing",
   "sales_section",
   "booking_fee_percent",
-  "column_break_vagd",
   "government_share_percent",
   "payment_period_section",
   "payment_years",
@@ -78,10 +67,25 @@
   "col_break_plots",
   "reserved_plots",
   "delivered_plots",
+  "tab_payment_channels",
+  "channels_section",
+  "collect_via_tcb",
+  "collect_via_malipopay",
+  "payment_channel",
+  "tcb_details_section",
+  "partner_code",
+  "profile_id",
+  "column_break_gmww",
+  "reconciliation_id",
+  "column_break_vagd",
+  "control_number_pattern",
+  "related_control_number_pattern",
   "tab_notes",
   "notes_section",
   "notes",
-  "amended_from"
+  "amended_from",
+  "column_break_obho",
+  "column_break_eanp"
  ],
  "fields": [
   {
@@ -335,14 +339,14 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Billed minus Paid \u2014 what we still owe suppliers on already-issued invoices.",
+   "description": "Billed minus Paid — what we still owe suppliers on already-issued invoices.",
    "fieldname": "total_outstanding_tzs",
    "fieldtype": "Currency",
    "label": "Outstanding (TZS)",
    "read_only": 1
   },
   {
-   "description": "Committed minus Billed \u2014 work ordered through Purchase Orders but not yet invoiced.",
+   "description": "Committed minus Billed — work ordered through Purchase Orders but not yet invoiced.",
    "fieldname": "total_unbilled_po_tzs",
    "fieldtype": "Currency",
    "label": "Unbilled PO (TZS)",
@@ -460,6 +464,96 @@
    "read_only": 1
   },
   {
+   "fieldname": "tab_payment_channels",
+   "fieldtype": "Tab Break",
+   "label": "Payment Channels"
+  },
+  {
+   "fieldname": "channels_section",
+   "fieldtype": "Section Break",
+   "label": "Channels"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "collect_via_tcb",
+   "fieldtype": "Check",
+   "label": "Collect via TCB",
+   "default": "1",
+   "description": "Enable TCB for this project: control numbers are registered with TCB and customers pay at the bank. Ticking reveals the TCB settings below."
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "collect_via_malipopay",
+   "fieldtype": "Check",
+   "label": "Collect via Malipopay",
+   "default": "0",
+   "description": "Registers this project's control numbers with Malipopay too, so customers can pay the same number through Malipopay as well. Malipopay follows the issuer: when a number is declined, its Malipopay bill is expired."
+  },
+  {
+   "fieldname": "payment_channel",
+   "fieldtype": "Select",
+   "label": "Control Numbers Issued By",
+   "options": "TCB\nMalipopay",
+   "default": "TCB",
+   "description": "The channel whose numbering issues this project's control numbers (the independent channel). Must be one of the ticked channels above. Every OTHER ticked channel is dependent on it: it collects against the same number and receives payment/reversal echoes. The issuer receives no echoes.",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tcb_details_section",
+   "fieldtype": "Section Break",
+   "label": "TCB",
+   "collapsible": 1,
+   "depends_on": "eval:doc.collect_via_tcb==1"
+  },
+  {
+   "description": "Issued by TCB per land acquisition. Sent as partnerCode in every outbound call.",
+   "fieldname": "partner_code",
+   "fieldtype": "Data",
+   "label": "Partner Code",
+   "search_index": 1,
+   "mandatory_depends_on": "eval:doc.collect_via_tcb==1"
+  },
+  {
+   "description": "Collection account per land acquisition. Sent as profileID on reference create and as acctNo on decline.",
+   "fieldname": "profile_id",
+   "fieldtype": "Data",
+   "label": "Profile ID / Account Number",
+   "search_index": 1,
+   "mandatory_depends_on": "eval:doc.collect_via_tcb==1"
+  },
+  {
+   "fieldname": "column_break_gmww",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Profile ID sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the ProfileID or account number here instead of the partner code.",
+   "fieldname": "reconciliation_id",
+   "fieldtype": "Data",
+   "label": "Reconciliation Profile ID",
+   "search_index": 1,
+   "mandatory_depends_on": "eval:doc.collect_via_tcb==1"
+  },
+  {
+   "fieldname": "column_break_vagd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Pattern used to generate TCB control numbers. '#' = random digit (filled by secrets.randbelow). All other characters are literal. Example: 99911#GVA00## generates 13-digit references like 9991143790087.",
+   "fieldname": "control_number_pattern",
+   "fieldtype": "Data",
+   "label": "Control Number Pattern",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Pattern for the optional related control number. Same '#' rules as the primary pattern. Must produce values that do not collide with the primary pattern. Example: 9992#RGVA####",
+   "fieldname": "related_control_number_pattern",
+   "fieldtype": "Data",
+   "label": "Related Control Number Pattern",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "tab_notes",
    "fieldtype": "Tab Break",
    "label": "Notes"
@@ -489,68 +583,11 @@
   {
    "fieldname": "column_break_eanp",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "tcb_details_section",
-   "fieldtype": "Section Break",
-   "label": "TCB Details"
-  },
-  {
-   "description": "Issued by TCB per land acquisition. Sent as partnerCode in every outbound call.",
-   "fieldname": "partner_code",
-   "fieldtype": "Data",
-   "label": "Partner Code",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "fieldname": "column_break_gmww",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_carp",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Profile ID sent as partnerCode in reconciliation calls. If empty, falls back to the main Partner Code above. TCB may require the ProfileID or account number here instead of the partner code.",
-   "fieldname": "reconciliation_id",
-   "fieldtype": "Data",
-   "label": "Reconciliation Profile ID",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "fieldname": "column_break_vagd",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Collection account per land acquisition. Sent as profileID on reference create and as acctNo on decline.",
-   "fieldname": "profile_id",
-   "fieldtype": "Data",
-   "label": "Profile ID / Account Number",
-   "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "description": "Pattern used to generate TCB control numbers. '#' = random digit (filled by secrets.randbelow). All other characters are literal. Example: 99911#GVA00## generates 13-digit references like 9991143790087.",
-   "fieldname": "control_number_pattern",
-   "fieldtype": "Data",
-   "label": "Control Number Pattern",
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
-   "description": "Pattern for the optional related control number. Same '#' rules as the primary pattern. Must produce values that do not collide with the primary pattern. Example: 9992#RGVA####",
-   "fieldname": "related_control_number_pattern",
-   "fieldtype": "Data",
-   "label": "Related Control Number Pattern",
-   "read_only": 1,
-   "search_index": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-07-03 18:31:05.631461",
+ "modified": "2026-10-14 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "LandMS",
  "name": "Land Acquisition",

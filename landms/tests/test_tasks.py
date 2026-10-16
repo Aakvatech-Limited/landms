@@ -64,6 +64,8 @@ class TestApplicationAndContractDeadlines(IntegrationTestCase):
 		)
 		mock_commit.assert_called_once()
 
+	# no Malipopay money waiting on the order (tested in test_nightly_run)
+	@patch("landms.tasks._malipopay_money_waiting", return_value=False)
 	@patch("landms.tasks.frappe.logger")
 	@patch("landms.tasks.frappe.db.commit")
 	@patch("landms.tasks.frappe.db.set_value")
@@ -80,6 +82,7 @@ class TestApplicationAndContractDeadlines(IntegrationTestCase):
 		mock_set_value,
 		mock_commit,
 		mock_logger,
+		mock_malipopay_waiting,
 	):
 		mock_get_all.return_value = [
 			frappe._dict(

@@ -1,0 +1,70 @@
+{
+ "doctype": "DocType",
+ "name": "Malipopay Sweep Log Row",
+ "module": "LandMS",
+ "istable": 1,
+ "editable_grid": 1,
+ "fields": [
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Control Number",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "ml_reference",
+   "fieldtype": "Data",
+   "label": "ML Reference",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "malipopay_collection",
+   "fieldtype": "Link",
+   "label": "Collection",
+   "options": "Malipopay Collection"
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Action",
+   "options": "Clean\nBooked\nOrphan Adopted\nDivergence Flagged\nSkipped (Hold)\nError",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "txns_booked",
+   "fieldtype": "Int",
+   "label": "Txns Booked",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "amount_booked",
+   "fieldtype": "Currency",
+   "label": "Amount Booked",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "provider_paid",
+   "fieldtype": "Currency",
+   "label": "Their Ledger Paid",
+   "description": "Cumulative paid per Malipopay's breakdown at sweep time."
+  },
+  {
+   "fieldname": "ledger_paid",
+   "fieldtype": "Currency",
+   "label": "Our Ledger Paid",
+   "description": "Sum of Payment Receipt Ledger rows for this collection. Divergence = these two disagree by more than the 1 TZS tolerance."
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "in_list_view": 1,
+   "columns": 2
+  }
+ ]
+}
