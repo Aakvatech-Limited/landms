@@ -98,7 +98,44 @@ class LandAcquisition(Document):
 					"{0} issues this project's control numbers, so it must stay ticked. Nothing was changed."
 				).format(issuer)
 			)
+		self._guard_malipopay_switch()
 		self._validate_channel_roles()
+
+	def _guard_malipopay_switch(self):
+		"""The Malipopay box on a submitted project (operator, 16 Oct 2026).
+
+		Only a System Manager may change it. It cannot be unticked while any of the
+		project's Malipopay bills is not yet ended: those customers can still pay on
+		the bill, but their orders would lose the nightly money check and the
+		reporting of their bank payments to Malipopay."""
+		before = self.get_doc_before_save()
+		if not before or cint(before.get("collect_via_malipopay")) == cint(self.get("collect_via_malipopay")):
+			return
+		if "System Manager" not in frappe.get_roles():
+			frappe.throw(
+				_(
+					"Only a System Manager can change Collect via Malipopay on a submitted project. Nothing was changed."
+				),
+				frappe.PermissionError,
+			)
+		if cint(self.get("collect_via_malipopay")):
+			return
+		open_bills = self._open_malipopay_bills()
+		if open_bills:
+			frappe.throw(
+				_(
+					"Collect via Malipopay cannot be switched off: this project still has {0} Malipopay bill(s) "
+					"that are not ended. End each one first (close the order for good, terminate or cancel it), "
+					"then untick. Nothing was changed."
+				).format(open_bills)
+			)
+
+	def _open_malipopay_bills(self):
+		if not frappe.db.table_exists("Malipopay Collection"):
+			return 0
+		return frappe.db.count(
+			"Malipopay Collection", {"land_acquisition": self.name, "state": ["!=", "Dead"]}
+		)
 
 	def before_submit(self):
 		if self.status != "Approved":
