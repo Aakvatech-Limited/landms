@@ -78,6 +78,7 @@ def get_sales_order_defaults(plot_application):
 		"delivery_date": payment_deadline,
 		"payment_deadline": payment_deadline,
 		"company": settings.company,
+		"cost_center": settings.cost_center,
 		"set_warehouse": settings.plot_inventory_warehouse,
 		"item_row": item_row,
 		"schedule_rows": schedule_rows,
