@@ -1,17 +1,12 @@
-"""Journal Entry doc-event hooks for LandMS."""
+"""Journal Entry doc-event hooks for LandMS.
 
-import frappe
+The cost-centre rule now lives in landms.cost_center (one rule for every
+LandMS doctype, wired as before_validate in hooks.py). This name is kept so
+any external wiring that still points at it keeps working.
+"""
+
+from landms.cost_center import apply_landms_cost_center
 
 
 def before_save_journal_entry(doc, method=None):
-	"""Auto-fill cost_center from LandMS Settings on rows that have
-	land_acquisition set but are missing a cost_center."""
-
-	# Find the cost_center from settings (cached single-doc read)
-	cost_center = frappe.db.get_single_value("LandMS Settings", "cost_center")
-	if not cost_center:
-		return
-
-	for row in doc.accounts or []:
-		if row.get("land_acquisition"):
-			row.cost_center = cost_center
+	apply_landms_cost_center(doc, method)
