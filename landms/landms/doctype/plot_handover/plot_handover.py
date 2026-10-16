@@ -8,11 +8,21 @@ from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
 
 class PlotHandover(Document):
 	def before_validate(self):
+		if self.docstatus == 0:
+			# a draft never carries a verification code: Amend copies the
+			# cancelled receipt's code (and the code must be unique), and a code
+			# typed in by someone must never reach a receipt. Submit gives a new one.
+			self.verification_code = None
 		self._fill_from_contract()
 		self._fill_company_representative()
 
 	def validate(self):
 		self._ensure_no_existing_handover()
+
+	def before_submit(self):
+		from landms.receipt_verification import assign_code
+
+		assign_code(self)
 
 	def on_submit(self):
 		delivery_note = self._ensure_delivery_note()

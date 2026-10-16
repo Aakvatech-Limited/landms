@@ -293,6 +293,23 @@
    "fieldtype": "Data",
    "label": "Government Fee Entry Naming Series",
    "default": "GFE-.YYYY.-.####"
+  },
+  {
+   "fieldname": "tab_receipts",
+   "fieldtype": "Tab Break",
+   "label": "Receipts"
+  },
+  {
+   "fieldname": "receipt_verification_section",
+   "fieldtype": "Section Break",
+   "label": "Handover Receipt Verification"
+  },
+  {
+   "description": "The address printed in the QR on every handover receipt, for example https://verify.gva.co.tz. Leave it empty until that address opens the verify page: no QR is printed while it is empty. Do not change it once receipts are printed; printed receipts keep the address they were printed with.",
+   "fieldname": "receipt_verification_address",
+   "fieldtype": "Data",
+   "label": "Receipt Verification Address",
+   "options": "URL"
   }
  ],
  "permissions": [
