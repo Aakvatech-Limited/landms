@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: commitcheck-landms-${{ github.event.number }}
+  group: commitcheck-${{ github.repository }}-${{ github.event.number }}
   cancel-in-progress: true
 
 jobs:
@@ -27,5 +27,5 @@ jobs:
 
       - name: Check commit messages
         run: |
-          npm install @commitlint/cli @commitlint/config-conventional
+          npm install @commitlint/cli @commitlint/config-conventional conventional-changelog-conventionalcommits
           npx commitlint --verbose --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
