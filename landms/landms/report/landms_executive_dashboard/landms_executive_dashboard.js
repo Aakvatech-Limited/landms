@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Executive Dashboard"] = {
+frappe.query_reports["LandMS Executive Dashboard"] = {
   filters: [],
   formatter: function (value, row, column, data, default_formatter) {
     let formatted = default_formatter(value, row, column, data);

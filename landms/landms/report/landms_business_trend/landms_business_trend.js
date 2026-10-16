@@ -1,4 +1,4 @@
-frappe.query_reports["LMS Business Trend"] = {
+frappe.query_reports["LandMS Business Trend"] = {
   filters: [
     {
       fieldname: "grouping",
