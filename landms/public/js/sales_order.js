@@ -51,6 +51,9 @@ frappe.ui.form.on("Sales Order", {
         frm.set_value("transaction_date", d.transaction_date);
         frm.set_value("delivery_date", d.delivery_date);
         frm.set_value("payment_deadline", d.payment_deadline);
+        if (d.cost_center && !frm.doc.cost_center) {
+          frm.set_value("cost_center", d.cost_center);
+        }
         frm.set_value("company", d.company);
         frm.set_value("set_warehouse", d.set_warehouse);
 

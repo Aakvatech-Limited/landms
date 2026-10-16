@@ -33,12 +33,20 @@ doc_events = {
 		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 		"on_update_after_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_purchase_invoice",
 	},
+	# Cost centre: one rule for every LandMS document (landms/cost_center.py) —
+	# fills EMPTY header/line cost centres from LandMS Settings, only on
+	# documents that are provably LandMS's and belong to the LandMS company.
+	# before_validate runs on every save path and ahead of the mandatory check.
+	"Delivery Note": {
+		"before_validate": "landms.cost_center.apply_landms_cost_center",
+	},
 	"Journal Entry": {
-		"before_save": "landms.journal_entry_hooks.before_save_journal_entry",
+		"before_validate": "landms.cost_center.apply_landms_cost_center",
 		"on_submit": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
 		"on_cancel": "landms.landms.doctype.land_acquisition.land_acquisition.sync_costs_from_journal_entry",
 	},
 	"Payment Entry": {
+		"before_validate": "landms.cost_center.apply_landms_cost_center",
 		"validate": [
 			"landms.landms.doctype.land_acquisition.land_acquisition.autoset_land_acquisition_on_payment_entry",
 			"landms.payment_sync.validate_payment_entry",
@@ -65,9 +73,11 @@ doc_events = {
 		"on_submit": "landms.malipopay_external.on_unreconcile_payment_submit",
 	},
 	"Sales Invoice": {
+		"before_validate": "landms.cost_center.apply_landms_cost_center",
 		"before_save": "landms.sales_invoice_hooks.before_save_sales_invoice",
 	},
 	"Sales Order": {
+		"before_validate": "landms.cost_center.apply_landms_cost_center",
 		"validate": "landms.sales_order_hooks.validate_sales_order",
 		"before_submit": "landms.sales_order_hooks.before_submit_sales_order",
 		"on_submit": [
