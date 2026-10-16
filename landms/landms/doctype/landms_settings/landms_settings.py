@@ -18,6 +18,7 @@ REQUIRED_ACCOUNTS = {
 BANK_CASH_ACCOUNTS = (
 	"application_fee_receiving_account",
 	"tcb_bank_account",
+	"malipopay_bank_account",
 )
 
 

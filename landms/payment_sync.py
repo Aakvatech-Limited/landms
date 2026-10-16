@@ -231,12 +231,16 @@ def create_payment_entry_for_sales_order(
 	reference_no: str,
 	remarks: str | None = None,
 	submit: bool = True,
+	name_from_reference: bool = True,
 ) -> str:
 	"""Create a Payment Entry against the plot SI, optionally submitting it.
 
 	Used by TCB inbound, so if this is the first advance we create the single
 	plot SI on demand before posting the PE. When `submit=False` the PE is
 	inserted as a Draft for manual review instead of being auto-submitted.
+	`name_from_reference` keeps the rail convention of naming the PE with the
+	provider's reference; callers pass False for a reference that is not safe
+	as a primary key, and ERPNext names the entry normally instead.
 	"""
 	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
 		frappe.throw(f"Sales Order {sales_order_name} not found.")
@@ -247,9 +251,17 @@ def create_payment_entry_for_sales_order(
 	if not reference_no:
 		frappe.throw("Payment reference number is required (used for idempotency).")
 
+	# One payment per order at a time, whichever rail it came from (TCB notice,
+	# TCB reconciliation, Malipopay booking). Without this, two payments landing
+	# together both read the same balance and the invoice loses one of them.
+	_lock_sales_order_for_payment(sales_order_name)
+
 	so = frappe.get_doc("Sales Order", sales_order_name)
 	if so.docstatus != 1:
 		frappe.throw(f"Sales Order {sales_order_name} is not submitted.")
+	_refuse_if_read_before_another_payment(
+		"Sales Order", sales_order_name, "plot_sales_invoice", so.get("plot_sales_invoice")
+	)
 
 	invoice_name = so.get("plot_sales_invoice") or ensure_plot_sales_invoice_for_sales_order(
 		sales_order_name,
@@ -264,6 +276,9 @@ def create_payment_entry_for_sales_order(
 	si = frappe.get_doc("Sales Invoice", invoice_name)
 	if si.docstatus != 1:
 		frappe.throw(f"Sales Invoice {invoice_name} is not submitted.")
+	_refuse_if_read_before_another_payment(
+		"Sales Invoice", invoice_name, "outstanding_amount", si.outstanding_amount
+	)
 
 	outstanding = flt(si.outstanding_amount)
 	if outstanding <= 0:
@@ -290,17 +305,99 @@ def create_payment_entry_for_sales_order(
 			"references": pe_references,
 		}
 	)
-	pe.name = cstr(reference_no)
-	pe.flags.name_set = True
+	if name_from_reference:
+		pe.name = cstr(reference_no)
+		pe.flags.name_set = True
 
 	caller = become_administrator()
 	try:
-		pe.insert(ignore_permissions=True, set_name=cstr(reference_no))
+		pe.insert(ignore_permissions=True, set_name=cstr(reference_no) if name_from_reference else None)
 		if submit:
 			pe.submit()
 	finally:
 		restore_caller(caller)
 	return pe.name
+
+
+class ConcurrentPaymentError(frappe.ValidationError):
+	"""Another payment on the same order was recorded while this one was being
+	prepared. Nothing of this one is saved. The rails go through
+	record_payment_waiting_for_others, which waits and records it again with
+	fresh figures — TCB never resends a notice (its endpoint always answers 200)."""
+
+
+# How many times a rail's payment is tried when another payment on the same
+# order is being recorded at the same moment.
+CONCURRENT_ATTEMPTS = 3
+
+
+def record_payment_waiting_for_others(**kwargs):
+	"""The rails' way to record a payment (TCB notice and reconciliation,
+	Malipopay booking): if another payment on the same order was being recorded
+	at the same moment, wait for it to finish and record this one with fresh
+	figures, instead of refusing it (proven 14 Oct 2026: the second of two
+	simultaneous TCB notices was refused and would only have been picked up by
+	the midnight reconciliation).
+
+	Between attempts the transaction is committed: that is what makes the next
+	attempt read the other payment's figures, and nothing of the refused attempt
+	was written. The rails already commit as they go (the TCB logger does, the
+	Malipopay booking owns its commits); console scripts call
+	create_payment_entry_for_sales_order directly and keep rehearse-then-rollback."""
+	for attempt in range(1, CONCURRENT_ATTEMPTS + 1):
+		try:
+			return create_payment_entry_for_sales_order(**kwargs)
+		except ConcurrentPaymentError:
+			if attempt == CONCURRENT_ATTEMPTS:
+				raise
+			frappe.db.commit()  # ends this transaction: the next attempt starts a fresh read
+
+
+def _lock_sales_order_for_payment(sales_order_name):
+	"""Hold this order's payment lock until the caller's transaction ends.
+
+	A MySQL named lock: a second payment on the same order waits here (up to 30
+	seconds) until the first one's transaction is committed or rolled back,
+	which releases it (after_commit / after_rollback), as does the connection
+	closing. Nothing between taking the lock and the end of the Payment Entry's
+	submit commits, so the whole payment is covered."""
+	lock_name = f"plot_pay:{sales_order_name}"[:64]
+	# 30 s per wait: three waits stay inside the web server's 120 s limit for a TCB notice
+	row = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (lock_name, 30))
+	if not row or row[0][0] != 1:
+		raise ConcurrentPaymentError(
+			f"Another payment on Sales Order {sales_order_name} is still being recorded. "
+			"This payment was not saved and will be tried again."
+		)
+
+	def release():
+		try:
+			frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_name,))
+		except Exception:
+			pass
+
+	frappe.db.after_commit.add(release)
+	frappe.db.after_rollback.add(release)
+
+
+def _refuse_if_read_before_another_payment(doctype, name, fieldname, value_read):
+	"""Refuse when this transaction read a figure that another payment has
+	since changed. The database answers ordinary reads from the moment the
+	transaction began, so waiting on the lock alone is not enough: the
+	locking read sees the latest saved value, and if it differs, every figure
+	this payment would be built on is out of date."""
+	row = frappe.db.sql(f"SELECT `{fieldname}` FROM `tab{doctype}` WHERE name = %s FOR UPDATE", (name,))
+	current = row[0][0] if row else None
+	changed = (
+		abs(flt(current) - flt(value_read)) >= 0.005
+		if fieldname == "outstanding_amount"
+		else cstr(current) != cstr(value_read)
+	)
+	if changed:
+		raise ConcurrentPaymentError(
+			f"Another payment on {doctype} {name} was recorded at the same moment. "
+			"This payment was not saved and will be tried again."
+		)
 
 
 def _ensure_first_advance_plot_invoices(doc):
@@ -779,7 +876,14 @@ def _post_government_share_je(pe_doc):
 	# The settlement rows require the bank account. If it is not configured we
 	# fall back to the accrual-only 2-row JE (previous behaviour) rather than
 	# throw — a misconfiguration must not block a customer payment.
+	# The share is settled out of the bank the money arrived in. A Malipopay
+	# receipt is paid into LandMS Settings.malipopay_bank_account, so its
+	# settlement rows credit that account — the same 4-line entry as TCB with
+	# the right bank. Every other plot payment keeps the TCB bank, as before.
 	bank_account = settings.tcb_bank_account
+	malipopay_bank_account = settings.get("malipopay_bank_account")
+	if malipopay_bank_account and pe_doc.paid_to == malipopay_bank_account:
+		bank_account = malipopay_bank_account
 	settle_govt_share = bool(bank_account)
 
 	accounts = [

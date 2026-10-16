@@ -235,6 +235,7 @@ def _get_tcb_settings() -> dict[str, Any]:
 			"verify_ssl": 1,
 			"connect_timeout_seconds": 5,
 			"read_timeout_seconds": 15,
+			"auto_catch_up": 0,
 		}
 
 	get_value = settings_doc.get
@@ -255,6 +256,8 @@ def _get_tcb_settings() -> dict[str, Any]:
 		"verify_ssl": get_value("verify_ssl"),
 		"connect_timeout_seconds": get_value("connect_timeout_seconds") or 5,
 		"read_timeout_seconds": get_value("read_timeout_seconds") or 15,
+		# "Waiting for TCB" automatic catch-up — off unless an operator ticks it
+		"auto_catch_up": get_value("auto_catch_up") or 0,
 	}
 
 
@@ -331,6 +334,48 @@ def _get_registry(control_number: str):
 	if not frappe.db.exists("TCB Control Number", control_number):
 		return None
 	return frappe.get_doc("TCB Control Number", control_number)
+
+
+def never_registered(control_number: str) -> bool:
+	"""True when TCB has never confirmed this number: its registry row is still
+	Generated or Failed and no registration ever succeeded. With the other
+	checks in payments.router (Malipopay project, TCB unreachable, no payment
+	ever arrived) such a number may be stopped while TCB is down; switching it
+	off at TCB is then queued under Waiting for TCB."""
+	status = frappe.db.get_value("TCB Control Number", control_number, "status") if control_number else None
+	if status not in ("Generated", "Failed"):
+		return False
+	return not frappe.db.exists(
+		"TCB Control Number Log Link",
+		{"parent": control_number, "event_type": "Reference Create", "status": "Success"},
+	)
+
+
+def payment_ever_arrived(control_number: str) -> bool:
+	"""True when anything shows money was ever paid on this number at TCB — a
+	payment notice or a reconciliation row naming it (even one we refused), or
+	a payment recorded on its registry row. Such a number is live at TCB
+	whatever our registry status says, so it must never be treated as
+	"nothing to release"."""
+	if not control_number:
+		return False
+	paid = frappe.db.get_value(
+		"TCB Control Number", control_number, ["paid_amount", "payment_entry", "paid_at"], as_dict=True
+	)
+	if paid and (flt(paid.paid_amount) > 0 or paid.payment_entry or paid.paid_at):
+		return True
+	if frappe.db.exists("TCB Payment Notification", {"reference": control_number}):
+		return True
+	return bool(
+		frappe.db.exists(
+			"TCB API Log",
+			{
+				"direction": "Inbound",
+				"event_type": ["in", ["IPN Callback", "Reconciliation"]],
+				"external_reference": control_number,
+			},
+		)
+	)
 
 
 # ---------------------------------------------------------------------- #
@@ -848,6 +893,8 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			"ok": False,
 			"status": "Failed",
 			"block_cancel": block_cancel,
+			# no answer we can read, or a server error: TCB did not decide anything
+			"unreachable": not http_status or http_status >= 500,
 			"message": (
 				f"TCB decline failed (HTTP {http_status}, TCB Status {tcb_status}: "
 				f"{tcb_message or 'No message'})."
@@ -885,6 +932,7 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 			"ok": False,
 			"status": "Failed",
 			"block_cancel": block_cancel,
+			"unreachable": True,  # no answer (timeout, connection refused)
 			"message": "TCB decline call failed with exception. Check TCB API Log.",
 		}
 
@@ -916,7 +964,7 @@ def apply_tcb_payment_to_sales_order(
 	Idempotent: if a Payment Entry with the same reference_no already
 	exists for the invoice, returns {status: 'Ignored'}.
 	"""
-	from landms.payment_sync import create_payment_entry_for_sales_order
+	from landms.payment_sync import record_payment_waiting_for_others
 
 	control_number = cstr(control_number).strip()
 	payment_reference = cstr(payment_reference).strip()
@@ -987,8 +1035,15 @@ def apply_tcb_payment_to_sales_order(
 			"sales_order": standard_so_name,
 		}
 
+	# A payment that fails half-way (e.g. the government-share entry is refused)
+	# must leave nothing behind: the next log write would otherwise save a
+	# Payment Entry with no government share and no order/contract update (the
+	# 7 Sep 2026 "zombie" payments). Undo only back to here, so the notice record
+	# made before this point stays as the audit trail.
+	frappe.db.savepoint(_PAYMENT_SAVEPOINT)
 	try:
-		pe_name = create_payment_entry_for_sales_order(
+		# waits for, then records after, any other payment on this order at the same moment
+		pe_name = record_payment_waiting_for_others(
 			sales_order_name=standard_so_name,
 			amount=amount,
 			payment_date=payment_date,
@@ -997,36 +1052,8 @@ def apply_tcb_payment_to_sales_order(
 			remarks=f"TCB Payment — {standard_so_name} / Control No: {control_number}",
 			submit=not hold_for_review,
 		)
-		if hold_for_review:
-			# Draft PE — do NOT mark registry as paid. The money is not yet
-			# booked; a reviewer must submit the PE first.
-			return {
-				"ok": True,
-				"status": "Success",
-				"message": (
-					f"Payment Entry {pe_name} created in Draft for {standard_so_name} "
-					"— pending manual review before submission."
-				),
-				"sales_order": standard_so_name,
-				"payment_entry": pe_name,
-			}
-
-		registry = _get_registry(control_number)
-		if registry:
-			registry.mark_paid(
-				payment_entry=pe_name,
-				payment_reference=reference_no,
-				paid_amount=amount,
-				note=f"Auto-applied to {standard_so_name}.",
-			)
-		return {
-			"ok": True,
-			"status": "Success",
-			"message": f"Payment auto-applied to {standard_so_name}.",
-			"sales_order": standard_so_name,
-			"payment_entry": pe_name,
-		}
 	except Exception as exc:
+		_undo_this_payment()
 		msg = cstr(exc)
 		if "Duplicate payment reference" in msg:
 			return {
@@ -1042,6 +1069,66 @@ def apply_tcb_payment_to_sales_order(
 			"sales_order": standard_so_name,
 			"error": frappe.get_traceback(),
 		}
+
+	if hold_for_review:
+		# Draft PE — do NOT mark registry as paid. The money is not yet
+		# booked; a reviewer must submit the PE first.
+		return {
+			"ok": True,
+			"status": "Success",
+			"message": (
+				f"Payment Entry {pe_name} created in Draft for {standard_so_name} "
+				"— pending manual review before submission."
+			),
+			"sales_order": standard_so_name,
+			"payment_entry": pe_name,
+		}
+
+	registry = _get_registry(control_number)
+	if registry:
+		try:
+			registry.mark_paid(
+				payment_entry=pe_name,
+				payment_reference=reference_no,
+				paid_amount=amount,
+				note=f"Auto-applied to {standard_so_name}.",
+			)
+		except Exception:
+			# the payment is booked; only the number's status could not follow —
+			# unless the database rolled the whole work back (a deadlock does),
+			# in which case nothing is booked and that must be said
+			frappe.log_error(
+				frappe.get_traceback(),
+				f"TCB: {pe_name} booked but control number {control_number} not marked Paid",
+			)
+			if not frappe.db.exists("Payment Entry", pe_name):
+				return {
+					"ok": False,
+					"status": "Failed",
+					"message": f"The payment to {standard_so_name} was undone by the database; nothing is booked.",
+					"sales_order": standard_so_name,
+				}
+	return {
+		"ok": True,
+		"status": "Success",
+		"message": f"Payment auto-applied to {standard_so_name}.",
+		"sales_order": standard_so_name,
+		"payment_entry": pe_name,
+	}
+
+
+_PAYMENT_SAVEPOINT = "landms_tcb_payment"
+
+
+def _undo_this_payment():
+	"""Undo the failed payment's own writes, keeping everything before it."""
+	try:
+		frappe.db.rollback(save_point=_PAYMENT_SAVEPOINT)
+	except Exception:
+		# a commit between attempts (record_payment_waiting_for_others) has
+		# already saved everything before this attempt and dropped the
+		# savepoint: a plain rollback now undoes only this attempt
+		frappe.db.rollback()
 
 
 # ---------------------------------------------------------------------- #
