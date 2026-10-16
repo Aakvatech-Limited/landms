@@ -1,6 +1,10 @@
 import frappe
 from frappe.utils import flt
 
+# A plot leaves stock only at handover (its Delivery Note). Every other plot is
+# still in the stock ledger, so the money cards count those — and match it.
+DELIVERED_STATUSES = ("Delivered", "Title Closed")
+
 
 def execute(filters=None):
 	filters = filters or {}
@@ -97,11 +101,12 @@ def get_summary(data):
 	pending_advance = sum(1 for r in data if r["status"] == "Pending Advance")
 	reserved = sum(1 for r in data if r["status"] == "Reserved")
 	ready_for_handover = sum(1 for r in data if r["status"] == "Ready for Handover")
-	delivered = sum(1 for r in data if r["status"] in ("Delivered", "Title Closed"))
+	delivered = sum(1 for r in data if r["status"] in DELIVERED_STATUSES)
 
-	total_cost = sum(flt(r["allocated_cost"]) for r in data)
-	total_price = sum(flt(r["selling_price"]) for r in data)
-	total_margin = sum(flt(r["margin"]) for r in data)
+	in_stock = [r for r in data if r["status"] not in DELIVERED_STATUSES]
+	total_cost = sum(flt(r["allocated_cost"]) for r in in_stock)
+	total_price = sum(flt(r["selling_price"]) for r in in_stock)
+	total_margin = total_price - total_cost
 	margin_pct = (total_margin / total_price * 100) if total_price else 0
 
 	return [
@@ -112,11 +117,26 @@ def get_summary(data):
 		{"label": "Reserved", "value": reserved, "datatype": "Int", "indicator": "Orange"},
 		{"label": "Ready for Handover", "value": ready_for_handover, "datatype": "Int", "indicator": "Cyan"},
 		{"label": "Delivered", "value": delivered, "datatype": "Int", "indicator": "Blue"},
-		{"label": "Inventory Cost (TZS)", "value": total_cost, "datatype": "Float", "indicator": "Grey"},
-		{"label": "Asking Value (TZS)", "value": total_price, "datatype": "Float", "indicator": "Blue"},
-		{"label": "Potential Margin (TZS)", "value": total_margin, "datatype": "Float", "indicator": "Green"},
 		{
-			"label": "Portfolio Margin %",
+			"label": "Inventory Cost, in stock (TZS)",
+			"value": total_cost,
+			"datatype": "Float",
+			"indicator": "Grey",
+		},
+		{
+			"label": "Asking Value, in stock (TZS)",
+			"value": total_price,
+			"datatype": "Float",
+			"indicator": "Blue",
+		},
+		{
+			"label": "Potential Margin, in stock (TZS)",
+			"value": total_margin,
+			"datatype": "Float",
+			"indicator": "Green",
+		},
+		{
+			"label": "Margin %, in stock",
 			"value": margin_pct,
 			"datatype": "Percent",
 			"indicator": "Green" if margin_pct >= 0 else "Red",

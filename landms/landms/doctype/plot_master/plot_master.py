@@ -1,7 +1,8 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import add_days, cint, flt, getdate, today
 
+from landms.after_submit import drop_rounding_noise_on_locked_fields
 from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
@@ -175,6 +176,51 @@ class PlotMaster(Document):
 		self.create_stock_entry()
 		sync_land_acquisition_plot_summary(self.land_acquisition)
 
+	# ------------------------------------------------------------------ #
+	#  The 90-day tick (No Advance Deadline) on a submitted plot           #
+	# ------------------------------------------------------------------ #
+
+	def before_update_after_submit(self):
+		# The form can hold the plot's money fields with more decimals than are
+		# stored, which made Frappe refuse the save (live, 13 Oct 2026).
+		drop_rounding_noise_on_locked_fields(self)
+		stored_tick = cint(frappe.db.get_value("Plot Master", self.name, "no_advance_deadline"))
+		self.flags.tick_changed = stored_tick != cint(self.no_advance_deadline)
+		if self.flags.tick_changed and not cint(self.no_advance_deadline):
+			self._refuse_untick_that_would_expire_an_order()
+
+	def on_update_after_submit(self):
+		if self.flags.tick_changed:
+			self._update_live_application_windows()
+
+	def _refuse_untick_that_would_expire_an_order(self):
+		"""Without the tick a paid application gets the standard advance window
+		again. If that window is over, tonight's run would expire the order at
+		once — refuse instead (the same check the console script made).
+
+		The run starts at 01:00, already on the next day, so a window ending
+		today is also over by then: hence <= (the run expires window_end < its
+		day, i.e. window_end <= today)."""
+		standard = _standard_advance_days()
+		for app in _paid_applications_on(self.name):
+			window_end = add_days(app.payment_date, standard)
+			if getdate(window_end) <= getdate(today()) and not _has_running_contract(app.sales_order):
+				frappe.throw(
+					f"The 90-day tick cannot be removed from {self.plot_number or self.name}: application "
+					f"{app.name}'s standard {standard}-day advance window ran until {window_end}, so "
+					"tonight's run would expire its order. Nothing was changed."
+				)
+
+	def _update_live_application_windows(self):
+		"""Live applications on this plot follow the tick: validity days and the
+		expiry date shown on the application, as when the application was made."""
+		days = _advance_days_for(self)
+		for app in _live_applications_on(self.name):
+			values = {"validity_days": days}
+			if app.payment_date:
+				values["expiry_date"] = add_days(app.payment_date, days)
+			frappe.db.set_value("Plot Application", app.name, values, update_modified=False)
+
 	def on_cancel(self):
 		self.cancel_stock_entry()
 		sync_land_acquisition_plot_summary(self.land_acquisition)
@@ -244,6 +290,40 @@ class PlotMaster(Document):
 			se.cancel()
 		self.db_set("stock_entry", None)
 		self.db_set("serial_no", None)
+
+
+def _standard_advance_days():
+	return cint(frappe.db.get_single_value("LandMS Settings", "application_fee_validity_days") or 7)
+
+
+def _advance_days_for(plot):
+	"""The advance window a plot's applications get — the same rule as
+	PlotApplication.fill_fee_from_settings and the nightly expiry."""
+	if cint(plot.no_advance_deadline) and cint(plot.payment_completion_days) > 0:
+		return cint(plot.payment_completion_days)
+	return _standard_advance_days()
+
+
+def _paid_applications_on(plot_name):
+	return frappe.get_all(
+		"Plot Application",
+		filters={"plot": plot_name, "docstatus": 1, "status": "Paid", "payment_date": ["is", "set"]},
+		fields=["name", "payment_date", "sales_order"],
+	)
+
+
+def _live_applications_on(plot_name):
+	return frappe.get_all(
+		"Plot Application",
+		filters={"plot": plot_name, "docstatus": 1, "status": ["in", ["Submitted", "Paid"]]},
+		fields=["name", "payment_date"],
+	)
+
+
+def _has_running_contract(sales_order):
+	return bool(sales_order) and bool(
+		frappe.db.exists("Plot Contract", {"sales_order": sales_order, "docstatus": 1})
+	)
 
 
 def get_plot_item_code(plot_type):
