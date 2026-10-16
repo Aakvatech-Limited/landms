@@ -656,6 +656,10 @@ def register_reference_for_sales_order(sales_order_name: str, control_number: st
 # ---------------------------------------------------------------------- #
 
 
+# TCB's decline answer when it holds no live reference under the number.
+TCB_STATUS_NO_SUCH_REFERENCE = 96
+
+
 def decline_reference_for_sales_order(sales_order_name: str, control_number: str) -> dict[str, Any]:
 	"""Decline a registered TCB reference when an unpaid SO is being cancelled."""
 	settings = _get_tcb_settings()
@@ -745,7 +749,18 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		http_status = response.status_code
 		parsed_body = _parse_json_or_text(response)
 		tcb_status, tcb_message = _extract_tcb_status_message(parsed_body)
-		ok = response.ok and tcb_status == 0
+		# 96 "Reference no does not exist": TCB holds nothing live under this
+		# number — a decline that timed out but went through, or a number TCB
+		# never registered. Nothing is left to release, so the stop goes ahead;
+		# reading it as a failure jammed orders for good (SO-03510, SO-04965).
+		# the code alone is not enough: in bank switching 96 can also mean "system
+		# malfunction", so TCB's own words must say the reference does not exist
+		released_before = (
+			response.ok
+			and tcb_status == TCB_STATUS_NO_SUCH_REFERENCE
+			and "not exist" in cstr(tcb_message).lower()
+		)
+		ok = response.ok and (tcb_status == 0 or released_before)
 
 		log_name = create_tcb_api_log(
 			direction="Outbound",
@@ -766,25 +781,29 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 		registry = _get_registry(control_number)
 		if registry:
 			if ok:
-				# Paid/Declined/Expired are terminal locally: TCB accepted the
-				# decline but we can't (and shouldn't) override a Paid registry —
-				# money was received. Just record the decline acknowledgment.
-				if registry.status in ("Paid", "Declined", "Expired"):
+				note = (
+					f"TCB answered {TCB_STATUS_NO_SUCH_REFERENCE} (reference does not exist): "
+					f"nothing left to release. {tcb_message or ''}".strip()
+					if released_before
+					else tcb_message or "Declined at TCB."
+				)
+				from landms.landms.doctype.tcb_control_number.tcb_control_number import (
+					ALLOWED_TRANSITIONS,
+				)
+
+				if "Declined" not in ALLOWED_TRANSITIONS.get(registry.status, set()):
+					# Paid/Declined/Expired are terminal locally (a Paid number keeps
+					# its money record) and a Reopened number cannot move to Declined:
+					# record the bank's answer instead of tripping the transition guard,
+					# which used to throw here and block a stop the bank had accepted.
 					registry.append_log(
 						log_name,
 						"Reference Decline",
 						"Success",
-						note=(
-							f"TCB accepted decline but registry is already "
-							f"{registry.status}; local status left unchanged. "
-							f"{tcb_message or ''}"
-						).strip(),
+						note=f"Registry left {registry.status}. {note}",
 					)
 				else:
-					registry.mark_declined(
-						log_name=log_name,
-						note=tcb_message or "Declined at TCB.",
-					)
+					registry.mark_declined(log_name=log_name, note=note)
 				# Durably record the successful bank decline NOW, so a later rollback
 				# (a throw in the forfeiture JE / credit note / cleanup steps that run
 				# after this) cannot erase it. Without this the registry reverts to
@@ -800,6 +819,17 @@ def decline_reference_for_sales_order(sales_order_name: str, control_number: str
 					note=f"HTTP {http_status} TCB {tcb_status}: {tcb_message}",
 				)
 
+		if released_before:
+			frappe.msgprint(
+				f"TCB reference <b>{control_number}</b> was already released at the bank.",
+				indicator="green",
+				alert=True,
+			)
+			return {
+				"ok": True,
+				"status": "Already Released",
+				"message": f"TCB holds nothing live under {control_number}; nothing to release.",
+			}
 		if ok:
 			frappe.msgprint(
 				f"TCB reference <b>{control_number}</b> declined successfully.",

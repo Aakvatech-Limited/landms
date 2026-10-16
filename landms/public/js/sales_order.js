@@ -2,6 +2,7 @@ frappe.ui.form.on("Sales Order", {
   refresh(frm) {
     _render_so_payment_countdown(frm);
     _render_so_close_button(frm);
+    _hide_erpnext_reopen(frm);
     _render_so_reopen_button(frm);
     _render_so_registration_banner(frm);
   },
@@ -66,6 +67,15 @@ frappe.ui.form.on("Sales Order", {
     });
   },
 });
+
+// ERPNext's Status > Re-open only flips the label of a closed plot order: the
+// plot, contract and payment number stay closed (SO-05026, Oct 2026). Plot
+// orders reopen through LandMS's own Reopen button only.
+function _hide_erpnext_reopen(frm) {
+  if (!frm.doc.plot || frm.doc.docstatus !== 1 || frm.doc.status !== "Closed")
+    return;
+  setTimeout(() => frm.remove_custom_button(__("Re-open"), __("Status")), 10);
+}
 
 function _render_so_close_button(frm) {
   if (frm.is_new()) return;

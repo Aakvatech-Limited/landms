@@ -1,16 +1,16 @@
-frappe.query_reports["LMS Revenue Recognition"] = {
+frappe.query_reports["LandMS Revenue Recognition"] = {
+  // No default dates: the report opens on all time, as management has always
+  // seen it (operator, 14 Oct 2026).
   filters: [
     {
       fieldname: "from_date",
       label: "From Date",
       fieldtype: "Date",
-      default: frappe.datetime.add_months(frappe.datetime.get_today(), -1),
     },
     {
       fieldname: "to_date",
       label: "To Date",
       fieldtype: "Date",
-      default: frappe.datetime.get_today(),
     },
     {
       fieldname: "customer",

@@ -15,6 +15,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cstr, flt, today
 
+from landms.elevation import become_administrator, restore_caller
 from landms.sales_order_hooks import ensure_plot_sales_invoice_for_sales_order
 
 
@@ -292,14 +293,13 @@ def create_payment_entry_for_sales_order(
 	pe.name = cstr(reference_no)
 	pe.flags.name_set = True
 
-	original_user = frappe.session.user
+	caller = become_administrator()
 	try:
-		frappe.set_user("Administrator")
 		pe.insert(ignore_permissions=True, set_name=cstr(reference_no))
 		if submit:
 			pe.submit()
 	finally:
-		frappe.set_user(original_user)
+		restore_caller(caller)
 	return pe.name
 
 

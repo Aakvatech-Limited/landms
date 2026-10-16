@@ -61,13 +61,18 @@ doc_events = {
 		"on_submit": "landms.sales_order_hooks.submit_sales_order",
 		"before_cancel": "landms.sales_order_hooks.before_cancel_sales_order",
 		"on_cancel": "landms.sales_order_hooks.cancel_sales_order",
+		# ERPNext's Status > Re-open: refused on a terminated plot order
+		"before_change": "landms.sales_order_hooks.before_change_sales_order",
 	},
 }
 
 scheduler_events = {
-	"daily": [
-		"landms.tasks.daily",
-	],
+	"cron": {
+		# the nightly expiry / overdue run at 01:00, after the TCB reconciliation;
+		# it runs in the long queue (25 min, not 5) and hands anything left to a
+		# follow-up job before it would be cut off
+		"0 1 * * *": ["landms.tasks.start_nightly_run"],
+	},
 	"daily_long": [
 		"landms.tasks.run_daily_tcb_reconciliation",
 	],
