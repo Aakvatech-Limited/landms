@@ -1136,22 +1136,109 @@ def _undo_this_payment():
 # ---------------------------------------------------------------------- #
 
 
+def _row_reference(row) -> str:
+	"""TCB sends the literal string 'None' when a credit carried no control number."""
+	reference = cstr(row.get("reference") or "").strip()
+	return "" if reference.lower() in ("", "none", "null") else reference
+
+
+def _pattern_regex(pattern: str):
+	"""'99910#GVA####' -> ^99910\\dGVA\\d{4}$ — '#' is one digit, everything else literal."""
+	return re.compile("^" + "".join(r"\d" if ch == "#" else re.escape(ch) for ch in cstr(pattern)) + "$")
+
+
+def _recon_projects(land_acquisition: str | None = None) -> list:
+	"""The projects a reconciliation run covers: each with the TCB account its
+	statement lives in and its numbering patterns (used for attribution)."""
+	filters: dict[str, Any] = {"docstatus": ["<", 2]}
+	if land_acquisition:
+		filters["name"] = land_acquisition
+	projects = []
+	for la in frappe.get_all(
+		"Land Acquisition",
+		filters=filters,
+		fields=[
+			"name",
+			"acquisition_name",
+			"reconciliation_id",
+			"partner_code",
+			"control_number_pattern",
+			"related_control_number_pattern",
+		],
+		order_by="name",
+	):
+		account = cstr(la.reconciliation_id or la.partner_code or "").strip()
+		if not account:
+			continue
+		projects.append(
+			frappe._dict(
+				name=la.name,
+				label=la.acquisition_name or la.name,
+				account=account,
+				patterns=[
+					_pattern_regex(p)
+					for p in (la.control_number_pattern, la.related_control_number_pattern)
+					if p
+				],
+			)
+		)
+	return projects
+
+
+def _attribute_recon_row(row, account: str, account_projects: list, projects: list) -> str | None:
+	"""Which project a statement row belongs to — decided on OUR side, never by
+	what TCB shares. Order carrying the number → registry → the single project
+	whose numbering pattern fits. A credit with no control number belongs to
+	the account's project only when that account is the project's alone."""
+	reference = _row_reference(row)
+	if reference:
+		la = frappe.db.get_value(
+			"Sales Order", {"control_number": reference, "docstatus": 1}, "land_acquisition"
+		)
+		if la:
+			return la
+		so_name = frappe.db.get_value("TCB Control Number", reference, "sales_order")
+		if so_name:
+			la = frappe.db.get_value("Sales Order", so_name, "land_acquisition")
+			if la:
+				return la
+		fits = [p.name for p in projects if any(rx.match(reference) for rx in p.patterns)]
+		return fits[0] if len(fits) == 1 else None
+	return account_projects[0] if len(account_projects) == 1 else None
+
+
 def run_tcb_reconciliation_job(
 	start_date: str | None = None,
 	end_date: str | None = None,
 	triggered_by: str = "Manual",
 	log_name: str | None = None,
+	land_acquisition: str | None = None,
 ) -> dict[str, Any]:
-	"""Pull reconciliation rows from TCB and optionally auto-apply missing payments.
+	"""Pull reconciliation rows from TCB, attribute every row to a PROJECT on our
+	side, and optionally auto-apply missing payments.
 
-	If `log_name` is given the existing TCB Reconciliation Log doc is updated
-	in-place (form button path). Otherwise a new log doc is created (scheduler
-	path). The dry path (auto_apply off) just logs.
+	Attribution never depends on what TCB shares between projects: a row
+	belongs to the project whose order (or registry entry) carries its control
+	number, else to the single project whose numbering pattern it fits. A credit
+	with no control number belongs to the account's project when that account
+	is the project's alone; otherwise it is 'Unmatched' — recorded with sender
+	and narration for matching by hand, never a bare failure.
+
+	Three ways to run:
+	  * a log naming a Land Acquisition (form button), or land_acquisition=
+	    → that project's reconciliation only: its account pulled, its rows applied;
+	  * a log with no project (manual "all projects")
+	    → one combined log, every row stamped with its project;
+	  * no log at all (the scheduler)
+	    → one log PER PROJECT, plus one log per shared account holding the
+	      credits that carry no control number.
+	Each distinct account is pulled once per run, however many projects share it.
 	"""
 	t_start = time.time()
 	settings = {}
 	start = ""
 	end = ""
+	created_logs: list[str] = []
 	try:
 		settings = _get_tcb_settings()
 		lookback_days = cint(settings.get("reconciliation_lookback_days") or 1)
@@ -1162,9 +1249,23 @@ def run_tcb_reconciliation_job(
 			else _normalize_date_string(add_days(end, -lookback_days))
 		)
 
-		# Create a new log doc if one was not supplied by the caller (scheduler path).
-		if not log_name:
-			log_name = _create_recon_log(triggered_by=triggered_by, start=start, end=end)
+		if log_name and not land_acquisition:
+			land_acquisition = (
+				frappe.db.get_value("TCB Reconciliation Log", log_name, "land_acquisition") or None
+			)
+
+		projects = _recon_projects(land_acquisition)
+		per_project = not log_name and not land_acquisition
+		if not per_project and not log_name:
+			log_name = _create_recon_log(
+				triggered_by=triggered_by,
+				start=start,
+				end=end,
+				land_acquisition=land_acquisition,
+				account=", ".join(sorted({p.account for p in projects})),
+			)
+			if log_name:
+				created_logs.append(log_name)
 
 		endpoint = _masked_reconciliation_endpoint(settings)
 		run_request = {
@@ -1172,6 +1273,7 @@ def run_tcb_reconciliation_job(
 			"triggered_by": triggered_by,
 			"start_date": start,
 			"end_date": end,
+			"land_acquisition": land_acquisition,
 		}
 		create_tcb_api_log(
 			direction="Outbound",
@@ -1184,8 +1286,7 @@ def run_tcb_reconciliation_job(
 			response_payload={"message": "Reconciliation run started."},
 		)
 
-		if not cint(settings.get("enabled")):
-			msg = "TCB integration disabled."
+		def _refuse(msg: str, *, ok: bool = True, status: str = "Ignored") -> dict[str, Any]:
 			create_tcb_api_log(
 				direction="Outbound",
 				event_type="Reconciliation",
@@ -1197,233 +1298,181 @@ def run_tcb_reconciliation_job(
 				response_payload={"message": msg},
 				error=msg,
 			)
-			_update_recon_log(log_name, status="Failed", message=msg, duration=time.time() - t_start)
-			return {"ok": True, "status": "Ignored", "message": msg}
-
-		if not cint(settings.get("reconciliation_enabled")):
-			msg = "TCB reconciliation is disabled in settings."
-			create_tcb_api_log(
-				direction="Outbound",
-				event_type="Reconciliation",
-				status="Failed",
-				processing_mode="Started",
-				endpoint=endpoint,
-				reconciliation_log=log_name,
-				request_payload=run_request,
-				response_payload={"message": msg},
-				error=msg,
-			)
-			_update_recon_log(log_name, status="Failed", message=msg, duration=time.time() - t_start)
-			return {"ok": True, "status": "Ignored", "message": msg}
-
-		land_acquisitions = frappe.get_all(
-			"Land Acquisition",
-			# filters={"status": ["in", ["Approved", "Subdivided"]]}, TODO: this filters need to be confirmed
-			fields=["name", "reconciliation_id", "partner_code"],
-		)
-		if not land_acquisitions:
-			err_msg = "No Approved or Subdivided Land Acquisitions found. Cannot run reconciliation."
 			_update_recon_log(
-				log_name, status="Failed", message=err_msg, error=err_msg, duration=time.time() - t_start
+				log_name,
+				status="Failed",
+				message=msg,
+				error=msg if not ok else "",
+				duration=time.time() - t_start,
 			)
-			return {"ok": False, "status": "Failed", "message": err_msg}
+			return {"ok": ok, "status": status, "message": msg}
 
-		rows = []
-		for la in land_acquisitions:
+		if not cint(settings.get("enabled")):
+			return _refuse("TCB integration disabled.")
+		if not cint(settings.get("reconciliation_enabled")):
+			return _refuse("TCB reconciliation is disabled in settings.")
+		if not projects:
+			return _refuse(
+				("Land Acquisition " + cstr(land_acquisition) + " has no TCB account to reconcile.")
+				if land_acquisition
+				else "No Land Acquisition with a TCB account found. Cannot run reconciliation.",
+				ok=False,
+				status="Failed",
+			)
+
+		# ---- pull each distinct account ONCE --------------------------------
+		accounts: dict[str, dict[str, Any]] = {}
+		for p in projects:
+			accounts.setdefault(p.account, {"rows": [], "projects": []})["projects"].append(p.name)
+		# An account TCB does not answer for is noted and the others go on: on
+		# 15 Oct 2026 one silent account stopped every project's reconciliation.
+		silent: dict[str, str] = {}
+		for account, info in accounts.items():
 			fetch_result = _fetch_reconciliation_rows(
 				settings=settings,
-				land_acquisition=la,
+				land_acquisition={"reconciliation_id": account, "partner_code": account},
 				start_date=start,
 				end_date=end,
 				reconciliation_log=log_name,
 			)
 			if not fetch_result.get("ok"):
-				err_msg = fetch_result.get("message") or "TCB reconciliation fetch failed."
-				_update_recon_log(
-					log_name, status="Failed", message=err_msg, error=err_msg, duration=time.time() - t_start
-				)
-				return {"ok": False, "status": "Failed", "message": err_msg}
-
-			rows.extend(fetch_result.get("rows") or [])
-
-		applied = 0
-		ignored = 0
-		failed = 0
-		processed = 0
-		stop_result = _stop_reconciliation_if_requested(
-			log_name=log_name,
-			settings=settings,
-			started_at=t_start,
-			total_rows=processed,
-			applied=applied,
-			ignored=ignored,
-			failed=failed,
-		)
-		if stop_result:
-			return stop_result
-
-		for row in rows:
-			stop_result = _stop_reconciliation_if_requested(
-				log_name=log_name,
-				settings=settings,
-				started_at=t_start,
-				total_rows=processed,
-				applied=applied,
-				ignored=ignored,
-				failed=failed,
-			)
-			if stop_result:
-				return stop_result
-
-			reference = cstr(row.get("reference") or "").strip()
-			amount = flt(row.get("amount"))
-			transaction_id = cstr(row.get("ptid") or "").strip()
-			receipt_no = cstr(row.get("receipt_no") or "").strip()
-			payment_ref = receipt_no or transaction_id or reference
-			payment_date = row.get("trans_date")
-
-			if not reference or amount <= 0:
-				msg = "Row skipped — TCB did not include a control number or the amount is zero."
-				create_tcb_api_log(
-					direction="Inbound",
-					event_type="Reconciliation",
-					status="Failed",
-					processing_mode="Log Only",
-					endpoint=endpoint,
-					reconciliation_log=log_name,
-					external_reference=reference,
-					transaction_id=transaction_id,
-					request_payload=row,
-					response_payload={"message": msg},
-				)
-				_append_recon_log_row(
-					log_name,
-					reference=reference,
-					amount=amount,
-					transaction_id=transaction_id,
-					row_status="Failed",
-					message=msg,
-				)
-				failed += 1
-				processed += 1
+				silent[account] = fetch_result.get("message") or "TCB reconciliation fetch failed."
 				continue
-
-			if not cint(settings.get("auto_apply_reconciliation_payments")):
-				msg = "Payment found on TCB but not posted — auto-apply is turned off. Review and post manually."
-				create_tcb_api_log(
-					direction="Inbound",
-					event_type="Reconciliation",
-					status="Ignored",
-					processing_mode="Log Only",
-					endpoint=endpoint,
-					reconciliation_log=log_name,
-					external_reference=reference,
-					transaction_id=transaction_id,
-					request_payload=row,
-					response_payload={"message": msg},
-				)
-				_append_recon_log_row(
-					log_name,
-					reference=reference,
-					amount=amount,
-					transaction_id=transaction_id,
-					row_status="Ignored",
-					message=msg,
-				)
-				ignored += 1
-				processed += 1
-				continue
-
-			result = apply_tcb_payment_to_sales_order(
-				control_number=reference,
-				amount=amount,
-				payment_date=payment_date,
-				payment_reference=payment_ref,
+			info["rows"] = fetch_result.get("rows") or []
+		if silent and len(silent) == len(accounts):
+			err_msg = "TCB did not answer: " + "; ".join(a + " — " + m for a, m in silent.items())
+			_update_recon_log(
+				log_name, status="Failed", message=err_msg, error=err_msg, duration=time.time() - t_start
 			)
-			create_tcb_api_log(
-				direction="Inbound",
-				event_type="Reconciliation",
-				status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
-				processing_mode="Apply Payment",
-				endpoint=endpoint,
-				reconciliation_log=log_name,
-				external_reference=reference,
-				transaction_id=transaction_id,
-				sales_order=result.get("sales_order"),
-				payment_entry=result.get("payment_entry"),
-				request_payload=row,
-				response_payload={"message": result.get("message")},
-				error=result.get("error"),
+			return {"ok": False, "status": "Failed", "message": err_msg}
+		silent_note = (
+			(
+				" TCB did not answer for account "
+				+ ", ".join(sorted(silent))
+				+ ": its payments were not checked. Run it again."
 			)
-
-			row_status = result.get("status")
-			if row_status == "Success":
-				applied += 1
-				_append_recon_log_row(
-					log_name,
-					reference=reference,
-					amount=amount,
-					transaction_id=transaction_id,
-					row_status="Applied",
-					sales_order=result.get("sales_order") or "",
-					payment_entry=result.get("payment_entry") or "",
-					message=result.get("message") or "",
-				)
-			elif row_status == "Ignored":
-				ignored += 1
-				_append_recon_log_row(
-					log_name,
-					reference=reference,
-					amount=amount,
-					transaction_id=transaction_id,
-					row_status="Ignored",
-					sales_order=result.get("sales_order") or "",
-					message=result.get("message") or "",
-				)
-			else:
-				failed += 1
-				_append_recon_log_row(
-					log_name,
-					reference=reference,
-					amount=amount,
-					transaction_id=transaction_id,
-					row_status="Failed",
-					message=result.get("message") or result.get("error") or "",
-				)
-			processed += 1
-
-		stop_result = _stop_reconciliation_if_requested(
-			log_name=log_name,
-			settings=settings,
-			started_at=t_start,
-			total_rows=processed,
-			applied=applied,
-			ignored=ignored,
-			failed=failed,
+			if silent
+			else ""
 		)
-		if stop_result:
-			return stop_result
 
-		total = len(rows)
-		if total == 0 or failed == 0:
-			final_status = "Success"
-		elif applied > 0 or ignored > 0:
-			final_status = "Partial"
+		# ---- attribute every row to a project (ours to decide) --------------
+		attributed: list[tuple] = []  # (row, land_acquisition or None, account)
+		for account, info in accounts.items():
+			for row in info["rows"]:
+				attributed.append(
+					(row, _attribute_recon_row(row, account, info["projects"], projects), account)
+				)
+
+		# ---- decide the scopes: (log_name or None, project or None, account label, rows)
+		scopes: list[tuple] = []
+		if per_project:
+			for p in projects:
+				scopes.append((None, p, p.account, [t for t in attributed if t[1] == p.name]))
+			for account, info in accounts.items():
+				if len(info["projects"]) > 1:
+					loose = [t for t in attributed if t[2] == account and t[1] is None]
+					if loose:
+						scopes.append((None, None, account, loose))
+		elif land_acquisition:
+			p = projects[0]
+			scopes.append(
+				(
+					log_name,
+					p,
+					p.account,
+					[t for t in attributed if t[1] == p.name or (t[1] is None and t[2] == p.account)],
+				)
+			)
 		else:
+			scopes.append((log_name, None, ", ".join(sorted(accounts)), attributed))
+
+		# ---- process each scope into its own log ----------------------------
+		grand = {"rows": 0, "applied": 0, "ignored": 0, "failed": 0, "unmatched": 0}
+		statuses: list[str] = []
+		for scope_log, project, account_label, scoped in scopes:
+			if not scope_log:
+				scope_log = _create_recon_log(
+					triggered_by=triggered_by,
+					start=start,
+					end=end,
+					land_acquisition=project.name if project else None,
+					account=account_label,
+				)
+				if scope_log:
+					created_logs.append(scope_log)
+			if project and project.account in silent:
+				# never report "0 rows, Success" for a project TCB did not answer for
+				msg = (
+					str(project.label)
+					+ ": not reconciled — TCB did not answer for account "
+					+ project.account
+					+ " ("
+					+ silent[project.account]
+					+ "). Run it again."
+				)
+				_update_recon_log(
+					scope_log, status="Failed", message=msg, error=msg, duration=time.time() - t_start
+				)
+				statuses.append("Failed")
+				continue
+			result = _process_recon_scope(
+				log_name=scope_log,
+				project=project,
+				label=(
+					project.label
+					if project
+					else ("payments not matched to a project" if per_project else "all projects")
+				),
+				scoped=scoped,
+				settings=settings,
+				endpoint=endpoint,
+				run_request=run_request,
+				t_start=t_start,
+			)
+			if result.get("stopped"):
+				return result
+			if silent and not project:
+				# a combined log: say which account was not checked
+				status = "Partial" if result.get("status") == "Success" else result.get("status")
+				_update_recon_log(
+					scope_log,
+					status=status,
+					message=cstr(result.get("message")) + silent_note,
+					total_rows=cint(result.get("rows")),
+					applied=cint(result.get("applied")),
+					ignored=cint(result.get("ignored")),
+					failed=cint(result.get("failed")),
+					unmatched=cint(result.get("unmatched")),
+					duration=time.time() - t_start,
+				)
+				result["status"] = status
+			statuses.append(result.get("status") or "Failed")
+			for key in grand:
+				grand[key] += cint(result.get(key))
+
+		if not scopes:
+			final_status = "Success"
+		elif all(s == "Success" for s in statuses):
+			final_status = "Success"
+		elif all(s == "Failed" for s in statuses):
 			final_status = "Failed"
-
-		summary = f"Processed {total} rows: applied={applied}, ignored={ignored}, failed={failed}."
-		_update_recon_log(
-			log_name,
-			status=final_status,
-			message=summary,
-			total_rows=total,
-			applied=applied,
-			ignored=ignored,
-			failed=failed,
-			duration=time.time() - t_start,
+		else:
+			final_status = "Partial"
+		if silent and final_status == "Success":
+			final_status = "Partial"
+		summary = (
+			"Processed " + str(grand["rows"]) + " rows across " + str(len(scopes)) + " log(s): "
+			"applied="
+			+ str(grand["applied"])
+			+ ", ignored="
+			+ str(grand["ignored"])
+			+ ", failed="
+			+ str(grand["failed"])
+			+ ", unmatched="
+			+ str(grand["unmatched"])
+			+ "."
+			+ silent_note
 		)
-
 		create_tcb_api_log(
 			direction="Outbound",
 			event_type="Reconciliation",
@@ -1434,35 +1483,31 @@ def run_tcb_reconciliation_job(
 			request_payload=run_request,
 			response_payload={
 				"message": summary,
-				"rows": total,
-				"applied": applied,
-				"ignored": ignored,
-				"failed": failed,
 				"final_status": final_status,
+				"logs": created_logs or [log_name],
+				**grand,
 			},
 		)
-
 		return {
 			"ok": True,
 			"status": final_status,
 			"message": summary,
-			"rows": total,
-			"applied": applied,
-			"ignored": ignored,
-			"failed": failed,
+			"rows": grand["rows"],
+			"applied": grand["applied"],
+			"ignored": grand["ignored"],
+			"failed": grand["failed"],
+			"unmatched": grand["unmatched"],
+			"logs": created_logs or ([log_name] if log_name else []),
 			"start_date": start,
 			"end_date": end,
 		}
 	except Exception:
 		err = frappe.get_traceback()
 		err_msg = "Unhandled reconciliation exception."
-		_update_recon_log(
-			log_name,
-			status="Failed",
-			message=err_msg,
-			error=err,
-			duration=time.time() - t_start,
-		)
+		for name in created_logs or [log_name]:
+			_update_recon_log(
+				name, status="Failed", message=err_msg, error=err, duration=time.time() - t_start
+			)
 		create_tcb_api_log(
 			direction="Outbound",
 			event_type="Reconciliation",
@@ -1475,6 +1520,7 @@ def run_tcb_reconciliation_job(
 				"triggered_by": triggered_by,
 				"start_date": start_date,
 				"end_date": end_date,
+				"land_acquisition": land_acquisition,
 			},
 			response_payload={"message": err_msg},
 			error=err,
@@ -1482,8 +1528,234 @@ def run_tcb_reconciliation_job(
 		return {"ok": False, "status": "Failed", "message": err_msg}
 
 
-def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
-	"""Insert a new TCB Reconciliation Log doc in Running state. Best-effort."""
+def _process_recon_scope(
+	*,
+	log_name: str | None,
+	project,
+	label: str = "",
+	scoped: list,
+	settings: dict[str, Any],
+	endpoint: str,
+	run_request: dict[str, Any],
+	t_start: float,
+) -> dict[str, Any]:
+	"""Apply (or just record) one log's worth of attributed rows. Returns the
+	per-log counters and final status; 'stopped' when the operator asked."""
+	applied = ignored = failed = unmatched = processed = 0
+
+	def _stop_check():
+		return _stop_reconciliation_if_requested(
+			log_name=log_name,
+			settings=settings,
+			started_at=t_start,
+			total_rows=processed,
+			applied=applied,
+			ignored=ignored,
+			failed=failed,
+		)
+
+	stop_result = _stop_check()
+	if stop_result:
+		stop_result["stopped"] = True
+		return stop_result
+
+	for row, row_la, account in scoped:
+		stop_result = _stop_check()
+		if stop_result:
+			stop_result["stopped"] = True
+			return stop_result
+
+		reference = _row_reference(row)
+		amount = flt(row.get("amount"))
+		transaction_id = cstr(row.get("ptid") or "").strip()
+		receipt_no = cstr(row.get("receipt_no") or "").strip()
+		payment_ref = receipt_no or transaction_id or reference
+		payment_date = row.get("trans_date")
+		sender = cstr(row.get("sender_name") or "").strip()
+		narration = cstr(row.get("details") or "").strip()
+		stamp = {"land_acquisition": row_la or "", "sender": sender}
+
+		if not reference or amount <= 0:
+			msg = (
+				("No control number on this credit" if not reference else "Zero amount")
+				+ " — account "
+				+ cstr(account)
+				+ (", sender " + sender if sender else "")
+				+ (". Narration: " + narration if narration else "")
+				+ ". Match by hand."
+			)
+			create_tcb_api_log(
+				direction="Inbound",
+				event_type="Reconciliation",
+				status="Ignored",
+				processing_mode="Log Only",
+				endpoint=endpoint,
+				reconciliation_log=log_name,
+				external_reference=reference,
+				transaction_id=transaction_id,
+				request_payload=row,
+				response_payload={"message": msg},
+			)
+			_append_recon_log_row(
+				log_name,
+				reference=reference,
+				amount=amount,
+				transaction_id=transaction_id,
+				row_status="Unmatched",
+				message=msg,
+				**stamp,
+			)
+			unmatched += 1
+			processed += 1
+			continue
+
+		if not cint(settings.get("auto_apply_reconciliation_payments")):
+			msg = "Payment found on TCB but not posted — auto-apply is turned off. Review and post manually."
+			create_tcb_api_log(
+				direction="Inbound",
+				event_type="Reconciliation",
+				status="Ignored",
+				processing_mode="Log Only",
+				endpoint=endpoint,
+				reconciliation_log=log_name,
+				external_reference=reference,
+				transaction_id=transaction_id,
+				request_payload=row,
+				response_payload={"message": msg},
+			)
+			_append_recon_log_row(
+				log_name,
+				reference=reference,
+				amount=amount,
+				transaction_id=transaction_id,
+				row_status="Ignored",
+				message=msg,
+				**stamp,
+			)
+			ignored += 1
+			processed += 1
+			continue
+
+		result = apply_tcb_payment_to_sales_order(
+			control_number=reference,
+			amount=amount,
+			payment_date=payment_date,
+			payment_reference=payment_ref,
+		)
+		create_tcb_api_log(
+			direction="Inbound",
+			event_type="Reconciliation",
+			status=result.get("status") or ("Success" if result.get("ok") else "Failed"),
+			processing_mode="Apply Payment",
+			endpoint=endpoint,
+			reconciliation_log=log_name,
+			external_reference=reference,
+			transaction_id=transaction_id,
+			sales_order=result.get("sales_order"),
+			payment_entry=result.get("payment_entry"),
+			request_payload=row,
+			response_payload={"message": result.get("message")},
+			error=result.get("error"),
+		)
+		row_status = result.get("status")
+		if row_status == "Success":
+			applied += 1
+			_append_recon_log_row(
+				log_name,
+				reference=reference,
+				amount=amount,
+				transaction_id=transaction_id,
+				row_status="Applied",
+				sales_order=result.get("sales_order") or "",
+				payment_entry=result.get("payment_entry") or "",
+				message=result.get("message") or "",
+				**stamp,
+			)
+		elif row_status == "Ignored":
+			ignored += 1
+			_append_recon_log_row(
+				log_name,
+				reference=reference,
+				amount=amount,
+				transaction_id=transaction_id,
+				row_status="Ignored",
+				sales_order=result.get("sales_order") or "",
+				message=result.get("message") or "",
+				**stamp,
+			)
+		else:
+			failed += 1
+			_append_recon_log_row(
+				log_name,
+				reference=reference,
+				amount=amount,
+				transaction_id=transaction_id,
+				row_status="Failed",
+				message=result.get("message") or result.get("error") or "",
+				**stamp,
+			)
+		processed += 1
+
+	stop_result = _stop_check()
+	if stop_result:
+		stop_result["stopped"] = True
+		return stop_result
+
+	total = len(scoped)
+	if failed == 0:
+		final_status = "Success"
+	elif applied > 0 or ignored > 0 or unmatched > 0:
+		final_status = "Partial"
+	else:
+		final_status = "Failed"
+	label = label or (project.label if project else "payments not matched to a project")
+	summary = (
+		str(label)
+		+ ": processed "
+		+ str(total)
+		+ " rows: applied="
+		+ str(applied)
+		+ ", ignored="
+		+ str(ignored)
+		+ ", failed="
+		+ str(failed)
+		+ ", unmatched="
+		+ str(unmatched)
+		+ "."
+	)
+	_update_recon_log(
+		log_name,
+		status=final_status,
+		message=summary,
+		total_rows=total,
+		applied=applied,
+		ignored=ignored,
+		failed=failed,
+		unmatched=unmatched,
+		duration=time.time() - t_start,
+	)
+	return {
+		"status": final_status,
+		"message": summary,
+		"rows": total,
+		"applied": applied,
+		"ignored": ignored,
+		"failed": failed,
+		"unmatched": unmatched,
+		"log": log_name,
+	}
+
+
+def _create_recon_log(
+	triggered_by: str,
+	start: str,
+	end: str,
+	*,
+	land_acquisition: str | None = None,
+	account: str | None = None,
+) -> str | None:
+	"""Insert a new TCB Reconciliation Log doc in Running state, stamped with the
+	project it reconciles (empty = combined) and the account(s) pulled. Best-effort."""
 	try:
 		doc = frappe.get_doc(
 			{
@@ -1491,6 +1763,9 @@ def _create_recon_log(triggered_by: str, start: str, end: str) -> str | None:
 				"naming_series": "TCB-RECON-.YYYY.-.######",
 				"status": "Running",
 				"triggered_by": triggered_by,
+				"land_acquisition": land_acquisition or None,
+				"account": (account or "")[:140],
+				"unmatched": 0,
 				"started_at": now(),
 				"completed_at": None,
 				"duration_seconds": 0,
@@ -1520,6 +1795,7 @@ def _update_recon_log(
 	applied: int = 0,
 	ignored: int = 0,
 	failed: int = 0,
+	unmatched: int = 0,
 	duration: float = 0.0,
 ) -> None:
 	"""Update an existing TCB Reconciliation Log after a run. Best-effort."""
@@ -1537,6 +1813,7 @@ def _update_recon_log(
 				"applied": applied,
 				"ignored": ignored,
 				"failed": failed,
+				"unmatched": unmatched,
 				"message": (message or "")[:500],
 				"error": error or "",
 			},
@@ -1557,6 +1834,8 @@ def _append_recon_log_row(
 	sales_order: str = "",
 	payment_entry: str = "",
 	message: str = "",
+	land_acquisition: str = "",
+	sender: str = "",
 ) -> None:
 	"""Append one detail row to the TCB Reconciliation Log child table. Best-effort."""
 	if not log_name:
@@ -1567,6 +1846,8 @@ def _append_recon_log_row(
 			"rows",
 			{
 				"reference": reference,
+				"land_acquisition": land_acquisition or None,
+				"sender": (sender or "")[:140],
 				"amount": flt(amount),
 				"transaction_id": transaction_id,
 				"row_status": row_status,
