@@ -1,0 +1,181 @@
+{
+ "doctype": "DocType",
+ "name": "Malipopay Sweep Log",
+ "module": "LandMS",
+ "issingle": 0,
+ "is_submittable": 0,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "MPSWP-.YYYY.-.#####",
+   "default": "MPSWP-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Queued\nRunning\nCompleted\nFailed\nStopped",
+   "default": "Queued",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Select",
+   "label": "Triggered By",
+   "options": "Scheduled\nManual",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "stop_requested",
+   "fieldtype": "Check",
+   "label": "Stop Requested",
+   "default": "0",
+   "read_only": 1,
+   "description": "Cooperative stop: the running sweep checks this between collections and exits cleanly as 'Stopped'. Set via the form's Request Stop button (arrives with the sweep module)."
+  },
+  {
+   "fieldname": "col_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "window_from",
+   "fieldtype": "Datetime",
+   "label": "Window From",
+   "read_only": 1,
+   "description": "Start of the swept window — the persisted watermark minus overlap, never a blind fixed 48h."
+  },
+  {
+   "fieldname": "window_to",
+   "fieldtype": "Datetime",
+   "label": "Window To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ended_at",
+   "fieldtype": "Datetime",
+   "label": "Ended At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counts_section",
+   "fieldtype": "Section Break",
+   "label": "Run Result"
+  },
+  {
+   "fieldname": "collections_seen",
+   "fieldtype": "Int",
+   "label": "Collections Seen",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transactions_booked",
+   "fieldtype": "Int",
+   "label": "Transactions Booked",
+   "default": "0",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "amount_booked",
+   "fieldtype": "Currency",
+   "label": "Amount Booked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_counts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "orphans_adopted",
+   "fieldtype": "Int",
+   "label": "Orphans Adopted",
+   "default": "0",
+   "read_only": 1,
+   "description": "Collections found at Malipopay with no local mirror (e.g. a create that timed out after succeeding) — adopted and flagged."
+  },
+  {
+   "fieldname": "divergences_flagged",
+   "fieldtype": "Int",
+   "label": "Divergences Flagged",
+   "default": "0",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Nonzero = the three books (their ledger / our Receipt Ledger / our GL) disagreed somewhere — the rows below say where, and the operator is alerted, not just logged."
+  },
+  {
+   "fieldname": "rows_section",
+   "fieldtype": "Section Break",
+   "label": "Collections Touched (the daily three-way divergence report)"
+  },
+  {
+   "fieldname": "rows",
+   "fieldtype": "Table",
+   "label": "Rows",
+   "options": "Malipopay Sweep Log Row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_section",
+   "fieldtype": "Section Break",
+   "label": "Errors",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Long Text",
+   "label": "Error / Traceback",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

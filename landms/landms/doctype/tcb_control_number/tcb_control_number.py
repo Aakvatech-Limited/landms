@@ -14,7 +14,9 @@ DECLINE_CONTROL_NUMBER_ENDPOINT = (
 # Generated → Registered → Paid is the happy path. Any state can move to
 # Failed (defensive), and Generated/Registered can be Declined or Expired.
 ALLOWED_TRANSITIONS = {
-	"Generated": {"Registered", "Declined", "Expired", "Failed"},
+	# "Paid" from Generated/Failed: TCB took a payment, so it did hold the number
+	# (a registration that timed out but went through)
+	"Generated": {"Registered", "Paid", "Declined", "Expired", "Failed"},
 	"Registered": {"Paid", "Declined", "Expired", "Failed"},
 	# Paid / Declined / Expired are terminal for the normal lifecycle, but a forfeited
 	# order can be REOPENED — the only allowed way out of them is to "Reopened".
@@ -23,7 +25,7 @@ ALLOWED_TRANSITIONS = {
 	"Expired": {"Reopened"},
 	# recovery on retry / restore after a failed reopen re-register; Declined once
 	# TCB confirms it holds nothing live under a number it never registered
-	"Failed": {"Generated", "Registered", "Reopened", "Declined"},
+	"Failed": {"Generated", "Registered", "Paid", "Reopened", "Declined"},
 	# A reopened number is being re-registered: -> Registered on success, -> Failed on a
 	# bank error. "Paid" is also allowed so a payment that lands while it is still Reopened
 	# (a race / reconciliation / manual entry) can never get stuck on an illegal transition.
@@ -176,7 +178,7 @@ class TCBControlNumber(Document):
 			)
 			frappe.throw(message)
 
-		from landms.tcb import decline_reference_for_sales_order
+		from landms.payments.router import decline_reference_for_sales_order
 
 		try:
 			result = decline_reference_for_sales_order(
@@ -250,6 +252,26 @@ class TCBControlNumber(Document):
 			)
 			frappe.throw(message)
 
+		# Never make a number live at TCB for an order that has been stopped: a
+		# customer could pay on it and the payment would find no open order.
+		# (a Draft order is the normal case: its submit failed because TCB could
+		# not register the number, and this retry is how it gets one)
+		order_state = frappe.db.get_value("Sales Order", self.sales_order, ["docstatus", "status"]) or (2, "")
+		if cint(order_state[0]) == 2 or order_state[1] == "Closed":
+			message = (
+				f"Sales Order {self.sales_order} is {'Closed' if order_state[1] == 'Closed' else 'cancelled'}, "
+				f"so control number {self.name} is not registered at TCB."
+			)
+			_log_manual_action(
+				event_type="Reference Create",
+				endpoint=RETRY_REGISTRATION_ENDPOINT,
+				control_number=self.name,
+				sales_order=self.sales_order,
+				request_payload=request_payload,
+				error=message,
+			)
+			frappe.throw(message)
+
 		# Never register a number the order no longer carries: the customer could
 		# pay on it and the payment would find no order (SO-05458, Oct 2026).
 		# When a Save has blanked the order's number, its newest number is still
@@ -280,7 +302,7 @@ class TCBControlNumber(Document):
 			)
 			frappe.throw(message)
 
-		from landms.tcb import register_reference_for_sales_order
+		from landms.payments.router import register_reference_for_sales_order
 
 		try:
 			result = register_reference_for_sales_order(

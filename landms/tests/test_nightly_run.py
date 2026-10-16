@@ -271,3 +271,115 @@ class TestNightlyRun(FrappeTestCase):
 		self.assertEqual(enqueue.call_args.args[0], "landms.tasks.daily")
 		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
 		self.assertTrue(enqueue.call_args.kwargs["deduplicate"])
+
+
+class TestNightlyRunChecksMalipopayFirst(FrappeTestCase):
+	"""A customer who paid through Malipopay is never stopped by the 01:00 run
+	because the payment notice was lost (Malipopay does not resend; the 04:40
+	sweep comes after the run). Every write is rolled back."""
+
+	def setUp(self):
+		for target in ("frappe.db.commit", "frappe.db.rollback"):
+			p = patch(target)
+			p.start()
+			self.addCleanup(p.stop)
+		p = patch("frappe.log_error")
+		self.logged = p.start()
+		self.addCleanup(p.stop)
+
+	def _check(self, *, on_malipopay=True, mode="Apply Payment", enabled=1, bills=("MPC-1",), result=None):
+		booked = result or frappe._dict(ok=True, booked=[], suspense=0, failed=0)
+		with (
+			patch("landms.malipopay.collects_via_malipopay", return_value=on_malipopay),
+			patch(
+				"landms.malipopay.get_malipopay_settings",
+				return_value=frappe._dict(enabled=enabled, inbound_mode=mode),
+			),
+			patch("landms.tasks._live_malipopay_bills", return_value=list(bills)),
+			patch("landms.malipopay.book_receipts_for_collection", return_value=booked) as book,
+		):
+			return tasks._malipopay_money_waiting("SO-TEST"), book
+
+	def test_an_order_on_a_tcb_only_project_is_not_held(self):
+		waiting, book = self._check(on_malipopay=False)
+		self.assertFalse(waiting)
+		book.assert_not_called()
+
+	def test_an_order_without_a_live_malipopay_bill_goes_ahead(self):
+		# deploy day: Malipopay not set up, no bills anywhere
+		waiting, book = self._check(bills=(), mode="Off", enabled=0)
+		self.assertFalse(waiting)
+		book.assert_not_called()
+		self.logged.assert_not_called()
+
+	def test_a_live_bill_that_cannot_be_checked_holds_the_order_and_tells_a_person(self):
+		for mode, enabled in (("Log Only", 1), ("Off", 1), ("Apply Payment", 0)):
+			self.logged.reset_mock()
+			waiting, book = self._check(mode=mode, enabled=enabled)
+			self.assertTrue(waiting)
+			book.assert_not_called()
+			self.logged.assert_called_once()
+			self.assertIn("needs a look", self.logged.call_args.args[1])
+
+	def test_nothing_waiting_at_malipopay_lets_the_run_go_ahead(self):
+		waiting, book = self._check()
+		self.assertFalse(waiting)
+		book.assert_called_once_with("MPC-1")
+
+	def test_money_found_holds_the_order_for_another_night(self):
+		waiting, _book = self._check(result=frappe._dict(ok=True, booked=["PE-1"], suspense=0, failed=0))
+		self.assertTrue(waiting)
+		self.logged.assert_not_called()  # booked money is the good case: nothing to look at
+
+	def test_money_that_could_not_be_booked_also_holds_the_order(self):
+		for result in (
+			frappe._dict(ok=True, booked=[], suspense=1, failed=0),
+			frappe._dict(ok=True, booked=[], suspense=0, failed=1),
+		):
+			self.logged.reset_mock()
+			waiting, _book = self._check(result=result)
+			self.assertTrue(waiting)
+			self.logged.assert_called_once()
+
+	def test_malipopay_unreachable_holds_the_order_and_tells_a_person(self):
+		waiting, _book = self._check(result=frappe._dict(ok=False, booked=[], suspense=0, failed=0))
+		self.assertTrue(waiting)
+		self.logged.assert_called_once()
+
+	def test_an_error_while_checking_holds_the_order_and_is_logged(self):
+		with patch("landms.malipopay.collects_via_malipopay", side_effect=RuntimeError("boom")):
+			self.assertTrue(tasks._malipopay_money_waiting("SO-TEST"))
+		self.logged.assert_called_once()
+
+	def test_the_expiry_skips_an_order_with_malipopay_money(self):
+		rows = [frappe._dict(name="PA-PAID", plot="P1", sales_order="SO-TEST", expiry_date="2026-09-01")]
+		with (
+			patch(
+				"landms.tasks.frappe.get_single", return_value=frappe._dict(application_fee_validity_days=7)
+			),
+			patch("landms.tasks._paid_applications_past_deadline", return_value=rows),
+			patch("landms.tasks._active_contract", return_value=None),
+			patch("landms.tasks._malipopay_money_waiting", return_value=True),
+			patch("landms.tasks._process_one") as process,
+		):
+			tasks.auto_expire_paid_applications_past_deadline(attempted=set(), started=None)
+		process.assert_not_called()
+
+	def test_a_contract_with_malipopay_money_is_not_terminated(self):
+		row = frappe._dict(
+			name="CTR-TEST",
+			sales_order="SO-TEST",
+			plot="P1",
+			customer="C1",
+			contract_status="Overdue",
+			apply_auto_cancellation=1,
+			payment_deadline="2026-09-01",
+		)
+		contract = MagicMock()
+		with (
+			patch("landms.tasks.frappe.db.exists", return_value=False),
+			patch("landms.tasks._malipopay_money_waiting", return_value=True),
+			patch("landms.tasks.frappe.get_doc", return_value=contract),
+		):
+			tasks._process_overdue_contract(row)
+		contract.terminate_contract.assert_not_called()
