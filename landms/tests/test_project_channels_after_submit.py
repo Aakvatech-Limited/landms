@@ -3,9 +3,13 @@
 Operator, 14 Oct 2026: the live project is submitted, so "Collect via Malipopay"
 could not be ticked at go-live. The two channel boxes are now allowed after
 submit; the issuer stays locked and must stay ticked; the cost figures and the
-period summary the form rebuilds on opening do not block the save. Every write
-is rolled back.
+period summary the form rebuilds on opening do not block the save. Operator,
+16 Oct 2026: only a System Manager may change the Malipopay box, and it cannot
+be unticked while the project has a Malipopay bill that is not ended. Every
+write is rolled back.
 """
+
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -76,6 +80,66 @@ class TestProjectChannelsAfterSubmit(FrappeTestCase):
 		doc.total_area_sqm = flt(doc.total_area_sqm) + 5
 		with self.assertRaises(frappe.UpdateAfterSubmitError):
 			doc.save()
+
+	def _malipopay_ticked(self):
+		doc = self._as_the_form_sends()
+		if not doc.collect_via_malipopay:
+			doc.collect_via_malipopay = 1
+			doc.save()
+		return self._as_the_form_sends()
+
+	def _bill(self, state):
+		order = frappe.db.get_value("Sales Order", {"land_acquisition": self.name, "docstatus": 1}, "name")
+		if not order:
+			self.skipTest("this project has no submitted sales order to hang a test bill on")
+		return frappe.get_doc(
+			{
+				"doctype": "Malipopay Collection",
+				"control_number": "GUARDTEST" + frappe.generate_hash(length=8),
+				"state": state,
+				"sales_order": order,
+				"land_acquisition": self.name,
+			}
+		).insert(ignore_permissions=True)
+
+	def test_malipopay_cannot_be_unticked_while_a_bill_is_open(self):
+		doc = self._malipopay_ticked()
+		self._bill("Active")
+		doc.collect_via_malipopay = 0
+		with self.assertRaisesRegex(frappe.ValidationError, "cannot be switched off"):
+			doc.save()
+		self.assertEqual(self._stored("collect_via_malipopay").collect_via_malipopay, 1)
+
+	def test_malipopay_can_be_unticked_when_no_bill_is_open(self):
+		doc = self._malipopay_ticked()
+		doc.collect_via_malipopay = 0
+		with patch.object(type(doc), "_open_malipopay_bills", return_value=0):
+			doc.save()
+		self.assertEqual(self._stored("collect_via_malipopay").collect_via_malipopay, 0)
+
+	def test_ended_bills_are_not_counted_as_open(self):
+		doc = frappe.get_doc("Land Acquisition", self.name)
+		start = doc._open_malipopay_bills()
+		self._bill("Dead")
+		self.assertEqual(doc._open_malipopay_bills(), start)
+		self._bill("Suspended")
+		self.assertEqual(doc._open_malipopay_bills(), start + 1)
+
+	def test_only_a_system_manager_can_change_the_malipopay_box(self):
+		doc = self._as_the_form_sends()
+		doc.collect_via_malipopay = 0 if doc.collect_via_malipopay else 1
+		doc.flags.ignore_permissions = True  # so only the guard can refuse
+		self.addCleanup(frappe.set_user, frappe.session.user)
+		frappe.set_user("Guest")
+		with self.assertRaisesRegex(frappe.PermissionError, "Only a System Manager"):
+			doc.save()
+
+	def test_other_changes_by_anyone_are_not_blocked_by_the_guard(self):
+		doc = self._as_the_form_sends()
+		doc.flags.ignore_permissions = True
+		self.addCleanup(frappe.set_user, frappe.session.user)
+		frappe.set_user("Guest")
+		doc.save()  # the box is unchanged, so the guard does not apply
 
 	def test_the_boxes_are_allowed_after_submit_in_the_doctype(self):
 		import json
