@@ -75,10 +75,18 @@ doc_events = {
 	# is on, both return at once for anything that is not a Payment Entry
 	# allocated to a plot invoice/order, and neither can raise into the posting.
 	"Payment Ledger Entry": {
-		"on_submit": "landms.malipopay_external.on_payment_ledger_entry_submit",
+		"on_submit": [
+			"landms.malipopay_external.on_payment_ledger_entry_submit",
+			# a payment moved onto a plot order by Payment Reconciliation: refresh
+			# order, invoice lines and contract after commit (no PE event fires)
+			"landms.reallocation_sync.on_payment_ledger_entry_submit",
+		],
 	},
 	"Unreconcile Payment": {
-		"on_submit": "landms.malipopay_external.on_unreconcile_payment_submit",
+		"on_submit": [
+			"landms.malipopay_external.on_unreconcile_payment_submit",
+			"landms.reallocation_sync.on_unreconcile_payment_submit",
+		],
 	},
 	"Sales Invoice": {
 		"before_validate": "landms.cost_center.apply_landms_cost_center",
