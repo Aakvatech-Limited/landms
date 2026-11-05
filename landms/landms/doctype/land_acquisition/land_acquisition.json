@@ -12,6 +12,7 @@
   "status",
   "col_break_header",
   "company",
+  "erpnext_project",
   "approved_by",
   "approval_date",
   "location_section",
@@ -134,6 +135,15 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.erpnext_project",
+   "fieldname": "erpnext_project",
+   "fieldtype": "Link",
+   "label": "ERPNext Project",
+   "no_copy": 1,
+   "options": "Project",
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.approved_by",
