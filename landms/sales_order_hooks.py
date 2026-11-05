@@ -24,6 +24,7 @@ from frappe.utils import add_days, cint, cstr, flt, getdate, today
 
 from landms.elevation import become_administrator, restore_caller
 from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
+from landms.landms.doctype.plot_master.plot_status import link, set_plot_status
 
 # Register/decline route through the payment-channel router, which resolves the
 # channel from the order's Land Acquisition ("Control Numbers Issued By"). For a
@@ -589,8 +590,13 @@ def reopen_sales_order(sales_order_name: str):
 	frappe.db.set_value(
 		"Plot Application", PA, {"docstatus": 1, "status": "Paid", "sales_order": SO}, update_modified=False
 	)
-	if frappe.db.get_value("Plot Master", PLOT, "status") == "Available":
-		frappe.db.set_value("Plot Master", PLOT, "status", "Pending Advance", update_modified=False)
+	set_plot_status(
+		PLOT,
+		"Pending Advance",
+		f"sales order {link('Sales Order', SO)} was reopened",
+		only_from=("Available",),
+		update_modified=False,
+	)
 
 	# fresh 7-day advance window (payment_date back-set so expiry lands exactly 7 days out).
 	# VALID must mirror the expiry task's window for THIS plot: a no_advance_deadline
@@ -1354,9 +1360,12 @@ def _clear_application_sales_order_link(doc):
 def _mark_plot_pending_advance(doc):
 	if not doc.plot:
 		return
-	current = frappe.db.get_value("Plot Master", doc.plot, "status")
-	if current == "Available":
-		frappe.db.set_value("Plot Master", doc.plot, "status", "Pending Advance")
+	set_plot_status(
+		doc.plot,
+		"Pending Advance",
+		f"sales order {link('Sales Order', doc.name)} was submitted",
+		only_from=("Available",),
+	)
 
 
 def _validate_customer_mobile_for_tcb(doc):
@@ -1687,6 +1696,10 @@ def _release_plot_if_no_active_application(doc):
 	if active_application:
 		return
 
-	plot_status = frappe.db.get_value("Plot Master", doc.plot, "status")
-	if plot_status in ("Pending Advance", "Pending Fee"):
-		frappe.db.set_value("Plot Master", doc.plot, "status", "Available")
+	ended = "cancelled" if doc.docstatus == 2 else "closed"
+	set_plot_status(
+		doc.plot,
+		"Available",
+		f"sales order {link('Sales Order', doc.name)} was {ended} and no application holds the plot",
+		only_from=("Pending Advance", "Pending Fee"),
+	)

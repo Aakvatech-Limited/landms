@@ -5,6 +5,7 @@ from frappe.utils import add_days, cint, flt, getdate, today
 from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
+from landms.landms.doctype.plot_master.plot_status import link, set_plot_status
 from landms.sales_order_hooks import build_payment_schedule_rows, build_sales_order_item_row
 
 
@@ -39,8 +40,12 @@ class PlotApplication(Document):
 			self.db_set("status", "Paid")
 			self.db_set("payment_date", payment_date)
 			self.db_set("expiry_date", add_days(payment_date, int(self.validity_days or 7)))
-			if self.plot and frappe.db.get_value("Plot Master", self.plot, "status") == "Available":
-				frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
+			if set_plot_status(
+				self.plot,
+				"Pending Advance",
+				f"application {link('Plot Application', self.name)} was submitted with no fee to pay",
+				only_from=("Available",),
+			):
 				self._sync_land_acquisition_summary()
 			self.create_sales_order(notify=0)
 			return
@@ -48,8 +53,12 @@ class PlotApplication(Document):
 		self.db_set("status", "Submitted")
 		if not self.plot:
 			return
-		if frappe.db.get_value("Plot Master", self.plot, "status") == "Available":
-			frappe.db.set_value("Plot Master", self.plot, "status", "Pending Fee")
+		if set_plot_status(
+			self.plot,
+			"Pending Fee",
+			f"application {link('Plot Application', self.name)} was submitted",
+			only_from=("Available",),
+		):
 			self._sync_land_acquisition_summary()
 
 	def on_cancel(self):
@@ -66,9 +75,13 @@ class PlotApplication(Document):
 		from_termination = reason == "Contract Terminated"
 
 		if not from_termination and self.status in ("Submitted", "Paid"):
-			plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
-			if plot_status in ("Pending Fee", "Pending Advance", "Reserved"):
-				frappe.db.set_value("Plot Master", self.plot, "status", "Available")
+			ended = "expired" if reason == "Expired" else "was cancelled"
+			if set_plot_status(
+				self.plot,
+				"Available",
+				f"application {link('Plot Application', self.name)} {ended}",
+				only_from=("Pending Fee", "Pending Advance", "Reserved"),
+			):
 				self._sync_land_acquisition_summary()
 
 		if not from_termination and self.status == "Paid":
@@ -351,7 +364,11 @@ class PlotApplication(Document):
 		self.db_set("status", "Paid")
 
 		# Lock the plot until first advance is received or the paid window expires.
-		frappe.db.set_value("Plot Master", self.plot, "status", "Pending Advance")
+		set_plot_status(
+			self.plot,
+			"Pending Advance",
+			f"the application fee for {link('Plot Application', self.name)} was recorded",
+		)
 		self._sync_land_acquisition_summary()
 
 		so_name = self.create_sales_order(notify=0)
