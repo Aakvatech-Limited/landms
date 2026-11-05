@@ -29,6 +29,7 @@ frappe.ui.form.on("Plot Master", {
     if (frm.doc.docstatus === 1 && frm.doc.status) {
       frm.page.set_indicator(frm.doc.status, colors[frm.doc.status] || "gray");
     }
+    show_customer_history(frm);
   },
 
   land_acquisition(frm) {
@@ -140,4 +141,59 @@ function rate_label(plot_type) {
   return plot_type
     ? `${plot_type} selling rate per sqm`
     : "plot-type selling rate";
+}
+
+// Customer History tab: every customer who took the plot, newest first (read-only, stored nowhere).
+function show_customer_history(frm) {
+  const wrapper = frm.get_field("customer_history_html").$wrapper;
+  if (frm.is_new()) {
+    wrapper.empty();
+    return;
+  }
+  frappe
+    .call({
+      method:
+        "landms.landms.doctype.plot_master.customer_history.get_customer_history",
+      args: { plot: frm.doc.name },
+    })
+    .then((r) => {
+      const lines = r.message || [];
+      if (!lines.length) {
+        wrapper.html(`<p class="text-muted">${__("No customer yet.")}</p>`);
+        return;
+      }
+      const link = (doctype, name) =>
+        `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(
+          name
+        )}">${frappe.utils.escape_html(name)}</a>`;
+      const money = (amount) => format_number(amount, null, 0);
+      const target = (m) => (m.name ? ` ${link(m.doctype, m.name)}` : "");
+      const move = (m) =>
+        m.direction === "out"
+          ? `${__("Moved")} ${money(m.amount)} →${target(m)}`
+          : `${__("Received")} ${money(m.amount)} ←${target(m)}`;
+      const rows = lines
+        .map(
+          (l) => `<tr>
+            <td>${
+              l.current
+                ? `<span class="indicator-pill green">${__("Current")}</span>`
+                : ""
+            }</td>
+            <td>${frappe.utils.escape_html(l.customer)}</td>
+            <td>${l.from ? frappe.datetime.str_to_user(l.from) : ""}</td>
+            <td>${__(l.outcome)}${l.moves
+            .map((m) => `<br>${move(m)}`)
+            .join("")}</td>
+            <td>${l.documents
+              .map(([dt, name]) => link(dt, name))
+              .join(" · ")}</td>
+          </tr>`
+        )
+        .join("");
+      wrapper.html(`<table class="table table-bordered table-sm">
+        <thead><tr><th></th><th>${__("Customer")}</th><th>${__("From")}</th>
+        <th>${__("What happened")}</th><th>${__("Documents")}</th></tr></thead>
+        <tbody>${rows}</tbody></table>`);
+    });
 }
