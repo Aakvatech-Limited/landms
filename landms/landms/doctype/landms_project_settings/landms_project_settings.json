@@ -1,0 +1,293 @@
+{
+ "doctype": "DocType",
+ "name": "LandMS Project Settings",
+ "module": "LandMS",
+ "autoname": "field:land_acquisition",
+ "naming_rule": "By fieldname",
+ "title_field": "project_name",
+ "read_only": 1,
+ "in_create": 1,
+ "track_changes": 1,
+ "allow_import": 0,
+ "allow_rename": 0,
+ "quick_entry": 0,
+ "fields": [
+  {
+   "fieldname": "general_tab",
+   "fieldtype": "Tab Break",
+   "label": "General"
+  },
+  {
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "label": "Project",
+   "fetch_from": "land_acquisition.acquisition_name",
+   "read_only": 1,
+   "bold": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "land_acquisition",
+   "fieldtype": "Link",
+   "label": "Project ID",
+   "options": "Land Acquisition",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "land_acquisition.company",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "general_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "plot_inventory_warehouse",
+   "fieldtype": "Link",
+   "label": "Plot Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "accounts_tab",
+   "fieldtype": "Tab Break",
+   "label": "Accounts"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Centre",
+   "options": "Cost Center",
+   "reqd": 1
+  },
+  {
+   "fieldname": "asset_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Asset Accounts"
+  },
+  {
+   "fieldname": "land_under_development_account",
+   "fieldtype": "Link",
+   "label": "Land Under Development",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "plot_inventory_account",
+   "fieldtype": "Link",
+   "label": "Plot Inventory",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tcb_bank_account",
+   "fieldtype": "Link",
+   "label": "TCB Bank Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "malipopay_bank_account",
+   "fieldtype": "Link",
+   "label": "Malipopay Bank Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "asset_accounts_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "revenue_account",
+   "fieldtype": "Link",
+   "label": "Revenue",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cogs_account",
+   "fieldtype": "Link",
+   "label": "Cost of Sales",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer_advance_account",
+   "fieldtype": "Link",
+   "label": "Customer Advances",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "liability_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Liability and Income"
+  },
+  {
+   "fieldname": "government_payable_account",
+   "fieldtype": "Link",
+   "label": "Government Payable",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seller_payable_account",
+   "fieldtype": "Link",
+   "label": "Seller Payable",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "liability_accounts_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "forfeited_deposits_account",
+   "fieldtype": "Link",
+   "label": "Forfeited Deposits",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "forfeiture_percentage",
+   "fieldtype": "Percent",
+   "label": "Forfeiture %",
+   "reqd": 1
+  },
+  {
+   "fieldname": "application_fee_tab",
+   "fieldtype": "Tab Break",
+   "label": "Application Fee"
+  },
+  {
+   "fieldname": "application_fee_item",
+   "fieldtype": "Link",
+   "label": "Fee Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "application_fee_amount",
+   "fieldtype": "Float",
+   "label": "Fee Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fee_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "unpaid_application_expiry_days",
+   "fieldtype": "Int",
+   "label": "Unpaid Expiry (Days)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "application_fee_validity_days",
+   "fieldtype": "Int",
+   "label": "Paid Validity (Days)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fee_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Fee Accounts"
+  },
+  {
+   "fieldname": "application_fee_income_account",
+   "fieldtype": "Link",
+   "label": "Fee Income",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fee_accounts_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "application_fee_receiving_account",
+   "fieldtype": "Link",
+   "label": "Fee Received In",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "government_fees_tab",
+   "fieldtype": "Tab Break",
+   "label": "Government Fees (Informational)"
+  },
+  {
+   "fieldname": "govt_appl_fee_amount",
+   "fieldtype": "Float",
+   "label": "Application Fee"
+  },
+  {
+   "fieldname": "govt_registration_fee_amount",
+   "fieldtype": "Float",
+   "label": "Registration Fee"
+  },
+  {
+   "fieldname": "government_fees_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "govt_premium_rate",
+   "fieldtype": "Float",
+   "label": "Premium Rate"
+  },
+  {
+   "fieldname": "naming_series_tab",
+   "fieldtype": "Tab Break",
+   "label": "Naming Series"
+  },
+  {
+   "fieldname": "naming_series_contract",
+   "fieldtype": "Data",
+   "label": "Contract Series"
+  },
+  {
+   "fieldname": "naming_series_installment_schedule",
+   "fieldtype": "Data",
+   "label": "Schedule Series"
+  },
+  {
+   "fieldname": "naming_series_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "naming_series_govt_fee",
+   "fieldtype": "Data",
+   "label": "Govt Fee Series"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Finance",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  }
+ ]
+}
