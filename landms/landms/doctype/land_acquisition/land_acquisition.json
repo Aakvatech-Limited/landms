@@ -586,7 +586,13 @@
   }
  ],
  "is_submittable": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Settings",
+   "link_doctype": "LandMS Project Settings",
+   "link_fieldname": "land_acquisition"
+  }
+ ],
  "modified": "2026-10-14 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "LandMS",
