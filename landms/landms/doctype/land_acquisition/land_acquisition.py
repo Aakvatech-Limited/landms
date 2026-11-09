@@ -149,7 +149,9 @@ class LandAcquisition(Document):
 
 	def before_cancel(self):
 		self._block_if_active_plots()
-		self._block_or_cancel_purchase_documents()
+		# Ledger rows carry the project too; skip them so Frappe's link check
+		# names the invoice, journal or payment behind them.
+		self.ignore_linked_doctypes = ("GL Entry", "Payment Ledger Entry")
 
 	def _block_if_active_plots(self):
 		if not frappe.db.exists("DocType", "Plot Master"):
@@ -171,92 +173,10 @@ class LandAcquisition(Document):
 			).format(names, extra)
 		)
 
-	def _block_or_cancel_purchase_documents(self):
-		"""Block cancellation if any PI or PO has payments against it.
-		Auto-cancel unpaid submitted PIs and POs so the LA can be cancelled cleanly.
-		"""
-		for doctype, item_doctype in (
-			("Purchase Invoice", "Purchase Invoice Item"),
-			("Purchase Order", "Purchase Order Item"),
-		):
-			linked = frappe.db.sql(
-				f"""
-                SELECT DISTINCT p.name
-                FROM `tab{doctype}` p
-                INNER JOIN `tab{item_doctype}` pi ON pi.parent = p.name
-                WHERE pi.land_acquisition = %s AND p.docstatus = 1
-                """,
-				self.name,
-				as_dict=True,
-			)
-
-			for row in linked:
-				has_payment = frappe.db.sql(
-					"""
-                    SELECT COUNT(*) FROM `tabPayment Entry Reference` per
-                    INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
-                    WHERE per.reference_doctype = %s
-                      AND per.reference_name = %s
-                      AND pe.docstatus = 1
-                    """,
-					(doctype, row.name),
-				)[0][0]
-
-				if has_payment:
-					frappe.throw(
-						f"Cannot cancel — {doctype} {row.name} has payments posted. "
-						"Cancel the Payment Entry first."
-					)
-
-			for row in linked:
-				doc = frappe.get_doc(doctype, row.name)
-				doc.flags.ignore_permissions = True
-				doc.cancel()
-
 	def on_cancel(self):
 		self.db_set("status", "Cancelled")
 		sync_land_acquisition_cost_summary(self.name)
 		sync_land_acquisition_plot_summary(self.name)
-		self._clear_land_acquisition_references()
-
-	def _clear_land_acquisition_references(self):
-		"""Clear the land_acquisition dimension from all linked doctypes after cancel.
-
-		Allows the cancelled LA to be deleted without ERPNext's link-check blocking it.
-		land_acquisition is a reporting dimension — clearing it does not affect
-		debit/credit amounts or financial totals.
-		"""
-		doctypes = [
-			"GL Entry",
-			"Payment Ledger Entry",
-			"Purchase Invoice",
-			"Purchase Invoice Item",
-			"Purchase Order",
-			"Purchase Order Item",
-			"Payment Entry",
-			"Journal Entry Account",
-			"Stock Entry",
-			"Stock Entry Detail",
-			"Purchase Receipt",
-			"Purchase Receipt Item",
-			"Sales Invoice",
-			"Sales Invoice Item",
-			"Sales Order",
-			"Sales Order Item",
-			"Delivery Note",
-			"Delivery Note Item",
-		]
-		for doctype in doctypes:
-			try:
-				names = frappe.get_all(
-					doctype,
-					filters={"land_acquisition": self.name},
-					pluck="name",
-				)
-				for name in names:
-					frappe.db.set_value(doctype, name, "land_acquisition", None, update_modified=False)
-			except Exception:
-				pass
 
 	# ── Private validators ───────────────────────────────────────────────────
 
