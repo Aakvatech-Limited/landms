@@ -394,16 +394,18 @@ def _build_plot_stock_entry_doc(
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_plot_types_for_la(doctype, txt, searchfield, start, page_len, filters):
+	"""Plot Type dropdown on a plot: the types the plot's project has a selling rate for."""
 	la = filters.get("land_acquisition") if isinstance(filters, dict) else None
 	if not la:
 		return []
-	return frappe.db.sql(
-		"""
-		SELECT DISTINCT plot_type
-		FROM `tabLand Acquisition Plot Type Rate`
-		WHERE parent = %s AND plot_type LIKE %s
-		ORDER BY plot_type
-		LIMIT %s OFFSET %s
-	""",
-		(la, f"%{txt}%", page_len, start),
+	rate = frappe.qb.DocType("Land Acquisition Plot Type Rate")
+	return (
+		frappe.qb.from_(rate)
+		.select(rate.plot_type)
+		.distinct()
+		.where((rate.parent == la) & rate.plot_type.like(f"%{txt}%"))
+		.orderby(rate.plot_type)
+		.limit(page_len)
+		.offset(start)
+		.run()
 	)
