@@ -253,6 +253,16 @@
    "label": "Location Description"
   },
   {
+   "fieldname": "tab_customer_history",
+   "fieldtype": "Tab Break",
+   "label": "Customer History"
+  },
+  {
+   "fieldname": "customer_history_html",
+   "fieldtype": "HTML",
+   "label": "Customer History"
+  },
+  {
    "fieldname": "tab_system",
    "fieldtype": "Tab Break",
    "label": "System"
