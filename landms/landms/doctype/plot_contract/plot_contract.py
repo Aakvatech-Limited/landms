@@ -7,6 +7,7 @@ from frappe.utils import add_days, cint, escape_html, flt, get_url_to_form, getd
 from landms.landms.doctype.land_acquisition.land_acquisition import (
 	sync_land_acquisition_plot_summary,
 )
+from landms.landms.doctype.plot_master.plot_status import link, set_plot_status
 from landms.sales_order_hooks import _post_credit_note_for_outstanding
 
 
@@ -34,12 +35,12 @@ class PlotContract(Document):
 			)
 
 	def on_submit(self):
-		frappe.db.set_value("Plot Master", self.plot, "status", "Reserved")
+		set_plot_status(self.plot, "Reserved", f"contract {link('Plot Contract', self.name)} was submitted")
 		self._sync_land_acquisition_summary()
 		self.db_set("contract_status", "Ongoing")
 
 	def on_cancel(self):
-		frappe.db.set_value("Plot Master", self.plot, "status", "Available")
+		set_plot_status(self.plot, "Available", f"contract {link('Plot Contract', self.name)} was cancelled")
 		self._sync_land_acquisition_summary()
 		self.db_set("contract_status", "Cancelled")
 
@@ -394,12 +395,20 @@ class PlotContract(Document):
 
 		if total_outstanding <= 0 and self.docstatus == 1:
 			self.contract_status = "Completed"
-			plot_status = frappe.db.get_value("Plot Master", self.plot, "status")
-			if plot_status not in ("Delivered", "Title Closed"):
-				frappe.db.set_value(
-					"Plot Master", self.plot, "status", "Ready for Handover", update_modified=True
-				)
-				frappe.clear_document_cache("Plot Master", self.plot)
+			set_plot_status(
+				self.plot,
+				"Ready for Handover",
+				f"contract {link('Plot Contract', self.name)} is fully paid",
+				# every status except handed over ("" = a plot with no status yet, as before)
+				only_from=(
+					"",
+					"Available",
+					"Pending Fee",
+					"Pending Advance",
+					"Reserved",
+					"Ready for Handover",
+				),
+			)
 			self._sync_land_acquisition_summary()
 
 			# Persist the submitted contract state before posting linked entries.
@@ -419,9 +428,12 @@ class PlotContract(Document):
 
 		elif advance_met and self.docstatus == 1:
 			self.contract_status = "Ongoing"
-			if frappe.db.get_value("Plot Master", self.plot, "status") == "Pending Advance":
-				frappe.db.set_value("Plot Master", self.plot, "status", "Reserved", update_modified=True)
-				frappe.clear_document_cache("Plot Master", self.plot)
+			if set_plot_status(
+				self.plot,
+				"Reserved",
+				f"the advance on contract {link('Plot Contract', self.name)} is paid",
+				only_from=("Pending Advance",),
+			):
 				self._sync_land_acquisition_summary()
 
 		self._persist_payment_sync_state()
@@ -805,7 +817,11 @@ class PlotContract(Document):
 		# Cancel the Plot Application so the plot is fully released
 		self._cancel_plot_application_on_termination()
 
-		frappe.db.set_value("Plot Master", self.plot, "status", "Available")
+		set_plot_status(
+			self.plot,
+			"Available",
+			f"contract {link('Plot Contract', self.name)} was terminated: {escape_html(str(reason))}",
+		)
 		self._sync_land_acquisition_summary()
 
 		msg = f"Contract terminated. Plot {self.plot} is now Available for new contracts."
