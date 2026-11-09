@@ -4,6 +4,7 @@ from frappe.utils import flt, get_fullname, today
 
 from landms.landms.doctype.land_acquisition.land_acquisition import sync_land_acquisition_plot_summary
 from landms.landms.doctype.plot_master.plot_master import get_plot_item_code
+from landms.landms.doctype.plot_master.plot_status import link, set_plot_status
 
 
 class PlotHandover(Document):
@@ -28,13 +29,15 @@ class PlotHandover(Document):
 		delivery_note = self._ensure_delivery_note()
 		if delivery_note and self.delivery_note != delivery_note:
 			self.db_set("delivery_note", delivery_note)
-		frappe.db.set_value("Plot Master", self.plot, "status", "Delivered")
+		set_plot_status(self.plot, "Delivered", f"handover {link('Plot Handover', self.name)} was submitted")
 		self._sync_land_acquisition_summary()
 		self.db_set("handover_status", "Completed")
 
 	def on_cancel(self):
 		self._cancel_delivery_note()
-		frappe.db.set_value("Plot Master", self.plot, "status", "Ready for Handover")
+		set_plot_status(
+			self.plot, "Ready for Handover", f"handover {link('Plot Handover', self.name)} was cancelled"
+		)
 		self._sync_land_acquisition_summary()
 		self.db_set("handover_status", "Draft")
 
